@@ -358,3 +358,41 @@ colors ad hoc.
 - Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass; the two new font
   packages add ~350KB of bundled `.woff2`/`.woff` assets (only the subsets actually used get
   fetched at runtime) and `lucide-react` tree-shakes to only the ~15 icons actually imported.
+
+### 2026-09-20 — `feature/notifications`
+
+Added a cross-cluster notification bell, per a follow-up request for something like "tell me when
+a cluster's connection drops, a related Jira ticket changes, or a node gets drained" - implemented
+the first two generically since H-Gate can observe them for any cluster; deliberately did not fake
+the third (see the limitation recorded in `docs/STATUS.md` - real node-drain detection needs
+H-Gate to run scheduler-specific commands like `sinfo` remotely, which is a separate feature).
+
+- **Notification store** (`src/main/notifications/store.ts`): an in-memory, capped (200) feed with
+  `addNotification`/`listNotifications`/`markNotificationRead`/`markAllNotificationsRead`, plus a
+  settable broadcaster so any main-process module can push a live event to the renderer without
+  importing Electron/IPC concerns directly.
+- **Reachability transitions** (`clusterMonitor.ts`): now tracks each cluster's last *settled*
+  status separately from the transient "checking" state, so a genuine online→offline or
+  offline→online flip fires a notification - without this, comparing against the immediately-prior
+  "checking" entry would mean the transition never matches and nothing would ever fire.
+- **Jira activity** (new `src/main/monitor/jiraMonitor.ts`): polls every 3 minutes (Jira's API is
+  heavier/more rate-limit-sensitive than the reachability TCP probe) per cluster with a Jira
+  profile configured, diffing against last-seen issue status to notify on new tickets and status
+  changes - silently baselining on each cluster's first sweep this run so opening the app with
+  existing tickets doesn't fire a wall of "new ticket" notifications.
+- **Unexpected SSH disconnects** (`src/main/ssh/manager.ts`): distinguishes an app-initiated
+  disconnect (switching clusters, quitting) from the remote end dropping the connection on its own,
+  via an `intentionalCloses` set checked in the stream's `close` handler - only the latter
+  notifies, so routine cluster-switching doesn't spam "connection lost" messages.
+- **UI**: a bell icon (with an unread-count badge) in the sidebar header opens a dropdown of
+  recent notifications; clicking one marks it read and jumps to the relevant cluster (and, for
+  Jira/SSH notifications, the relevant tab) - which meant lifting the Terminal/Status tab state
+  up from `MainPanel` into `AppShell` so a notification click can control it.
+- Caught and fixed two CSS bugs while screenshotting this for real: the notification panel's text
+  wasn't wrapping (`.notification-item-body` needed `flex: 1` to actually claim row width instead
+  of shrinking to content), and the whole dropdown was getting silently clipped at the sidebar's
+  edge because `.sidebar` had `overflow: hidden` - changed to `visible` since only the inner
+  `.cluster-rows` list actually needs its own scroll.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass, and visually
+  confirmed the bell/badge/dropdown via the same headless-browser + mocked-data pipeline used for
+  the README screenshots.

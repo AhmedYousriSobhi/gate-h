@@ -7,10 +7,13 @@ import { registerSshIpcHandlers } from './ipc/ssh'
 import { registerGrafanaIpcHandlers } from './ipc/grafana'
 import { registerJiraIpcHandlers } from './ipc/jira'
 import { registerReachabilityIpcHandlers } from './ipc/reachability'
+import { registerNotificationIpcHandlers } from './ipc/notifications'
 import { closeAllSessions } from './ssh/manager'
 import { startClusterMonitor, stopClusterMonitor } from './monitor/clusterMonitor'
+import { startJiraMonitor, stopJiraMonitor } from './monitor/jiraMonitor'
+import { setNotificationBroadcaster } from './notifications/store'
 import { initUserDataDir } from './userData'
-import type { ClusterReachability } from '../shared/types'
+import type { ClusterNotification, ClusterReachability } from '../shared/types'
 
 // Must run before anything (including app.whenReady()) touches the userData path.
 initUserDataDir()
@@ -69,6 +72,7 @@ app.whenReady().then(() => {
   registerGrafanaIpcHandlers()
   registerJiraIpcHandlers()
   registerReachabilityIpcHandlers()
+  registerNotificationIpcHandlers()
 
   createWindow()
 
@@ -77,6 +81,13 @@ app.whenReady().then(() => {
       mainWindow.webContents.send('reachability:update', event)
     }
   })
+
+  setNotificationBroadcaster((notification: ClusterNotification) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('notifications:created', notification)
+    }
+  })
+  startJiraMonitor()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
@@ -91,6 +102,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   closeAllSessions()
   stopClusterMonitor()
+  stopJiraMonitor()
   if (process.platform !== 'darwin') {
     app.quit()
   }

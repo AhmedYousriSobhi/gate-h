@@ -12,7 +12,9 @@
   flex-direction: column;
   background: var(--color-bg-elevated);
   border-right: 1px solid var(--color-border);
-  overflow: hidden;
+  /* Not overflow: hidden - the notification dropdown is an absolutely-positioned descendant that
+     needs to render outside this box. `.cluster-rows` below handles its own scroll. */
+  overflow: visible;
 }
 
 .sidebar-header {
@@ -21,6 +23,12 @@
   justify-content: space-between;
   padding: var(--space-4);
   flex-shrink: 0;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .sidebar-brand {
@@ -238,4 +246,132 @@
 .btn-sm {
   padding: 5px 10px;
   font-size: 12px;
+}
+
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell-trigger {
+  position: relative;
+  width: 28px;
+  height: 28px;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-offline);
+  color: white;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 15px;
+  text-align: center;
+}
+
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+  overflow: hidden;
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+
+.notification-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  font-size: 12.5px;
+  font-weight: 560;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notification-list {
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.notification-empty {
+  padding: var(--space-4) var(--space-3);
+  text-align: center;
+}
+
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-text-1);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.notification-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.notification-item-unread {
+  background-color: var(--color-surface-active);
+}
+
+.notification-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  margin-top: 1px;
+}
+
+.notification-icon-info {
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent-hover);
+}
+
+.notification-icon-warning {
+  background-color: rgba(240, 85, 95, 0.14);
+  color: var(--color-offline);
+}
+
+.notification-item-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.notification-item-message {
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.notification-item-time {
+  font-size: 11px;
+  color: var(--color-text-3);
 }

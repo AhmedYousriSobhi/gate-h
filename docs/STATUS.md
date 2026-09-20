@@ -27,6 +27,7 @@ this repo or its history.)
 | Linux packaging | ✅ Done | AppImage via `electron-builder`, built reproducibly inside Docker (`./build-desktop.sh`) |
 | App icon / branding | ✅ Done | custom mark, see `resources/icon.svg`; product renamed H-Gate → Gate-H after user feedback |
 | Visual design system | ✅ Done | token-based dark theme (`assets/base.css`), self-hosted Inter/JetBrains Mono, `lucide-react` icons throughout - see the redesign entry in `CHANGELOG.md` |
+| Cross-cluster notifications | ⚠️ Partial | bell icon covers reachability changes, Jira ticket activity, and unexpected SSH disconnects (all generic, cluster-agnostic signals). **Does not** cover scheduler-level events like Slurm node drains/downs - see the limitation below. |
 | Automated tests | ❌ Not started | verification so far is `typecheck` + `lint` + `build` on every change, no unit/e2e suite yet |
 | Multi-session terminal (tabs) | ❌ Not started | only one SSH session open at a time currently; switching clusters in the sidebar disconnects the previous session |
 | Jump host with its own password | ⚠️ Partial | only supported when the jump host uses the *same* auth method as the target cluster (see the note in `src/main/ssh/manager.ts`) — a jump host needing an independent password isn't wired up yet |
@@ -50,6 +51,14 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 
 ## Known limitations / near-term roadmap
 
+- **No scheduler-level event detection (e.g. Slurm node drains)** — deliberately not implemented
+  yet, rather than faked. The notification bell's signals (`src/main/monitor/clusterMonitor.ts`,
+  `jiraMonitor.ts`, `src/main/ssh/manager.ts`) are all things H-Gate can observe generically across
+  any cluster: is the SSH port up, did a Jira ticket change, did an open session drop. Detecting
+  "node X went into drain state" would mean H-Gate itself periodically running a non-interactive
+  command like `sinfo`/`pbsnodes`/`bhosts` over SSH and parsing scheduler-specific output - a
+  real, separate feature (and one that varies by scheduler: Slurm/PBS/LSF each report this
+  differently) rather than a small addition to the existing monitors.
 - **Single terminal session** — selecting a different cluster in the sidebar disconnects whichever
   SSH session was open; there's no way yet to keep two clusters connected simultaneously in
   separate tabs. The natural next step is a session switcher, reusing the existing `ssh:*` IPC

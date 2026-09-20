@@ -22,6 +22,10 @@
   Grafana instance using the Grafana REST API.
 - **Jira integration** — view matching issues and file new tickets against a cluster's Jira
   project, for both Jira Cloud and Jira Data Center/Server.
+- **Cross-cluster notifications** — a bell icon collects reachability changes, new/updated Jira
+  tickets, and unexpected SSH disconnects from every cluster in one place, so you don't have to
+  click into each one to notice something changed. Clicking a notification jumps straight to the
+  relevant cluster and tab.
 
 ## Preview
 
@@ -40,6 +44,16 @@
 <td width="50%" align="center">
   <img src="docs/assets/screenshots/status-panel.png" alt="Cluster status panel" width="360"><br/>
   <sub>Grafana health/snapshots + Jira issues, per cluster</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/notifications.png" alt="Notification bell dropdown" width="360"><br/>
+  <sub>One bell for reachability, Jira, and session events across every cluster</sub>
+</td>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/add-cluster-form.png" alt="Add cluster form" width="360"><br/>
+  <sub>Register a cluster: SSH, optional jump host, Grafana, Jira</sub>
 </td>
 </tr>
 </table>

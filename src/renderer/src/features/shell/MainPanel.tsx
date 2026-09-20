@@ -1,18 +1,21 @@
-import { useState } from 'react'
 import { Activity, MousePointerClick, Terminal as TerminalIcon } from 'lucide-react'
 import type { ClusterSummary } from '../../../../shared/types'
 import TerminalPanel from '../terminal/TerminalPanel'
 import StatusPanel from '../status/StatusPanel'
 
-interface MainPanelProps {
-  cluster: ClusterSummary | null
-}
-
 type Tab = 'terminal' | 'status'
 
-export default function MainPanel({ cluster }: MainPanelProps): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>('terminal')
+interface MainPanelProps {
+  cluster: ClusterSummary | null
+  tab: Tab
+  onTabChange: (tab: Tab) => void
+}
 
+export default function MainPanel({
+  cluster,
+  tab,
+  onTabChange
+}: MainPanelProps): React.JSX.Element {
   if (!cluster) {
     return (
       <div className="main-panel main-panel-empty">
@@ -27,14 +30,14 @@ export default function MainPanel({ cluster }: MainPanelProps): React.JSX.Elemen
       <div className="panel-tabs">
         <button
           className={`panel-tab${tab === 'terminal' ? ' panel-tab-active' : ''}`}
-          onClick={() => setTab('terminal')}
+          onClick={() => onTabChange('terminal')}
         >
           <TerminalIcon size={14} strokeWidth={2} />
           Terminal
         </button>
         <button
           className={`panel-tab${tab === 'status' ? ' panel-tab-active' : ''}`}
-          onClick={() => setTab('status')}
+          onClick={() => onTabChange('status')}
         >
           <Activity size={14} strokeWidth={2} />
           Status

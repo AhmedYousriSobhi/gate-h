@@ -127,6 +127,20 @@ export interface ClusterReachability {
   checkedAt: string
 }
 
+export type NotificationKind = 'reachability' | 'jira' | 'ssh'
+export type NotificationSeverity = 'info' | 'warning'
+
+export interface ClusterNotification {
+  id: string
+  clusterId: string
+  clusterName: string
+  kind: NotificationKind
+  severity: NotificationSeverity
+  message: string
+  createdAt: string
+  read: boolean
+}
+
 export interface GateHApi {
   clusters: {
     list(): Promise<ClusterSummary[]>
@@ -154,5 +168,11 @@ export interface GateHApi {
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>
     onUpdate(callback: (event: ClusterReachability) => void): () => void
+  }
+  notifications: {
+    list(): Promise<ClusterNotification[]>
+    markRead(id: string): void
+    markAllRead(): void
+    onCreated(callback: (notification: ClusterNotification) => void): () => void
   }
 }

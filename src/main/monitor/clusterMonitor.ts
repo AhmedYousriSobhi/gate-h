@@ -1,5 +1,6 @@
 import { listClusters } from '../clusters'
 import { checkTcpReachable } from './reachability'
+import { addNotification } from '../notifications/store'
 import type { ClusterReachability } from '../../shared/types'
 
 // 60s matches the default check interval of standard SSH-aware monitoring tools (e.g.
@@ -8,28 +9,63 @@ import type { ClusterReachability } from '../../shared/types'
 const SWEEP_INTERVAL_MS = 60_000
 
 const state = new Map<string, ClusterReachability>()
+// Tracks the last *settled* (non-"checking") status per cluster, separately from `state` above,
+// so a transition can be detected against the previous real reading rather than against the
+// transient "checking" entry that setStatus() writes moments before the real result comes in.
+const lastSettledStatus = new Map<string, 'online' | 'offline'>()
 let broadcast: ((event: ClusterReachability) => void) | null = null
 let intervalHandle: ReturnType<typeof setInterval> | null = null
 
-function setStatus(clusterId: string, status: ClusterReachability['status']): void {
+function setStatus(
+  clusterId: string,
+  clusterName: string,
+  status: ClusterReachability['status']
+): void {
   const entry: ClusterReachability = { clusterId, status, checkedAt: new Date().toISOString() }
   state.set(clusterId, entry)
   broadcast?.(entry)
+
+  if (status === 'checking') return
+
+  const previous = lastSettledStatus.get(clusterId)
+  if (previous && previous !== status) {
+    addNotification({
+      clusterId,
+      clusterName,
+      kind: 'reachability',
+      severity: status === 'offline' ? 'warning' : 'info',
+      message:
+        status === 'offline'
+          ? `${clusterName} became unreachable`
+          : `${clusterName} is reachable again`
+    })
+  }
+  lastSettledStatus.set(clusterId, status)
 }
 
-async function checkOne(clusterId: string, host: string, port: number): Promise<void> {
-  setStatus(clusterId, 'checking')
+async function checkOne(
+  clusterId: string,
+  clusterName: string,
+  host: string,
+  port: number
+): Promise<void> {
+  setStatus(clusterId, clusterName, 'checking')
   const reachable = await checkTcpReachable(host, port)
-  setStatus(clusterId, reachable ? 'online' : 'offline')
+  setStatus(clusterId, clusterName, reachable ? 'online' : 'offline')
 }
 
 async function sweep(): Promise<void> {
   const clusters = listClusters()
   const knownIds = new Set(clusters.map((c) => c.id))
   for (const id of state.keys()) {
-    if (!knownIds.has(id)) state.delete(id)
+    if (!knownIds.has(id)) {
+      state.delete(id)
+      lastSettledStatus.delete(id)
+    }
   }
-  await Promise.all(clusters.map((c) => checkOne(c.id, c.connection.host, c.connection.port)))
+  await Promise.all(
+    clusters.map((c) => checkOne(c.id, c.name, c.connection.host, c.connection.port))
+  )
 }
 
 export function getAllReachability(): Record<string, ClusterReachability> {
@@ -38,8 +74,13 @@ export function getAllReachability(): Record<string, ClusterReachability> {
 
 /** Checks a single cluster immediately - used right after it's added/edited so its LED doesn't
  *  wait for the next sweep. */
-export function refreshCluster(clusterId: string, host: string, port: number): void {
-  void checkOne(clusterId, host, port)
+export function refreshCluster(
+  clusterId: string,
+  clusterName: string,
+  host: string,
+  port: number
+): void {
+  void checkOne(clusterId, clusterName, host, port)
 }
 
 export function startClusterMonitor(onUpdate: (event: ClusterReachability) => void): void {
