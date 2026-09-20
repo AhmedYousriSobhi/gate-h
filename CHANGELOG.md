@@ -178,3 +178,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - All temporary tooling (the standalone Vite config, the mock-API/recording scripts) lived in the
   scratchpad directory and was not committed; only the resulting README, `docs/STATUS.md`, and
   `docs/assets/` media are part of the repo.
+
+### 2026-09-20 — `feature/docker-build`
+
+- Added `docker/build.Dockerfile` (a pinned `node:22-bookworm` toolchain image with the native-module
+  build deps for `better-sqlite3` and the Linux packaging deps for `electron-builder`) and
+  `build-desktop.sh`, which builds that image and then runs `npm ci && npm run typecheck && npm run
+  build:linux` inside a container from it, bind-mounting the repo rather than baking source into
+  the image - so editing app code never requires rebuilding the toolchain image.
+- The container runs as the host user (`--user "$(id -u):$(id -g)"`) so build output ends up
+  host-owned; `node_modules` and the npm/electron-builder download caches live in named Docker
+  volumes (not bind-mounted from the host), so a Docker-built `node_modules` can never collide
+  with the one used for local `npm run dev`. Docker was actually available in this sandbox, so
+  this was verified end-to-end (not just written blind): `./build-desktop.sh` was run for real
+  and produced `dist/H-Gate-0.1.0.AppImage`, host-owned and executable.
+- Dropped `.deb` from `linux.target` in `electron-builder.yml`: electron-builder's `fpm`-based deb
+  packaging requires a `homepage` field in `package.json`, and there's no real public repo/homepage
+  URL for this project yet to put there - fabricating one felt worse than just building the
+  `AppImage` (the format actually asked for) until a real URL exists. Also fixed `appImage.artifactName`
+  to use `${productName}` instead of `${name}`, so the output is `H-Gate-<version>.AppImage` rather
+  than `hgate-<version>.AppImage`, and excluded `docs/`, `docker/`, and `build-desktop.sh` from the
+  packaged app's files (they're project docs/tooling, not app runtime files).
+- Updated `README.md` (Docker is now the documented way to get a runnable build; `npm run dev`
+  stays the documented path for local development, since Docker can't give you a GUI window) and
+  `docs/STATUS.md` (packaging status, and the `.deb`/homepage limitation) to match.
