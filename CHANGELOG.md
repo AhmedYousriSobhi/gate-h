@@ -223,3 +223,41 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and on first run after the rename, moves a pre-existing `~/.config/hgate/hgate.sqlite3` into the
   new location automatically before anything else touches it.
 - Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass after the rename.
+
+### 2026-09-20 — `feature/sidebar-shell-and-monitoring`
+
+Three more pieces of feedback from that same real-cluster testing session (see above): no live
+indication of which clusters were actually reachable, a closed SSH session leaving the terminal
+screen stuck until manually dismissed, and a request for a layout where the cluster list is
+always visible instead of a full-page swap between "list" and "terminal"/"status".
+
+- **Live reachability monitoring**: added `src/main/monitor/reachability.ts` (a TCP connect probe
+  against each cluster's SSH host:port - no ICMP/raw sockets needed, and it reflects what actually
+  matters here: can we SSH in) and `src/main/monitor/clusterMonitor.ts` (sweeps every registered
+  cluster every 20s, broadcasts each result over a new `reachability:update` IPC event, and
+  triggers an immediate check right after a cluster is added/edited rather than waiting for the
+  next sweep). Exposed via `window.api.reachability.{getAll,onUpdate}` and a `useReachability()`
+  renderer hook.
+- **Sidebar + panel shell redesign**: replaced the old full-page navigation (`ClusterListPage` ⇄
+  `TerminalView` ⇄ `ClusterStatusPage`, swapped via `App.tsx` state) with a persistent two-pane
+  layout (`src/renderer/src/features/shell/`): a `Sidebar` listing every cluster with its live
+  reachability LED, and a `MainPanel` with Terminal/Status tabs for whichever cluster is selected.
+  Switching tabs no longer remounts anything (a background SSH session stays alive while looking
+  at the Status tab); switching to a *different* cluster does tear down the previous session
+  (see the multi-session limitation noted in `docs/STATUS.md`).
+  - `TerminalView.tsx` and `ClusterStatusPage.tsx` (each previously a full page with its own
+    header and a "Back to clusters" button) were replaced by `TerminalPanel.tsx` and
+    `StatusPanel.tsx`, which just render their content into the shared shell instead of owning
+    page-level chrome.
+  - Consolidated `.btn`/`.error-banner`/`.hint` - previously defined in `clusters.css` and only
+    incidentally available everywhere because `ClusterListPage` happened to import it - into
+    `main.css` as genuinely shared primitives, now that the component that used to import them is
+    gone.
+- **Terminal no longer gets "stuck" when a session ends**: since the sidebar is always visible,
+  there's no full page to navigate back from any more. `TerminalPanel` now shows a clear "closed"
+  state with a **Reconnect** button in its status bar instead of requiring any dismissal - you can
+  also just click a different cluster in the sidebar at any time, closed session or not.
+- Regenerated all README preview screenshots/GIFs against the new UI, using the same headless
+  Chromium + mocked `window.api` pipeline as before (see `docs/STATUS.md` for how). Updated
+  `docs/STATUS.md`'s feature table and limitations to match.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass.

@@ -9,19 +9,23 @@ research behind the design decisions, see [ANALYSIS.md](./ANALYSIS.md).
 
 The core loop works end-to-end: add a cluster → connect to it over SSH → view its Grafana status
 → view/file its Jira tickets — all inside one standalone Electron app, with no browser involved.
+As of this update, a real user (testing on a real the research center cluster called "TestCluster") tried v0.1 and gave
+feedback that directly shaped the sidebar layout, live LEDs, and terminal-close behavior below.
 
 | Area | Status | Notes |
 |---|---|---|
 | Multi-cluster registry | ✅ Done | SQLite-backed (`better-sqlite3`), add/edit/remove, per-cluster tags |
 | SSH connection profiles | ✅ Done | password / private key (+ passphrase) / SSH agent, optional jump host |
 | Secrets storage | ✅ Done | `electron.safeStorage` (OS keychain, e.g. libsecret on Linux) — never round-tripped to the renderer |
-| Embedded SSH terminal | ✅ Done | `ssh2` + `@xterm/xterm`, one session at a time |
+| Sidebar + panel shell | ✅ Done | persistent cluster sidebar (no scrolling away to "go back"); a main panel with Terminal/Status tabs per selected cluster |
+| Live reachability monitoring | ✅ Done | main process TCP-probes every cluster's SSH port on a timer (`src/main/monitor/`); sidebar shows a green/red/gray LED per cluster, always up to date |
+| Embedded SSH terminal | ✅ Done | `ssh2` + `@xterm/xterm`; closes cleanly to a "closed" state with a Reconnect button instead of a stuck full-page view; one session at a time |
 | Grafana status | ✅ Done | health check, per-dashboard title/link, panel snapshot image if `grafana-image-renderer` is installed |
 | Jira issues | ✅ Done | list via JQL, file new tickets; supports both Jira Cloud (email + API token) and Data Center (PAT) |
 | Linux packaging | ✅ Done | AppImage via `electron-builder`, built reproducibly inside Docker (`./build-desktop.sh`) |
-| App icon / branding | ✅ Done | custom mark, see `resources/icon.svg` |
+| App icon / branding | ✅ Done | custom mark, see `resources/icon.svg`; product renamed H-Gate → Gate-H after user feedback |
 | Automated tests | ❌ Not started | verification so far is `typecheck` + `lint` + `build` on every change, no unit/e2e suite yet |
-| Multi-session terminal (tabs) | ❌ Not started | only one SSH session open at a time currently |
+| Multi-session terminal (tabs) | ❌ Not started | only one SSH session open at a time currently; switching clusters in the sidebar disconnects the previous session |
 | Jump host with its own password | ⚠️ Partial | only supported when the jump host uses the *same* auth method as the target cluster (see the note in `src/main/ssh/manager.ts`) — a jump host needing an independent password isn't wired up yet |
 | Windows / macOS packaging | ⚠️ Untested | `electron-builder` config exists for both, but the project is being developed and verified on Linux only |
 
@@ -43,10 +47,18 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 
 ## Known limitations / near-term roadmap
 
-- **Single terminal session** — connecting to a second cluster while one is open isn't supported
-  yet; the natural next step is tabs or a session switcher, reusing the existing `ssh:*` IPC
+- **Single terminal session** — selecting a different cluster in the sidebar disconnects whichever
+  SSH session was open; there's no way yet to keep two clusters connected simultaneously in
+  separate tabs. The natural next step is a session switcher, reusing the existing `ssh:*` IPC
   channels (they're already keyed by `sessionId`, so the main-process side mostly just needs the
-  renderer to track more than one).
+  renderer to track more than one) and keeping each `TerminalPanel` mounted (not unmounted) when
+  its cluster isn't the active sidebar selection.
+- **Reachability is a TCP probe, not a real health check** — `src/main/monitor/reachability.ts`
+  just checks whether the SSH port accepts a TCP connection every 20 seconds; a cluster behind a
+  firewall that blocks the probe but is otherwise fine would show red, and a host that accepts TCP
+  connections but has a broken SSH daemon would show green. It's a reasonable proxy for "can I
+  probably SSH in right now" - not a substitute for the actual Grafana-based health data on the
+  Status tab.
 - **Jump host secret reuse** — see `src/main/ssh/manager.ts`; a jump host with a different
   password than the target cluster needs its own stored secret, which the data model doesn't
   have a field for yet.

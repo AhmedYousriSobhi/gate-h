@@ -119,6 +119,14 @@ export interface CreateJiraIssueInput {
   description?: string
 }
 
+export type ReachabilityStatus = 'online' | 'offline' | 'checking'
+
+export interface ClusterReachability {
+  clusterId: string
+  status: ReachabilityStatus
+  checkedAt: string
+}
+
 export interface GateHApi {
   clusters: {
     list(): Promise<ClusterSummary[]>
@@ -142,5 +150,9 @@ export interface GateHApi {
     onData(callback: (event: SshDataEvent) => void): () => void
     onClosed(callback: (event: SshClosedEvent) => void): () => void
     onError(callback: (event: SshErrorEvent) => void): () => void
+  }
+  reachability: {
+    getAll(): Promise<Record<string, ClusterReachability>>
+    onUpdate(callback: (event: ClusterReachability) => void): () => void
   }
 }

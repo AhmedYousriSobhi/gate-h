@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   ClusterInput,
+  ClusterReachability,
   CreateJiraIssueInput,
   GateHApi,
   SshClosedEvent,
@@ -50,6 +51,15 @@ const api: GateHApi = {
         callback(payload)
       ipcRenderer.on('ssh:error', listener)
       return () => ipcRenderer.removeListener('ssh:error', listener)
+    }
+  },
+  reachability: {
+    getAll: () => ipcRenderer.invoke('reachability:getAll'),
+    onUpdate: (callback: (event: ClusterReachability) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ClusterReachability): void =>
+        callback(payload)
+      ipcRenderer.on('reachability:update', listener)
+      return () => ipcRenderer.removeListener('reachability:update', listener)
     }
   }
 }

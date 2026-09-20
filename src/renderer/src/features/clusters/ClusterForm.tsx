@@ -5,6 +5,7 @@ import type {
   JiraAuthMode,
   SshAuthMethod
 } from '../../../../shared/types'
+import './clusters.css'
 
 interface ClusterFormProps {
   initial?: ClusterSummary

@@ -12,7 +12,10 @@
 ## What it does
 
 - **Multi-cluster management** — register any number of HPC clusters, each with its own SSH
-  connection profile (host, port, user, auth method, optional jump/bastion host).
+  connection profile (host, port, user, auth method, optional jump/bastion host), always visible
+  in a sidebar so switching between clusters never means losing your place.
+- **Live reachability monitoring** — every registered cluster is continuously checked in the
+  background; a colored LED next to its name shows at a glance whether it's currently reachable.
 - **Connect & operate** — open an SSH session (embedded terminal) to any registered cluster
   without leaving the app.
 - **Live status via Grafana** — pull cluster health and dashboard snapshots from each cluster's
@@ -23,18 +26,19 @@
 ## Preview
 
 <p align="center">
-  <img src="docs/assets/screenshots/cluster-list.png" alt="Cluster list" width="720"><br/>
-  <sub>Every cluster you manage, with its connection, Grafana, and Jira status at a glance.</sub>
+  <img src="docs/assets/screenshots/sidebar-overview.png" alt="Sidebar with cluster list and reachability LEDs" width="720"><br/>
+  <sub>Every cluster in a persistent sidebar - the colored dot shows live reachability - with a
+  main panel for whichever one you're working on.</sub>
 </p>
 
 <table>
 <tr>
 <td width="50%" align="center">
-  <img src="docs/assets/screenshots/ssh-terminal.png" alt="Embedded SSH terminal" width="360"><br/>
-  <sub>Connect over SSH without leaving the app</sub>
+  <img src="docs/assets/screenshots/terminal-panel.png" alt="Embedded SSH terminal" width="360"><br/>
+  <sub>Connect over SSH - the sidebar stays put</sub>
 </td>
 <td width="50%" align="center">
-  <img src="docs/assets/screenshots/cluster-status.png" alt="Cluster status screen" width="360"><br/>
+  <img src="docs/assets/screenshots/status-panel.png" alt="Cluster status panel" width="360"><br/>
   <sub>Grafana health/snapshots + Jira issues, per cluster</sub>
 </td>
 </tr>
@@ -79,11 +83,12 @@ locally. See [docker/build.Dockerfile](docker/build.Dockerfile) for exactly what
 
 Then, inside the app:
 
-1. Click **+ Add cluster** and fill in a name plus its SSH connection details (host, user, auth
-   method). Grafana and Jira are optional per cluster.
-2. Click **Connect** on a cluster card to open an embedded SSH terminal to it.
-3. Click **Status** on a cluster card to see its Grafana health/dashboards and Jira issues, and to
-   file a new ticket.
+1. Click **+ Add** in the sidebar and fill in a name plus its SSH connection details (host, user,
+   auth method). Grafana and Jira are optional per cluster.
+2. Click a cluster in the sidebar to open its embedded SSH **Terminal** tab - the sidebar (and its
+   live reachability LEDs) stays visible the whole time, so switching clusters is just a click.
+3. Switch to its **Status** tab to see Grafana health/dashboards and Jira issues, and to file a
+   new ticket.
 
 ## Development
 
@@ -118,7 +123,7 @@ src/
   shared/     # types shared between main and renderer (over the preload bridge)
   main/       # Electron main process — SSH sessions, SQLite store, Grafana/Jira HTTP calls
   preload/    # contextBridge API exposed to the renderer
-  renderer/   # React UI (cluster list, terminal, Grafana/Jira status screens)
+  renderer/   # React UI (sidebar + panel shell, terminal, Grafana/Jira status)
 ```
 
 ## Learn more / project status
