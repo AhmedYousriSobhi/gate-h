@@ -15,6 +15,11 @@ const state = new Map<string, ClusterReachability>()
 const lastSettledStatus = new Map<string, 'online' | 'offline'>()
 let broadcast: ((event: ClusterReachability) => void) | null = null
 let intervalHandle: ReturnType<typeof setInterval> | null = null
+let lastSweepStartedAt = 0
+// Floor on how often a sweep can run, even when nudged early by triggerImmediateSweepIfStale() -
+// this is what keeps "check again when the window regains focus" from ever turning into spam if
+// the user alt-tabs in and out repeatedly.
+const MIN_SWEEP_GAP_MS = 15_000
 
 function setStatus(
   clusterId: string,
@@ -55,6 +60,7 @@ async function checkOne(
 }
 
 async function sweep(): Promise<void> {
+  lastSweepStartedAt = Date.now()
   const clusters = listClusters()
   const knownIds = new Set(clusters.map((c) => c.id))
   for (const id of state.keys()) {
@@ -81,6 +87,16 @@ export function refreshCluster(
   port: number
 ): void {
   void checkOne(clusterId, clusterName, host, port)
+}
+
+/** Runs a sweep right away instead of waiting for the next scheduled tick, but only if it's been
+ *  at least MIN_SWEEP_GAP_MS since the last one - e.g. when the window regains focus, so
+ *  reachability catches up quickly after something like reconnecting a VPN, without that turning
+ *  into extra load on a cluster's login node if focus events fire in quick succession. */
+export function triggerImmediateSweepIfStale(): void {
+  if (Date.now() - lastSweepStartedAt >= MIN_SWEEP_GAP_MS) {
+    void sweep()
+  }
 }
 
 export function startClusterMonitor(onUpdate: (event: ClusterReachability) => void): void {

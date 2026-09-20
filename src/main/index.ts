@@ -10,7 +10,11 @@ import { registerReachabilityIpcHandlers } from './ipc/reachability'
 import { registerNotificationIpcHandlers } from './ipc/notifications'
 import { registerWindowIpcHandlers } from './ipc/window'
 import { closeAllSessions } from './ssh/manager'
-import { startClusterMonitor, stopClusterMonitor } from './monitor/clusterMonitor'
+import {
+  startClusterMonitor,
+  stopClusterMonitor,
+  triggerImmediateSweepIfStale
+} from './monitor/clusterMonitor'
 import { startJiraMonitor, stopJiraMonitor } from './monitor/jiraMonitor'
 import { setNotificationBroadcaster } from './notifications/store'
 import { initUserDataDir } from './userData'
@@ -48,6 +52,12 @@ function createWindow(): void {
 
   win.on('maximize', () => win.webContents.send('window:maximized-changed', true))
   win.on('unmaximize', () => win.webContents.send('window:maximized-changed', false))
+
+  // Catch up on reachability quickly after the user comes back to the app (e.g. right after
+  // reconnecting a VPN) instead of waiting for the next scheduled sweep - throttled inside
+  // triggerImmediateSweepIfStale so this can never turn into extra probing beyond the normal
+  // sweep cadence.
+  win.on('focus', () => triggerImmediateSweepIfStale())
 
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)

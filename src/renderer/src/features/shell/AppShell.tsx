@@ -13,7 +13,16 @@ export default function AppShell(): React.JSX.Element {
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'terminal' | 'status'>('terminal')
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
-  const reachability = useReachability()
+  const [reconnectSignal, setReconnectSignal] = useState(0)
+  const reachability = useReachability((clusterId, from, to) => {
+    // A single, one-shot nudge - not a retry loop - when the *currently open* cluster's
+    // connection comes back after being down (e.g. the user just reconnected their VPN), so they
+    // don't have to remember to click Reconnect themselves. Anything else (a different cluster
+    // flapping in the background, going offline, or already being watched) does nothing here.
+    if (clusterId === selectedClusterId && from === 'offline' && to === 'online') {
+      setReconnectSignal((n) => n + 1)
+    }
+  })
 
   async function refresh(): Promise<ClusterSummary[]> {
     try {
@@ -87,7 +96,12 @@ export default function AppShell(): React.JSX.Element {
             <div className="error-banner">{loadError}</div>
           </div>
         ) : (
-          <MainPanel cluster={selectedCluster} tab={activeTab} onTabChange={setActiveTab} />
+          <MainPanel
+            cluster={selectedCluster}
+            tab={activeTab}
+            onTabChange={setActiveTab}
+            reconnectSignal={reconnectSignal}
+          />
         )}
 
         {editing && (
