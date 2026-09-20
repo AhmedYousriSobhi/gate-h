@@ -62,3 +62,25 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`ELECTRON_RUN_AS_NODE=1` is enforced here, which forces the Electron binary to run as plain
   Node rather than launch a window) — recommend running `npm run dev` on a normal desktop to
   visually verify this screen.
+
+### 2026-09-20 — `feature/ssh-terminal`
+
+- Added `ssh2`-based session management (`src/main/ssh/manager.ts`): connects using a cluster's
+  stored connection profile (password, private key + optional passphrase, or SSH agent), chains
+  through a jump/bastion host via `forwardOut` when configured, opens an interactive shell
+  channel, and streams its output to the renderer. Sessions are tracked in memory and torn down
+  on disconnect or app quit.
+  - **Known v1 limitation** (documented in-code): a jump host currently reuses the target
+    cluster's stored secret only when both use the same auth method; a jump host needing its own
+    distinct password isn't supported yet and would need its own secret field — left for a
+    follow-up rather than adding an unused option now.
+- Exposed `ssh:connect` / `ssh:write` / `ssh:resize` / `ssh:disconnect` over IPC
+  (`src/main/ipc/ssh.ts`) and the matching `window.api.ssh.*` bridge in preload, with `onData` /
+  `onClosed` / `onError` subscriptions for the renderer.
+- Built an embedded terminal (`src/renderer/src/features/terminal/TerminalView.tsx`) using
+  `@xterm/xterm` + `@xterm/addon-fit`, wired to a new "Connect" button on each cluster card;
+  `node-pty` was intentionally **not** added since it's only needed for a local shell — every
+  H-Gate terminal is a remote SSH channel already provided by `ssh2`.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Could not test an
+  actual SSH connection end-to-end in this sandbox (no reachable SSH server here, and see the GUI
+  limitation noted above) — recommend testing `Connect` against a real cluster after `npm run dev`.

@@ -3,6 +3,8 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerClusterIpcHandlers } from './ipc/clusters'
+import { registerSshIpcHandlers } from './ipc/ssh'
+import { closeAllSessions } from './ssh/manager'
 
 function createWindow(): void {
   // Create the browser window.
@@ -51,6 +53,7 @@ app.whenReady().then(() => {
   })
 
   registerClusterIpcHandlers()
+  registerSshIpcHandlers()
 
   createWindow()
 
@@ -65,6 +68,7 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  closeAllSessions()
   if (process.platform !== 'darwin') {
     app.quit()
   }

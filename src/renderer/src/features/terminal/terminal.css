@@ -1,0 +1,25 @@
+.terminal-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ev-c-gray-3);
+}
+
+.terminal-status {
+  color: var(--ev-c-text-2);
+  font-size: 13px;
+}
+
+.terminal-container {
+  flex: 1;
+  padding: 8px;
+  background-color: #111318;
+  overflow: hidden;
+}
