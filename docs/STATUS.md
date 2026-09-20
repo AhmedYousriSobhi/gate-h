@@ -18,6 +18,7 @@ this repo or its history.)
 |---|---|---|
 | Multi-cluster registry | ✅ Done | SQLite-backed (`better-sqlite3`), add/edit/remove, per-cluster tags |
 | SSH connection profiles | ✅ Done | password / private key (+ passphrase) / SSH agent, optional jump host |
+| SSH keepalive & host key pinning | ✅ Done | SSH-level keepalive (`keepaliveInterval`/`keepaliveCountMax` in `src/main/ssh/manager.ts`) so idle sessions through a VPN/firewall are detected as dead instead of sitting falsely "connected"; trust-on-first-use host key verification (`src/main/ssh/knownHosts.ts`) refuses to connect - and notifies - if a host's key ever changes, the same model as OpenSSH's `known_hosts` |
 | Secrets storage | ✅ Done | `electron.safeStorage` (OS keychain, e.g. libsecret on Linux) — never round-tripped to the renderer |
 | Sidebar + panel shell | ✅ Done | persistent cluster sidebar (no scrolling away to "go back"); a main panel with Terminal/Status tabs per selected cluster |
 | Live reachability monitoring | ✅ Done | main process TCP-probes every cluster's SSH port on a timer (`src/main/monitor/`); sidebar shows a green/red/gray LED per cluster, always up to date |
@@ -81,6 +82,12 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   the actual Grafana-based health data on the Status tab. When the currently open cluster's
   session is closed and its reachability flips back to online, `TerminalPanel` retries the
   connection once automatically (see the auto-reconnect entry in `CHANGELOG.md`).
+- **No way to un-pin a host key from the UI yet** — if a cluster's login node is legitimately
+  reinstalled (its host key changes on purpose), `forgetKnownHost()` in
+  `src/main/ssh/knownHosts.ts` exists to clear the old pinned key, but nothing in the UI calls it
+  yet; today the only way to recover from an expected key change is to delete the row from the
+  `known_hosts` SQLite table directly. A "trust this new key" button on the connection-refused
+  error is the natural next step.
 - **Jump host secret reuse** — see `src/main/ssh/manager.ts`; a jump host with a different
   password than the target cluster needs its own stored secret, which the data model doesn't
   have a field for yet.
