@@ -6,6 +6,7 @@ import type {
   JiraAuthMode,
   SshAuthMethod
 } from '../../../../shared/types'
+import { toClusterSlug } from '../../../../shared/clusterSlug'
 import './clusters.css'
 
 interface ClusterFormProps {
@@ -412,9 +413,16 @@ export default function ClusterForm({
                       id="jiraJql"
                       value={form.jiraJql}
                       onChange={(e) => set('jiraJql', e.target.value)}
+                      placeholder={`project = ${form.jiraProjectKey || 'HPC'} AND labels = "${toClusterSlug(form.name)}"`}
                     />
                   </div>
                 </div>
+                <p className="hint">
+                  Multiple clusters sharing one Jira project will show identical tickets unless you
+                  scope this JQL by something unique to the cluster (a label or component) - login,
+                  compute, and controller hostnames differ per cluster and aren&apos;t a useful Jira
+                  key. See docs/JIRA_GUIDE.md for the recommended pattern.
+                </p>
                 <div className="form-field">
                   <label htmlFor="jiraApiToken">
                     {form.jiraAuthMode === 'cloud' ? 'API token' : 'Personal access token'}

@@ -3,7 +3,11 @@ import { getCluster, getClusterSecrets } from '../clusters'
 import { createJiraIssue, listJiraIssues } from '../jira/client'
 import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
 
-function requireJiraContext(clusterId: string): { jira: JiraProfile; token: string } {
+function requireJiraContext(clusterId: string): {
+  jira: JiraProfile
+  token: string
+  clusterName: string
+} {
   const cluster = getCluster(clusterId)
   if (!cluster?.jira) {
     throw new Error('This cluster has no Jira project configured.')
@@ -12,7 +16,7 @@ function requireJiraContext(clusterId: string): { jira: JiraProfile; token: stri
   if (!jiraApiToken) {
     throw new Error('No Jira API token is stored for this cluster.')
   }
-  return { jira: cluster.jira, token: jiraApiToken }
+  return { jira: cluster.jira, token: jiraApiToken, clusterName: cluster.name }
 }
 
 export function registerJiraIpcHandlers(): void {
@@ -24,8 +28,8 @@ export function registerJiraIpcHandlers(): void {
   ipcMain.handle(
     'jira:create',
     async (_event, clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary> => {
-      const { jira, token } = requireJiraContext(clusterId)
-      return createJiraIssue(jira, token, input)
+      const { jira, token, clusterName } = requireJiraContext(clusterId)
+      return createJiraIssue(jira, token, input, clusterName)
     }
   )
 }

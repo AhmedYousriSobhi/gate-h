@@ -146,6 +146,9 @@ src/
 
 This README stays focused on what Gate-H is and how to run it. For anything deeper:
 
+- **[docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md)** — step-by-step Jira setup, and how to keep multiple
+  clusters' tickets from bleeding into each other when they share one Jira project (plus where
+  Confluence currently stands: not integrated yet).
 - **[docs/STATUS.md](docs/STATUS.md)** — current feature completeness, how each feature has been
   verified so far, and known limitations/roadmap.
 - **[CHANGELOG.md](CHANGELOG.md)** — the chronological build log: every change, in the order it

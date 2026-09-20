@@ -396,3 +396,35 @@ H-Gate to run scheduler-specific commands like `sinfo` remotely, which is a sepa
 - Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass, and visually
   confirmed the bell/badge/dropdown via the same headless-browser + mocked-data pipeline used for
   the README screenshots.
+
+### 2026-09-20 — `feature/jira-guide-and-auto-label`
+
+A follow-up request asked for a tutorial on connecting Jira, and - the real underlying question -
+how to tell multiple clusters' tickets (and eventually Confluence pages) apart when each cluster
+has its own distinct login/compute/controller hostnames that don't make sense as a shared key.
+
+- **Added `docs/JIRA_GUIDE.md`**: step-by-step Jira Cloud/Data Center setup, a dedicated section
+  explaining why hostnames aren't the right cross-tool identifier (they differ per cluster and
+  even per node-type within a cluster) and why the cluster's own Gate-H name is, JQL recipes for
+  the common cases (shared project split by label/component, dedicated project per cluster,
+  open-only, node-specific), and an honest status check on Confluence: not integrated - no
+  client/auth/UI exists - with a no-code-change workaround (put the link in the cluster's
+  description) and the intended future pattern (label-based page search, mirroring Jira) rather
+  than pretending it works today.
+- **Added `src/shared/clusterSlug.ts`** (`toClusterSlug`): normalizes a cluster's name into a
+  Jira-label-safe slug, shared between the renderer and main process rather than duplicated.
+- **`ClusterForm`**: the Default JQL field now shows a live example placeholder built from the
+  cluster's own name (e.g. `project = HPC AND labels = "frontier-dev"` for a cluster named
+  "Frontier-Dev"), plus a hint explaining the shared-project gotcha, so the guide's advice is
+  visible right where you'd need it instead of only in a doc.
+- **Auto-labeling on ticket creation**: `createJiraIssue` now tags new tickets (filed via the
+  Status tab's "Create ticket") with the cluster's own slug as a label, so tickets created through
+  Gate-H already satisfy the recommended JQL without the user tagging them by hand. Falls back to
+  creating the ticket without the label if a Jira project's create screen doesn't have a Labels
+  field configured, rather than failing ticket creation over a nice-to-have.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass, and unit-tested
+  `toClusterSlug` directly against several inputs (including empty/symbols-only and non-ASCII
+  names). Could not verify the auto-label behavior against a real Jira instance (none reachable in
+  this sandbox) - the fallback-on-failure path means a misconfigured Jira project degrades to the
+  previous (unlabeled) behavior rather than breaking ticket creation, but that path itself is
+  also unverified against a real API response.
