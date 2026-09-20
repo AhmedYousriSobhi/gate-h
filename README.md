@@ -33,6 +33,24 @@ Early development. See [CHANGELOG.md](./CHANGELOG.md) for the running build log 
 
 ## Development
 
-See [docs/ANALYSIS.md](./docs/ANALYSIS.md) for architecture details. Project scaffolding and
-setup instructions land in this README as the app is built out feature by feature (each feature
-is developed on its own branch and merged into `main` once verified).
+See [docs/ANALYSIS.md](./docs/ANALYSIS.md) for architecture details and the build plan. Each
+feature is developed on its own `feature/*` branch and merged into `main` once it builds, lints,
+and typechecks cleanly.
+
+```bash
+npm install       # install dependencies
+npm run dev       # run the app in development mode
+npm run lint       # eslint
+npm run typecheck  # tsc, main + renderer
+npm run build      # production build (main/preload/renderer)
+npm run build:linux  # package as AppImage + .deb
+```
+
+Requires Node.js 20+. Project layout:
+
+```
+src/
+  main/       # Electron main process — SSH, SQLite store, Grafana/Jira HTTP calls
+  preload/    # contextBridge API exposed to the renderer
+  renderer/   # React UI
+```
