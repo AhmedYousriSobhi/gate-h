@@ -3,7 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   ClusterInput,
   CreateJiraIssueInput,
-  HGateApi,
+  GateHApi,
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent
@@ -11,7 +11,7 @@ import type {
 
 // Custom APIs for renderer - a narrow, explicit surface over IPC. The renderer never gets
 // direct Node/Electron access, and secrets never travel back across this bridge.
-const api: HGateApi = {
+const api: GateHApi = {
   clusters: {
     list: () => ipcRenderer.invoke('clusters:list'),
     get: (id: string) => ipcRenderer.invoke('clusters:get', id),

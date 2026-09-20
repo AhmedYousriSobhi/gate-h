@@ -66,7 +66,7 @@ export default function ClusterListPage({
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>H-Gate — Clusters</h1>
+        <h1>Gate-H — Clusters</h1>
         <button className="btn btn-primary" onClick={() => setEditing('new')}>
           + Add cluster
         </button>

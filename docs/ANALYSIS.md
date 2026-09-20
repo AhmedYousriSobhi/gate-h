@@ -1,4 +1,4 @@
-# H-Gate — Analysis & Architecture
+# Gate-H — Analysis & Architecture
 
 ## 1. Problem statement
 
@@ -10,22 +10,22 @@ tools to do their job day to day:
   utilization.
 - A browser tab open to Jira to track incidents, job-support requests, or maintenance tickets.
 
-H-Gate's goal is to fold all three into one **standalone desktop application** (not a browser
+Gate-H's goal is to fold all three into one **standalone desktop application** (not a browser
 tab) that is generic enough to manage any number of clusters, each with its own SSH connection
 profile, Grafana instance, and Jira project.
 
 ## 2. Prior art / competitive landscape
 
-| Tool | Type | Open source | What it does | What H-Gate takes from it |
+| Tool | Type | Open source | What it does | What Gate-H takes from it |
 |---|---|---|---|---|
-| **Open OnDemand** (OSC) | Web portal (server-hosted) | Yes (BSD-3) | Browser-based file management, job submit/monitor, interactive apps (Jupyter/RStudio), in-browser SSH shell | The "one pane of glass per cluster" idea — but H-Gate stays a local desktop app instead of requiring a server deployment per site. |
-| **ColdFront** + **Open XDMoD** | Web apps (Django) | Yes | Allocation/project management (ColdFront) and utilization/usage reporting (XDMoD), integrated via plugin | The separation of concerns: access/allocation vs. utilization reporting vs. interactive portal. H-Gate's Grafana view plays XDMoD's role but scoped to live ops status, not accounting. |
-| **Bright Cluster Manager / NVIDIA Base Command Manager** | Commercial, admin-facing | No | Bare-metal cluster provisioning, lifecycle, monitoring | Out of scope for H-Gate — H-Gate never provisions clusters, only connects to ones that already exist. |
+| **Open OnDemand** (OSC) | Web portal (server-hosted) | Yes (BSD-3) | Browser-based file management, job submit/monitor, interactive apps (Jupyter/RStudio), in-browser SSH shell | The "one pane of glass per cluster" idea — but Gate-H stays a local desktop app instead of requiring a server deployment per site. |
+| **ColdFront** + **Open XDMoD** | Web apps (Django) | Yes | Allocation/project management (ColdFront) and utilization/usage reporting (XDMoD), integrated via plugin | The separation of concerns: access/allocation vs. utilization reporting vs. interactive portal. Gate-H's Grafana view plays XDMoD's role but scoped to live ops status, not accounting. |
+| **Bright Cluster Manager / NVIDIA Base Command Manager** | Commercial, admin-facing | No | Bare-metal cluster provisioning, lifecycle, monitoring | Out of scope for Gate-H — Gate-H never provisions clusters, only connects to ones that already exist. |
 | **Slurm-web** (rackslab) | Web dashboard (needs server) | Yes (GPLv3) | Job queue/node/rack topology views over `slurmrestd`, multi-cluster, RBAC | Closest direct prior art for the "cluster status" screen — worth mirroring its multi-cluster queue/node visualization, but delivered as an embedded desktop view backed by Grafana instead of a hosted web app. |
-| **Ganglia** | Monitoring agent + web UI | Yes | Older push-model HPC monitoring, mostly superseded by Prometheus+Grafana | Confirms Prometheus+Grafana as the modern default — this is exactly what H-Gate integrates with instead of building its own metrics pipeline. |
-| **Termius / MobaXterm / Remmina** | Desktop SSH session managers | Termius/MobaXterm: no, Remmina: yes | Save/organize SSH hosts and keys, tabbed sessions | Closest UX analog for H-Gate's cluster/connection manager — but none of them are HPC-aware (no job queue, no Grafana/Jira). This is the specific gap H-Gate fills: SSH manager + HPC dashboards + ticketing in one app. |
+| **Ganglia** | Monitoring agent + web UI | Yes | Older push-model HPC monitoring, mostly superseded by Prometheus+Grafana | Confirms Prometheus+Grafana as the modern default — this is exactly what Gate-H integrates with instead of building its own metrics pipeline. |
+| **Termius / MobaXterm / Remmina** | Desktop SSH session managers | Termius/MobaXterm: no, Remmina: yes | Save/organize SSH hosts and keys, tabbed sessions | Closest UX analog for Gate-H's cluster/connection manager — but none of them are HPC-aware (no job queue, no Grafana/Jira). This is the specific gap Gate-H fills: SSH manager + HPC dashboards + ticketing in one app. |
 
-**Positioning**: H-Gate is not trying to replace Open OnDemand/Slurm-web (server-hosted, multi-tenant
+**Positioning**: Gate-H is not trying to replace Open OnDemand/Slurm-web (server-hosted, multi-tenant
 HPC center portals) or Bright/Base Command Manager (infra provisioning). It occupies the niche of
 a **personal/team desktop console**: no server to stand up, works against clusters you already
 have SSH + Grafana + Jira access to, and requires zero admin buy-in from the HPC center to install.
@@ -86,7 +86,7 @@ one cluster with a self-hosted Jira Data Center for another.
 REST API pull, per the confirmed decision:
 
 - Auth via a **Grafana service account token** (Bearer token), configured per cluster.
-- H-Gate calls Grafana's HTTP API to fetch dashboard/panel definitions and query results and
+- Gate-H calls Grafana's HTTP API to fetch dashboard/panel definitions and query results and
   renders its own lightweight status widgets (node up/down counts, queue depth, utilization)
   natively in the app — no iframe, so the app has no runtime dependency on a browser engine
   feature set beyond what Electron already ships, and no dependency on the target Grafana's

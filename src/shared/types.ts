@@ -119,7 +119,7 @@ export interface CreateJiraIssueInput {
   description?: string
 }
 
-export interface HGateApi {
+export interface GateHApi {
   clusters: {
     list(): Promise<ClusterSummary[]>
     get(id: string): Promise<ClusterSummary | null>

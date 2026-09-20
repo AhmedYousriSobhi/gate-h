@@ -8,7 +8,7 @@ import type {
 // Talks to a cluster's Grafana instance over its HTTP API using a service-account token.
 // Dashboard "snapshots" are fetched as pre-rendered PNGs via Grafana's render endpoint (needs the
 // grafana-image-renderer plugin on the Grafana side) rather than parsing per-datasource queries -
-// this keeps H-Gate genuinely datasource-agnostic: it works the same whether a cluster's Grafana
+// this keeps Gate-H genuinely datasource-agnostic: it works the same whether a cluster's Grafana
 // is backed by Prometheus, InfluxDB, or anything else, at the cost of a static (non-live) image.
 // When the renderer plugin isn't installed, we fall back to just the dashboard title/link.
 
