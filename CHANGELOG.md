@@ -155,3 +155,26 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Replaced `resources/icon.png`, `build/icon.png`, `build/icon.ico`, and `build/icon.icns`; added
   `resources/icon.svg` as the editable vector source for future changes.
 - Verified `npm run build` still succeeds with the new assets.
+
+### 2026-09-20 — `feature/docs-preview`
+
+- Split the README in two: it now stays focused on what H-Gate is, a visual preview, and how to
+  run it, while `docs/STATUS.md` (new) carries the detailed, point-in-time status - a
+  feature-by-feature completeness table, exactly how each feature has been verified so far, and
+  known limitations/roadmap - for anyone who wants the deeper picture. `CHANGELOG.md` (this file)
+  stays the chronological log; `docs/ANALYSIS.md` stays the architecture/prior-art doc.
+- Generated real preview media from the actual UI code rather than mockups: served the React
+  renderer alone through a plain Vite dev server (bypassing Electron, which this sandbox can't
+  render), drove it with the same headless Chromium used for the earlier screenshots against a
+  mocked `window.api` with realistic sample data, and captured:
+  - Four static screenshots (`docs/assets/screenshots/`): cluster list, add-cluster form, SSH
+    terminal, cluster status.
+  - Three short procedure GIFs (`docs/assets/gifs/`): adding a cluster, connecting over SSH, and
+    viewing status + filing a Jira ticket. Built by capturing a timed sequence of screenshots at
+    each meaningful UI state (not a continuous screen recording) and encoding them with the
+    pure-JS `gifenc`/`pngjs` packages, since no system video/image tooling (ffmpeg with a PNG
+    decoder, ImageMagick) is available in this sandbox - the only ffmpeg present is Playwright's
+    own stripped-down build, which can encode video for screen recording but can't decode PNG.
+- All temporary tooling (the standalone Vite config, the mock-API/recording scripts) lived in the
+  scratchpad directory and was not committed; only the resulting README, `docs/STATUS.md`, and
+  `docs/assets/` media are part of the repo.
