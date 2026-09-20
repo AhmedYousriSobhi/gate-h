@@ -212,43 +212,195 @@
   color: var(--color-text-3);
 }
 
-.panel-tabs {
+.panel-toolbar {
   display: flex;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-4) 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
-.panel-tab {
+.panel-toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.btn-icon {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: none;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--color-text-2);
-  padding: var(--space-2) var(--space-3);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 510;
-  font-family: inherit;
-  border-bottom: 2px solid transparent;
-  transition: color var(--duration-fast) var(--ease-out);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 
-.panel-tab:hover {
+.btn-icon:hover:not(:disabled) {
   color: var(--color-text-1);
+  background: var(--color-surface-hover);
 }
 
-.panel-tab-active {
-  color: var(--color-text-1);
-  border-bottom-color: var(--color-accent);
+.btn-icon:disabled {
+  color: var(--color-text-3);
+  cursor: not-allowed;
 }
 
-.panel-content {
+.btn-icon-active {
+  color: var(--color-accent);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border);
+}
+
+/* Split view: two panes (Terminal/Status today) laid out side by side or stacked, with a 1px
+   seam between them created by the container's background peeking through the `gap`, so no
+   dedicated divider element is needed for either orientation. */
+.panel-split {
   flex: 1;
+  display: flex;
+  min-height: 0;
+  gap: 1px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.panel-split-horizontal {
+  flex-direction: row;
+}
+
+.panel-split-vertical {
+  flex-direction: column;
+}
+
+.panel-split-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  color: var(--color-text-3);
+  font-size: 13px;
+  text-align: center;
+  background: var(--color-bg);
+}
+
+.panel-pane {
+  flex: 1 1 0%;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.widget-picker-anchor {
+  position: relative;
+}
+
+.widget-picker {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 20;
+  width: 280px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  padding: var(--space-2);
+}
+
+.widget-picker-heading {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-3);
+}
+
+.widget-picker-heading-roadmap {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-1);
+}
+
+.widget-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.widget-picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-1);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.widget-picker-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.widget-picker-item svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-text-2);
+}
+
+.widget-picker-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.widget-picker-item-label {
+  font-size: 13px;
+  font-weight: 510;
+}
+
+.widget-picker-item-description {
+  font-size: 11.5px;
+  color: var(--color-text-3);
+}
+
+.widget-picker-check {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--color-accent);
+}
+
+.widget-picker-item-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .btn-sm {
