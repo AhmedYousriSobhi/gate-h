@@ -53,12 +53,12 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   channels (they're already keyed by `sessionId`, so the main-process side mostly just needs the
   renderer to track more than one) and keeping each `TerminalPanel` mounted (not unmounted) when
   its cluster isn't the active sidebar selection.
-- **Reachability is a TCP probe, not a real health check** — `src/main/monitor/reachability.ts`
-  just checks whether the SSH port accepts a TCP connection every 20 seconds; a cluster behind a
-  firewall that blocks the probe but is otherwise fine would show red, and a host that accepts TCP
-  connections but has a broken SSH daemon would show green. It's a reasonable proxy for "can I
-  probably SSH in right now" - not a substitute for the actual Grafana-based health data on the
-  Status tab.
+- **Reachability is an SSH-banner probe, not a real health check** — `src/main/monitor/reachability.ts`
+  checks every 60 seconds whether the SSH port opens *and* actually speaks SSH (see the "fixed"
+  entry in `CHANGELOG.md` for why it's not a bare TCP connect); a cluster behind a firewall that
+  blocks the probe but is otherwise fine would show red, and a host with an SSH-shaped banner but
+  a broken daemon behind it would show green. It's a reasonable proxy for "can I probably SSH in
+  right now" - not a substitute for the actual Grafana-based health data on the Status tab.
 - **Jump host secret reuse** — see `src/main/ssh/manager.ts`; a jump host with a different
   password than the target cluster needs its own stored secret, which the data model doesn't
   have a field for yet.
