@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerClusterIpcHandlers } from './ipc/clusters'
 import { registerSshIpcHandlers } from './ipc/ssh'
+import { registerGrafanaIpcHandlers } from './ipc/grafana'
 import { closeAllSessions } from './ssh/manager'
 
 function createWindow(): void {
@@ -54,6 +55,7 @@ app.whenReady().then(() => {
 
   registerClusterIpcHandlers()
   registerSshIpcHandlers()
+  registerGrafanaIpcHandlers()
 
   createWindow()
 

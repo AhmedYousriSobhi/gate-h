@@ -1,0 +1,71 @@
+.status-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.status-body h2 {
+  font-size: 16px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--ev-c-gray-3);
+  padding-bottom: 8px;
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.health-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.health-ok {
+  background-color: #1e4d2b;
+  color: #8de29b;
+}
+
+.health-down {
+  background-color: #4d1e1e;
+  color: #e28d8d;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.dashboard-card {
+  border: 1px solid var(--ev-c-gray-3);
+  border-radius: 10px;
+  padding: 12px;
+  background-color: var(--color-background-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-card img {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--ev-c-gray-3);
+}
+
+.dashboard-card a {
+  color: #6fa8ff;
+  font-size: 13px;
+}

@@ -5,9 +5,13 @@ import './clusters.css'
 
 interface ClusterListPageProps {
   onConnect: (cluster: ClusterSummary) => void
+  onViewStatus: (cluster: ClusterSummary) => void
 }
 
-export default function ClusterListPage({ onConnect }: ClusterListPageProps): React.JSX.Element {
+export default function ClusterListPage({
+  onConnect,
+  onViewStatus
+}: ClusterListPageProps): React.JSX.Element {
   const [clusters, setClusters] = useState<ClusterSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -105,6 +109,9 @@ export default function ClusterListPage({ onConnect }: ClusterListPageProps): Re
             <div className="card-actions">
               <button className="btn btn-primary" onClick={() => onConnect(cluster)}>
                 Connect
+              </button>
+              <button className="btn" onClick={() => onViewStatus(cluster)}>
+                Status
               </button>
               <button className="btn" onClick={() => setEditing(cluster)}>
                 Edit

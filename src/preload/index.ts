@@ -18,6 +18,9 @@ const api: HGateApi = {
     update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
     remove: (id: string) => ipcRenderer.invoke('clusters:remove', id)
   },
+  grafana: {
+    getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId)
+  },
   ssh: {
     connect: (clusterId: string) => ipcRenderer.invoke('ssh:connect', clusterId),
     write: (sessionId: string, data: string) => ipcRenderer.send('ssh:write', sessionId, data),
