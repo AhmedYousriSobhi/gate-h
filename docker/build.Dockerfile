@@ -1,4 +1,4 @@
-# Reproducible build environment for packaging H-Gate as a Linux AppImage.
+# Reproducible build environment for packaging Gate-H as a Linux AppImage.
 #
 # This image intentionally contains no app source - it's the toolchain only (pinned Node version,
 # native-module build deps, Linux packaging deps). build-desktop.sh mounts the real repo into it

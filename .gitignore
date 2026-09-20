@@ -14,7 +14,7 @@ out
 *.key
 
 # Local app data (cluster configs, cached credentials) - never commit
-.hgate/
+.gate-h/
 *.sqlite
 *.sqlite3
 

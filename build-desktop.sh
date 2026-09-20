@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds the H-Gate Linux AppImage reproducibly, inside Docker, instead of relying on whatever
+# Builds the Gate-H Linux AppImage reproducibly, inside Docker, instead of relying on whatever
 # Node/toolchain happens to be installed locally.
 #
 # Usage:
 #   ./build-desktop.sh
-#   ./dist/H-Gate-*.AppImage
+#   ./dist/Gate-H-*.AppImage
 #
 # The Docker image (docker/build.Dockerfile) is the build TOOLCHAIN only - a pinned Node version
 # plus the native-module and Linux-packaging build deps. The actual repo is bind-mounted in at run
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_TAG="hgate-builder:latest"
+IMAGE_TAG="gateh-builder:latest"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "error: docker is required but was not found on PATH" >&2
@@ -25,12 +25,12 @@ fi
 echo "==> Building the build-toolchain image ($IMAGE_TAG)"
 docker build -t "$IMAGE_TAG" -f "$ROOT_DIR/docker/build.Dockerfile" "$ROOT_DIR"
 
-echo "==> Building H-Gate inside Docker (npm ci && npm run typecheck && npm run build:linux)"
+echo "==> Building Gate-H inside Docker (npm ci && npm run typecheck && npm run build:linux)"
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   -v "$ROOT_DIR:/workspace" \
-  -v hgate_build_node_modules:/workspace/node_modules \
-  -v hgate_build_home:/home/build \
+  -v gateh_build_node_modules:/workspace/node_modules \
+  -v gateh_build_home:/home/build \
   -w /workspace \
   "$IMAGE_TAG" \
   bash -c "npm ci && npm run typecheck && npm run build:linux"

@@ -7,6 +7,10 @@ import { registerSshIpcHandlers } from './ipc/ssh'
 import { registerGrafanaIpcHandlers } from './ipc/grafana'
 import { registerJiraIpcHandlers } from './ipc/jira'
 import { closeAllSessions } from './ssh/manager'
+import { initUserDataDir } from './userData'
+
+// Must run before anything (including app.whenReady()) touches the userData path.
+initUserDataDir()
 
 function createWindow(): void {
   // Create the browser window.
@@ -45,7 +49,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('de.yousri.hgate')
+  electronApp.setAppUserModelId('de.yousri.gateh')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

@@ -1,7 +1,7 @@
 {
-  "name": "hgate",
+  "name": "gate-h",
   "version": "0.1.0",
-  "description": "H-Gate — a standalone desktop portal for managing HPC workloads across multiple clusters",
+  "description": "Gate-H — a standalone desktop portal for managing HPC workloads across multiple clusters",
   "main": "./out/main/index.js",
   "author": "ahmedyousrisobhi",
   "license": "UNLICENSED",

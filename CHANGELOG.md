@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to H-Gate are documented in this file, in the order they happened.
+All notable changes to Gate-H are documented in this file, in the order they happened.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
@@ -31,8 +31,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   were touched and no reboot was required.
 - Scaffolded the Electron + React + TypeScript app using `electron-vite`'s official
   `react-ts` template (main / preload / renderer process split).
-- Renamed the app to **H-Gate** throughout (`package.json`, `electron-builder.yml`: app id
-  `de.yousri.hgate`, product name `H-Gate`); linux packaging targets set to AppImage + deb.
+- Renamed the app to **Gate-H** throughout (`package.json`, `electron-builder.yml`: app id
+  `de.yousri.hgate`, product name `Gate-H`); linux packaging targets set to AppImage + deb.
 - Wrote `docs/ANALYSIS.md`: prior-art comparison (Open OnDemand, ColdFront/XDMoD, Bright Cluster
   Manager, Slurm-web, Ganglia, Termius/MobaXterm/Remmina), the chosen architecture (Electron
   process split, `ssh2` + jump-host chaining, `xterm.js` + `node-pty` terminal,
@@ -80,7 +80,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Built an embedded terminal (`src/renderer/src/features/terminal/TerminalView.tsx`) using
   `@xterm/xterm` + `@xterm/addon-fit`, wired to a new "Connect" button on each cluster card;
   `node-pty` was intentionally **not** added since it's only needed for a local shell — every
-  H-Gate terminal is a remote SSH channel already provided by `ssh2`.
+  Gate-H terminal is a remote SSH channel already provided by `ssh2`.
 - Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Could not test an
   actual SSH connection end-to-end in this sandbox (no reachable SSH server here, and see the GUI
   limitation noted above) — recommend testing `Connect` against a real cluster after `npm run dev`.
@@ -92,9 +92,9 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   each configured dashboard's title/panel count, and `/render/d-solo/{uid}` (grafana-image-renderer)
   for a snapshot image of the first panel, falling back to just the title/link when the renderer
   plugin isn't installed.
-  - Chose image-rendering over parsing per-panel queries directly so H-Gate stays genuinely
+  - Chose image-rendering over parsing per-panel queries directly so Gate-H stays genuinely
     datasource-agnostic — it works the same regardless of whether a cluster's Grafana sits on
-    Prometheus, InfluxDB, or anything else, without H-Gate needing to understand that data source.
+    Prometheus, InfluxDB, or anything else, without Gate-H needing to understand that data source.
 - Added `grafana:status` IPC handler (`src/main/ipc/grafana.ts`) and `window.api.grafana.getStatus`
   in preload.
 - Added a cluster "Status" screen (`src/renderer/src/features/status/`) reachable via a new
@@ -142,7 +142,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 2026-09-20 — `feature/app-icon`
 
-- Replaced the default electron-vite/Electron logo with a custom H-Gate mark: two rounded bars
+- Replaced the default electron-vite/Electron logo with a custom Gate-H mark: two rounded bars
   forming an "H" doubling as a gate/frame silhouette, with a glowing status node on the crossbar
   (nodding to the app's live Grafana monitoring), gradient blue on a dark navy rounded-square
   background - designed to read clearly down to a 16px taskbar size.
@@ -158,7 +158,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 2026-09-20 — `feature/docs-preview`
 
-- Split the README in two: it now stays focused on what H-Gate is, a visual preview, and how to
+- Split the README in two: it now stays focused on what Gate-H is, a visual preview, and how to
   run it, while `docs/STATUS.md` (new) carries the detailed, point-in-time status - a
   feature-by-feature completeness table, exactly how each feature has been verified so far, and
   known limitations/roadmap - for anyone who wants the deeper picture. `CHANGELOG.md` (this file)
@@ -191,14 +191,35 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   volumes (not bind-mounted from the host), so a Docker-built `node_modules` can never collide
   with the one used for local `npm run dev`. Docker was actually available in this sandbox, so
   this was verified end-to-end (not just written blind): `./build-desktop.sh` was run for real
-  and produced `dist/H-Gate-0.1.0.AppImage`, host-owned and executable.
+  and produced `dist/Gate-H-0.1.0.AppImage`, host-owned and executable.
 - Dropped `.deb` from `linux.target` in `electron-builder.yml`: electron-builder's `fpm`-based deb
   packaging requires a `homepage` field in `package.json`, and there's no real public repo/homepage
   URL for this project yet to put there - fabricating one felt worse than just building the
   `AppImage` (the format actually asked for) until a real URL exists. Also fixed `appImage.artifactName`
-  to use `${productName}` instead of `${name}`, so the output is `H-Gate-<version>.AppImage` rather
+  to use `${productName}` instead of `${name}`, so the output is `Gate-H-<version>.AppImage` rather
   than `hgate-<version>.AppImage`, and excluded `docs/`, `docker/`, and `build-desktop.sh` from the
   packaged app's files (they're project docs/tooling, not app runtime files).
 - Updated `README.md` (Docker is now the documented way to get a runnable build; `npm run dev`
   stays the documented path for local development, since Docker can't give you a GUI window) and
   `docs/STATUS.md` (packaging status, and the `.deb`/homepage limitation) to match.
+
+### 2026-09-20 — `feature/rebrand-gate-h`
+
+- First real user testing happened: the packaged AppImage was actually installed and used to
+  connect to a real cluster ("TestCluster"). Feedback from that session drove this and the following
+  changes.
+- Renamed the product from "H-Gate" to "Gate-H" everywhere: the in-app header, `package.json`
+  (`name`, `description`), `electron-builder.yml` (`appId`, `productName`, `win.executableName` -
+  the packaged AppImage is now `Gate-H-<version>.AppImage`), the `<title>` tag (previously still
+  the electron-vite template default, never actually set), the `HGateApi` → `GateHApi` TypeScript
+  interface, and every mention across `README.md`/`CHANGELOG.md`/`docs/*.md` and the Docker
+  image/volume names in `build-desktop.sh`.
+- **Protected existing user data across the rename**: Electron was deriving the userData directory
+  (where the cluster database lives) from the old `hgate` package name, so renaming it outright
+  would have made the app start looking in a new, empty directory - silently "losing" a real
+  user's already-saved clusters (including the "TestCluster" cluster from the testing session above).
+  Added `src/main/userData.ts`: it now pins `userData` to an explicit `gate-h` directory
+  (independent of whatever the npm package happens to be named, so this class of bug can't recur),
+  and on first run after the rename, moves a pre-existing `~/.config/hgate/hgate.sqlite3` into the
+  new location automatically before anything else touches it.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass after the rename.

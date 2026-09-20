@@ -1,13 +1,14 @@
 import { app } from 'electron'
 import { join } from 'path'
 import Database from 'better-sqlite3'
+import { DB_FILE_NAME } from './userData'
 
 let db: Database.Database | null = null
 
 export function getDb(): Database.Database {
   if (db) return db
 
-  const dbPath = join(app.getPath('userData'), 'hgate.sqlite3')
+  const dbPath = join(app.getPath('userData'), DB_FILE_NAME)
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
 

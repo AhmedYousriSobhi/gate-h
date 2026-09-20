@@ -1,6 +1,6 @@
 # Project status
 
-This page is the detailed, point-in-time status of H-Gate: what's implemented, how it was
+This page is the detailed, point-in-time status of Gate-H: what's implemented, how it was
 verified, and what's deliberately deferred. For the chronological build log (what changed, in
 what order, and why), see [CHANGELOG.md](../CHANGELOG.md). For architecture and the prior-art
 research behind the design decisions, see [ANALYSIS.md](./ANALYSIS.md).
@@ -39,7 +39,7 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
    with realistic sample data. This is how the screenshots and GIFs in the README were produced.
 3. **Not yet verified against real infrastructure**: an actual SSH server, a real Grafana
    instance, or a real Jira instance. If you have access to any of those, running `npm run dev`
-   on a normal desktop and pointing H-Gate at them is the natural next verification step.
+   on a normal desktop and pointing Gate-H at them is the natural next verification step.
 
 ## Known limitations / near-term roadmap
 
@@ -50,7 +50,7 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 - **Jump host secret reuse** — see `src/main/ssh/manager.ts`; a jump host with a different
   password than the target cluster needs its own stored secret, which the data model doesn't
   have a field for yet.
-- **Grafana snapshots need the image-renderer plugin** — without it, H-Gate falls back to just
+- **Grafana snapshots need the image-renderer plugin** — without it, Gate-H falls back to just
   the dashboard title and an "Open in Grafana" link. A future iteration could let a cluster point
   at specific panel IDs instead of just dashboard UIDs, for a more compact status view.
 - **No automated tests** — the project has been verified manually (typecheck/lint/build, plus the

@@ -1,5 +1,5 @@
-appId: de.yousri.hgate
-productName: H-Gate
+appId: de.yousri.gateh
+productName: Gate-H
 directories:
   buildResources: build
 files:
@@ -15,7 +15,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: hgate
+  executableName: Gate-H
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

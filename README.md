@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="resources/icon.png" alt="H-Gate icon" width="96" height="96">
+  <img src="resources/icon.png" alt="Gate-H icon" width="96" height="96">
 </p>
 
-<h1 align="center">H-Gate</h1>
+<h1 align="center">Gate-H</h1>
 
 <p align="center">
   A standalone desktop app (not a browser app) for managing HPC workloads across multiple
@@ -65,16 +65,16 @@
 
 ## Get the app
 
-The reproducible way to get a runnable H-Gate, no local Node/toolchain setup required — just
+The reproducible way to get a runnable Gate-H, no local Node/toolchain setup required — just
 [Docker](https://docs.docker.com/engine/install/):
 
 ```bash
 ./build-desktop.sh
-./dist/H-Gate-*.AppImage
+./dist/Gate-H-*.AppImage
 ```
 
 `build-desktop.sh` builds a pinned Node + native-module toolchain image, then builds and packages
-H-Gate inside a container from it — the same result on any machine, regardless of what's installed
+Gate-H inside a container from it — the same result on any machine, regardless of what's installed
 locally. See [docker/build.Dockerfile](docker/build.Dockerfile) for exactly what's in that image.
 
 Then, inside the app:
@@ -87,12 +87,12 @@ Then, inside the app:
 
 ## Development
 
-For active development (with hot reload), run H-Gate directly with Node instead — Docker doesn't
+For active development (with hot reload), run Gate-H directly with Node instead — Docker doesn't
 give you a GUI window, so it's only used for reproducible packaging above, not for `dev`:
 
 ```bash
 npm install       # install dependencies (Node.js 20+ required)
-npm run dev       # launch H-Gate in development mode
+npm run dev       # launch Gate-H in development mode
 ```
 
 Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.
@@ -123,14 +123,14 @@ src/
 
 ## Learn more / project status
 
-This README stays focused on what H-Gate is and how to run it. For anything deeper:
+This README stays focused on what Gate-H is and how to run it. For anything deeper:
 
 - **[docs/STATUS.md](docs/STATUS.md)** — current feature completeness, how each feature has been
   verified so far, and known limitations/roadmap.
 - **[CHANGELOG.md](CHANGELOG.md)** — the chronological build log: every change, in the order it
   happened, and why.
 - **[docs/ANALYSIS.md](docs/ANALYSIS.md)** — prior-art research (Open OnDemand, ColdFront/XDMoD,
-  Slurm-web, etc.) and the architecture decisions behind H-Gate.
+  Slurm-web, etc.) and the architecture decisions behind Gate-H.
 
 Each feature is developed on its own `feature/*` branch and merged into `main` once it builds,
 lints, and typechecks cleanly.
