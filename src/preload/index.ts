@@ -6,6 +6,7 @@ import type {
   ClusterReachability,
   CreateJiraIssueInput,
   GateHApi,
+  PanelLayout,
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent
@@ -94,6 +95,10 @@ const api: GateHApi = {
     rename: (id: string, name: string) => ipcRenderer.invoke('profiles:rename', id, name),
     remove: (id: string) => ipcRenderer.invoke('profiles:remove', id),
     countClusters: (id: string) => ipcRenderer.invoke('profiles:countClusters', id)
+  },
+  layout: {
+    get: () => ipcRenderer.invoke('layout:get'),
+    set: (layout: PanelLayout) => ipcRenderer.send('layout:set', layout)
   }
 }
 
