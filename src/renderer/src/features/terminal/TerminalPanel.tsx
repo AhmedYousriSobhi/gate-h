@@ -5,21 +5,25 @@ import type { ClusterSummary } from '../../../../shared/types'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 
-interface TerminalViewProps {
+interface TerminalPanelProps {
   cluster: ClusterSummary
-  onClose: () => void
 }
 
-export default function TerminalView({ cluster, onClose }: TerminalViewProps): React.JSX.Element {
+type SessionStatus = 'connecting' | 'connected' | 'closed'
+
+export default function TerminalPanel({ cluster }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [connectError, setConnectError] = useState<string | null>(null)
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'closed'>('connecting')
+  const [status, setStatus] = useState<SessionStatus>('connecting')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!containerRef.current) return
 
     let disposed = false
     let sessionId: string | null = null
+    setStatus('connecting')
+    setConnectError(null)
 
     const term = new Terminal({
       convertEol: true,
@@ -79,24 +83,21 @@ export default function TerminalView({ cluster, onClose }: TerminalViewProps): R
       if (sessionId) window.api.ssh.disconnect(sessionId)
       term.dispose()
     }
-  }, [cluster.id])
+  }, [cluster.id, attempt])
 
   return (
-    <div className="terminal-page">
-      <header className="terminal-header">
-        <div>
-          <strong>{cluster.name}</strong>
-          <span className="terminal-status"> — {status}</span>
-        </div>
-        <button className="btn" onClick={onClose}>
-          Back to clusters
-        </button>
-      </header>
-      {connectError && (
-        <div className="error-banner" style={{ margin: 16 }}>
-          {connectError}
-        </div>
-      )}
+    <div className="terminal-panel">
+      <div className="terminal-statusbar">
+        <span>
+          {cluster.connection.username}@{cluster.connection.host} — {status}
+        </span>
+        {status === 'closed' && (
+          <button className="btn btn-sm" onClick={() => setAttempt((n) => n + 1)}>
+            Reconnect
+          </button>
+        )}
+      </div>
+      {connectError && <div className="error-banner terminal-error">{connectError}</div>}
       <div className="terminal-container" ref={containerRef} />
     </div>
   )

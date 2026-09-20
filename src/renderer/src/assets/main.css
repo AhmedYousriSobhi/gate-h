@@ -25,3 +25,57 @@ code {
   display: block;
   min-height: 100vh;
 }
+
+/* Shared, cross-feature UI primitives (buttons, banners, hints) - kept here rather than in a
+   single feature's stylesheet since Sidebar, MainPanel, TerminalPanel, and the status/cluster-form
+   features all rely on them. */
+.btn {
+  cursor: pointer;
+  border: 1px solid var(--ev-button-alt-border);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ev-button-alt-text);
+  background-color: var(--ev-button-alt-bg);
+}
+
+.btn:hover {
+  color: var(--ev-button-alt-hover-text);
+  background-color: var(--ev-button-alt-hover-bg);
+}
+
+.btn-primary {
+  background-color: #2f6fed;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #4a80f0;
+}
+
+.btn-danger {
+  background-color: transparent;
+  border-color: #a83c3c;
+  color: #e07a7a;
+}
+
+.btn-danger:hover {
+  background-color: #a83c3c33;
+}
+
+.error-banner {
+  background-color: #a83c3c33;
+  border: 1px solid #a83c3c;
+  color: #f0a9a9;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--ev-c-text-3);
+  margin-top: 2px;
+}

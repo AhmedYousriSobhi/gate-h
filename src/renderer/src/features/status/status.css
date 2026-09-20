@@ -1,14 +1,10 @@
-.status-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
 .status-body {
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .status-body h2 {
