@@ -1,3 +1,4 @@
+import { BarChart3, Ticket } from 'lucide-react'
 import type { ClusterSummary } from '../../../../shared/types'
 import GrafanaStatusSection from './GrafanaStatusSection'
 import JiraSection from './JiraSection'
@@ -11,11 +12,17 @@ export default function StatusPanel({ cluster }: StatusPanelProps): React.JSX.El
   return (
     <div className="status-body">
       <section>
-        <h2>Grafana</h2>
+        <h2>
+          <BarChart3 size={15} strokeWidth={2} />
+          Grafana
+        </h2>
         <GrafanaStatusSection cluster={cluster} />
       </section>
       <section>
-        <h2>Jira</h2>
+        <h2>
+          <Ticket size={15} strokeWidth={2} />
+          Jira
+        </h2>
         <JiraSection cluster={cluster} />
       </section>
     </div>

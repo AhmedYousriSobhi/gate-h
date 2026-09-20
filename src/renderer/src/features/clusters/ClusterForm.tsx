@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BarChart3, KeyRound, Ticket } from 'lucide-react'
 import type {
   ClusterInput,
   ClusterSummary,
@@ -178,7 +179,10 @@ export default function ClusterForm({
           </div>
 
           <div className="form-section">
-            <h4>SSH connection</h4>
+            <h4>
+              <KeyRound size={13} strokeWidth={2} />
+              SSH connection
+            </h4>
             <div className="form-row">
               <div className="form-field">
                 <label htmlFor="host">Host</label>
@@ -309,7 +313,10 @@ export default function ClusterForm({
                 checked={form.useGrafana}
                 onChange={(e) => set('useGrafana', e.target.checked)}
               />
-              <h4 style={{ margin: 0 }}>Grafana status</h4>
+              <h4 style={{ margin: 0 }}>
+                <BarChart3 size={13} strokeWidth={2} />
+                Grafana status
+              </h4>
             </label>
             {form.useGrafana && (
               <>
@@ -351,7 +358,10 @@ export default function ClusterForm({
                 checked={form.useJira}
                 onChange={(e) => set('useJira', e.target.checked)}
               />
-              <h4 style={{ margin: 0 }}>Jira</h4>
+              <h4 style={{ margin: 0 }}>
+                <Ticket size={13} strokeWidth={2} />
+                Jira
+              </h4>
             </label>
             {form.useJira && (
               <>

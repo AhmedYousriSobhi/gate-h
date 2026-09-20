@@ -323,3 +323,38 @@ the current files:
 - **What this can't reach**: this repo's own git history and working tree are clean, but the
   identifying details were also visible earlier in this project's chat conversation, which lives
   outside this repository - scrubbing that is outside what a code change can do.
+
+### 2026-09-20 — `feature/minimalist-redesign`
+
+A full visual pass, grounded in current UI/UX research (Linear's design-token approach - near-black
+surfaces, a single chromatic accent, a tight 4px spacing scale, Inter at an in-between "510" weight
+- and the minimalist/graphical direction of tools like Raycast and Termius) rather than tweaking
+colors ad hoc.
+
+- **Design tokens** (`assets/base.css`): replaced the scattered `--ev-*` variables with a real
+  token set - layered near-black surfaces (`--color-bg` → `--color-surface-active`), a single blue
+  accent (`--color-accent`, matching the existing app icon) reserved for interactive/active
+  elements, semantic online/offline/checking colors reserved for status only, a 4px spacing scale,
+  and a 6/10/14px radius scale. Old `--ev-*` names are kept as aliases so nothing broke mid-migration.
+- **Typography**: self-hosted Inter (`@fontsource-variable/inter`) at `font-weight: 510` for UI
+  text (Linear's signature "between regular and medium" weight) and JetBrains Mono
+  (`@fontsource/jetbrains-mono`) for hostnames/connection strings, both bundled locally rather than
+  loaded from Google Fonts/a CDN - this is a desktop app that should render its own UI correctly
+  with no network access.
+- **Iconography**: replaced every unicode glyph and emoji (✎, ✕, 📊, 🎫) with real SVG icons from
+  `lucide-react` - tree-shakeable, MIT-licensed, `currentColor`-based so they follow the theme.
+- **Sidebar**: each cluster now gets a colored monogram avatar (deterministic per name, like a
+  Slack/Linear workspace icon) with its reachability LED as a small badge on the avatar itself
+  instead of a separate dot; the active row gets a left accent bar instead of just a background
+  tint; the "checking" LED now pulses.
+- **Status panel**: Jira issues get a status-colored pill (accent for "in progress", green for
+  "done", neutral for "to do") instead of one flat gray pill for every status; health badges and
+  links got matching icons.
+- **Terminal panel**: status bar now shows a small colored connection-state dot plus the
+  connection string in monospace, and the xterm instance itself uses JetBrains Mono and an accent
+  cursor color to match the rest of the app.
+- Regenerated the README preview screenshots/GIFs against the redesigned UI (same headless-browser
+  pipeline as before).
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass; the two new font
+  packages add ~350KB of bundled `.woff2`/`.woff` assets (only the subsets actually used get
+  fetched at runtime) and `lucide-react` tree-shakes to only the ~15 icons actually imported.

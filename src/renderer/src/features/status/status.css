@@ -1,115 +1,173 @@
 .status-body {
-  padding: 24px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-5);
   height: 100%;
   overflow-y: auto;
 }
 
 .status-body h2 {
-  font-size: 16px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--ev-c-gray-3);
-  padding-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-1);
+}
+
+.status-body h2 svg {
+  color: var(--color-text-3);
 }
 
 .status-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .health-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   width: fit-content;
   font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 999px;
+  font-weight: 510;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
 }
 
 .health-ok {
-  background-color: #1e4d2b;
-  color: #8de29b;
+  background-color: rgba(61, 220, 132, 0.12);
+  color: var(--color-online);
 }
 
 .health-down {
-  background-color: #4d1e1e;
-  color: #e28d8d;
+  background-color: rgba(240, 85, 95, 0.12);
+  color: var(--color-offline);
 }
 
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .dashboard-card {
-  border: 1px solid var(--ev-c-gray-3);
-  border-radius: 10px;
-  padding: 12px;
-  background-color: var(--color-background-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background-color: var(--color-surface);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.dashboard-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.dashboard-card h4 {
+  font-size: 13px;
+  font-weight: 560;
 }
 
 .dashboard-card img {
   width: 100%;
-  border-radius: 6px;
-  border: 1px solid var(--ev-c-gray-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
 }
 
 .dashboard-card a {
-  color: #6fa8ff;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-accent-hover);
+  font-size: 12.5px;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.dashboard-card a:hover {
+  text-decoration: underline;
 }
 
 .issue-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .issue-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--ev-c-gray-3);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background-color: var(--color-background-soft);
+  gap: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  font-size: 13px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.issue-row:hover {
+  border-color: var(--color-border-strong);
 }
 
 .issue-row a {
-  color: #6fa8ff;
-  font-weight: 600;
+  color: var(--color-accent-hover);
+  font-weight: 560;
   text-decoration: none;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
 }
 
 .issue-status {
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background-color: var(--ev-c-gray-3);
-  color: var(--ev-c-text-2);
+  font-weight: 510;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
   white-space: nowrap;
+}
+
+.issue-status-todo {
+  background-color: var(--color-surface-active);
+  color: var(--color-text-2);
+}
+
+.issue-status-active {
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent-hover);
+}
+
+.issue-status-done {
+  background-color: rgba(61, 220, 132, 0.12);
+  color: var(--color-online);
 }
 
 .issue-form {
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .issue-form input {
   flex: 1;
-  background-color: var(--color-background);
-  border: 1px solid var(--ev-c-gray-3);
-  border-radius: 6px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
-  color: var(--color-text);
+  color: var(--color-text-1);
   font-size: 13px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.issue-form input:focus {
+  outline: none;
+  border-color: var(--color-accent);
 }

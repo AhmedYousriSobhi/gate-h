@@ -1,34 +1,69 @@
 :root {
-  --ev-c-white: #ffffff;
-  --ev-c-white-soft: #f8f8f8;
-  --ev-c-white-mute: #f2f2f2;
+  /* Surfaces - near-black, not pure black, so elevated panels can read as "lighter" */
+  --color-bg: #0a0a0c;
+  --color-bg-elevated: #101114;
+  --color-bg-overlay: rgba(6, 6, 8, 0.6);
+  --color-surface: #131418;
+  --color-surface-hover: #1a1b20;
+  --color-surface-active: #1f2026;
 
-  --ev-c-black: #1b1b1f;
-  --ev-c-black-soft: #222222;
-  --ev-c-black-mute: #282828;
+  /* Borders - subtle, semi-transparent white, brighter on hover/focus */
+  --color-border: rgba(255, 255, 255, 0.07);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
 
-  --ev-c-gray-1: #515c67;
-  --ev-c-gray-2: #414853;
-  --ev-c-gray-3: #32363f;
+  /* Text */
+  --color-text-1: rgba(247, 247, 249, 0.92);
+  --color-text-2: rgba(247, 247, 249, 0.6);
+  --color-text-3: rgba(247, 247, 249, 0.38);
 
-  --ev-c-text-1: rgba(255, 255, 245, 0.86);
-  --ev-c-text-2: rgba(235, 235, 245, 0.6);
-  --ev-c-text-3: rgba(235, 235, 245, 0.38);
+  /* Single chromatic accent - kept as the app's existing signature blue */
+  --color-accent: #3b7cf6;
+  --color-accent-hover: #578dfa;
+  --color-accent-soft: rgba(59, 124, 246, 0.14);
+  --color-accent-text: #ffffff;
 
+  /* Semantic status colors - reserved for status only, never decorative */
+  --color-online: #3ddc84;
+  --color-offline: #f0555f;
+  --color-checking: #8a8f98;
+  --color-warning: #e8a33d;
+
+  /* Spacing scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Radius scale */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+
+  /* Legacy aliases kept so any not-yet-migrated component still resolves sensibly */
+  --color-background: var(--color-bg);
+  --color-background-soft: var(--color-surface);
+  --color-background-mute: var(--color-surface-hover);
+  --color-text: var(--color-text-1);
+  --ev-c-gray-1: rgba(255, 255, 255, 0.24);
+  --ev-c-gray-2: var(--color-surface-active);
+  --ev-c-gray-3: var(--color-border);
+  --ev-c-text-1: var(--color-text-1);
+  --ev-c-text-2: var(--color-text-2);
+  --ev-c-text-3: var(--color-text-3);
   --ev-button-alt-border: transparent;
-  --ev-button-alt-text: var(--ev-c-text-1);
-  --ev-button-alt-bg: var(--ev-c-gray-3);
+  --ev-button-alt-text: var(--color-text-1);
+  --ev-button-alt-bg: var(--color-surface-active);
   --ev-button-alt-hover-border: transparent;
-  --ev-button-alt-hover-text: var(--ev-c-text-1);
-  --ev-button-alt-hover-bg: var(--ev-c-gray-2);
-}
-
-:root {
-  --color-background: var(--ev-c-black);
-  --color-background-soft: var(--ev-c-black-soft);
-  --color-background-mute: var(--ev-c-black-mute);
-
-  --color-text: var(--ev-c-text-1);
+  --ev-button-alt-hover-text: var(--color-text-1);
+  --ev-button-alt-hover-bg: var(--color-surface-hover);
 }
 
 *,
@@ -36,32 +71,56 @@
 *::after {
   box-sizing: border-box;
   margin: 0;
-  font-weight: normal;
 }
 
 ul {
   list-style: none;
 }
 
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-text-1);
+}
+
 body {
   min-height: 100vh;
-  color: var(--color-text);
-  background: var(--color-background);
-  line-height: 1.6;
+  color: var(--color-text-1);
+  background: var(--color-bg);
+  line-height: 1.5;
   font-family:
+    'Inter Variable',
     Inter,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
-    'Helvetica Neue',
+    system-ui,
     sans-serif;
+  font-weight: 460;
+  font-size: 13.5px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-feature-settings: 'liga' 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

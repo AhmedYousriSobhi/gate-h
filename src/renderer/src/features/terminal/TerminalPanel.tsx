@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { RefreshCw } from 'lucide-react'
 import type { ClusterSummary } from '../../../../shared/types'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
@@ -29,7 +30,8 @@ export default function TerminalPanel({ cluster }: TerminalPanelProps): React.JS
       convertEol: true,
       cursorBlink: true,
       fontSize: 13,
-      theme: { background: '#111318' }
+      fontFamily: "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace",
+      theme: { background: '#0a0a0c', cursor: '#3b7cf6' }
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -88,11 +90,16 @@ export default function TerminalPanel({ cluster }: TerminalPanelProps): React.JS
   return (
     <div className="terminal-panel">
       <div className="terminal-statusbar">
-        <span>
-          {cluster.connection.username}@{cluster.connection.host} — {status}
+        <span className="terminal-statusbar-label">
+          <span className={`session-dot session-dot-${status}`} />
+          <span className="mono">
+            {cluster.connection.username}@{cluster.connection.host}
+          </span>
+          <span className="terminal-status-word">{status}</span>
         </span>
         {status === 'closed' && (
           <button className="btn btn-sm" onClick={() => setAttempt((n) => n + 1)}>
+            <RefreshCw size={13} strokeWidth={2} />
             Reconnect
           </button>
         )}
