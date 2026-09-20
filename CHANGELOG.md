@@ -521,3 +521,51 @@ showing all connected clusters."
   end-to-end in a real running app (the mock used for screenshots doesn't re-filter clusters by
   profile) - the underlying scoping logic is the same `listClustersByProfile` query exercised in
   the migration test above, but the full round trip through Electron IPC is unverified here.
+
+### 2026-09-20 — `fix/connection-hardening-and-cleanup`: SSH hardening + memory/cleanup pass
+
+A general code review across clean code, memory, and HPC-specific SSH connection practices,
+rather than a single reported bug.
+
+- **SSH keepalive** (`src/main/ssh/manager.ts`): every connection (target and jump host) now sets
+  `keepaliveInterval: 15000` / `keepaliveCountMax: 3`. ssh2 sends no keepalive at all by default,
+  which matters specifically for HPC clusters: login nodes are commonly reached through a VPN or
+  behind a firewall/NAT that silently drops idle connections, so without this a session can sit
+  showing "connected" for a long time after the underlying connection is actually dead - the same
+  problem OpenSSH's `ServerAliveInterval` exists to solve.
+- **Host key pinning** (new `src/main/ssh/knownHosts.ts`, new `known_hosts` SQLite table): ssh2
+  also does *no host verification* by default - it completes a handshake with whatever host key a
+  server presents, unlike every real SSH client (OpenSSH, PuTTY), which is a real exposure for a
+  tool that manages cluster credentials over a network. Added trust-on-first-use pinning: the
+  first connection to a `host:port` records the SHA-256 fingerprint of its host key, and every
+  connection after that must present the same one; a mismatch is refused and surfaces a
+  notification explaining it could mean a legitimate reinstall or a man-in-the-middle. Verified
+  directly against a real `better-sqlite3` database: first-use trust, repeat-match, and
+  mismatch-detection (and that a mismatch doesn't silently re-trust) all confirmed, plus that
+  different hosts/ports are tracked independently.
+- **Fixed a dead/leaked error listener**: `connectClient()`'s internal `.on('error', reject)`
+  handler was never removed once the connection succeeded, so it sat attached for the session's
+  entire life, silently no-op'ing (`reject()` on an already-settled promise does nothing) instead
+  of visibly reporting later errors. Now removed the moment the promise settles. This meant the
+  jump host's connection previously had *no* real error visibility after connecting; it now logs
+  jump-host errors explicitly (the forwarded stream closing already notifies the user; this adds
+  the specific reason to the console for debugging) and, just as importantly, keeps a listener
+  attached at all - an SSH `Client` is an `EventEmitter`, and an `'error'` event with zero
+  listeners throws and crashes the whole main process.
+- **Guarded `WebContents.send` calls in the SSH manager** against a destroyed window: `ssh:data`/
+  `ssh:closed`/`ssh:error` could still fire from a session's streams after the window that owns
+  them was destroyed (e.g. quitting while a session was mid-teardown), and `send()` on a destroyed
+  `WebContents` throws. Added a `safeSend()` helper (`sender.isDestroyed()` check) used at every
+  call site - the reachability/notification broadcasters in `src/main/index.ts` already did this;
+  the SSH manager didn't.
+- **Bounded the renderer's notification list**: the main process caps its notification feed at
+  200 (`src/main/notifications/store.ts`) but broadcasts every new one regardless of that cap, so
+  `useNotifications.ts`'s `[notification, ...prev]` had no matching bound and would grow without
+  limit over a very long-running session. Capped it to the same 200.
+- **Removed duplicated fetch logic** in `useProfiles.ts`: the initial-load effect and `refresh()`
+  each had their own copy of the same "fetch list + active id, then set state" code; extracted the
+  shared `fetchProfiles()` helper.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified**:
+  actual keepalive/host-key behavior against a real SSH server or a real man-in-the-middle - only
+  the TOFU pinning logic itself (against a real database) and that the config values are wired
+  through correctly.

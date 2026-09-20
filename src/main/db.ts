@@ -99,5 +99,13 @@ export function getDb(): Database.Database {
 
   migrateToProfiles(db)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS known_hosts (
+      host_port TEXT PRIMARY KEY,
+      fingerprint TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `)
+
   return db
 }
