@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CircleCheck, CircleX, ExternalLink } from 'lucide-react'
 import type { ClusterSummary, GrafanaStatusResult } from '../../../../shared/types'
 
 interface GrafanaStatusSectionProps {
@@ -41,6 +42,11 @@ export default function GrafanaStatusSection({
   return (
     <div className="status-section">
       <div className={`health-badge ${status.health.ok ? 'health-ok' : 'health-down'}`}>
+        {status.health.ok ? (
+          <CircleCheck size={14} strokeWidth={2} />
+        ) : (
+          <CircleX size={14} strokeWidth={2} />
+        )}
         {status.health.ok
           ? `Grafana reachable (v${status.health.version ?? '?'})`
           : `Grafana unreachable: ${status.health.message}`}
@@ -63,6 +69,7 @@ export default function GrafanaStatusSection({
                 )}
                 {dashboard.url && (
                   <a href={dashboard.url} target="_blank" rel="noreferrer">
+                    <ExternalLink size={12} strokeWidth={2} />
                     Open in Grafana
                   </a>
                 )}

@@ -1,5 +1,7 @@
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import StatusLed from './StatusLed'
+import { avatarColorFor, initialFor } from '../../lib/avatarColor'
 
 interface SidebarProps {
   clusters: ClusterSummary[]
@@ -25,14 +27,15 @@ export default function Sidebar({
       <div className="sidebar-header">
         <span className="sidebar-brand">Gate-H</span>
         <button className="btn btn-primary btn-sm" onClick={onAdd}>
-          + Add
+          <Plus size={14} strokeWidth={2.5} />
+          Add
         </button>
       </div>
 
       <div className="cluster-rows">
         {clusters.length === 0 && (
           <p className="hint sidebar-empty">
-            No clusters yet. Click &quot;+ Add&quot; to register one.
+            No clusters yet. Click &quot;Add&quot; to register one.
           </p>
         )}
         {clusters.map((cluster) => (
@@ -41,10 +44,16 @@ export default function Sidebar({
             className={`cluster-row${cluster.id === selectedClusterId ? ' cluster-row-active' : ''}`}
             onClick={() => onSelect(cluster)}
           >
-            <StatusLed status={reachability[cluster.id]?.status} />
+            <span
+              className="cluster-avatar"
+              style={{ backgroundColor: avatarColorFor(cluster.name) }}
+            >
+              {initialFor(cluster.name)}
+              <StatusLed status={reachability[cluster.id]?.status} />
+            </span>
             <div className="cluster-row-main">
               <div className="cluster-row-name">{cluster.name}</div>
-              <div className="cluster-row-host">{cluster.connection.host}</div>
+              <div className="cluster-row-host mono">{cluster.connection.host}</div>
             </div>
             <div className="cluster-row-actions">
               <button
@@ -55,7 +64,7 @@ export default function Sidebar({
                   onEdit(cluster)
                 }}
               >
-                ✎
+                <Pencil size={13} strokeWidth={2} />
               </button>
               <button
                 className="icon-btn icon-btn-danger"
@@ -65,7 +74,7 @@ export default function Sidebar({
                   onRemove(cluster)
                 }}
               >
-                ✕
+                <Trash2 size={13} strokeWidth={2} />
               </button>
             </div>
           </div>

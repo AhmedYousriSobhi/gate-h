@@ -1,4 +1,7 @@
 @import './base.css';
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
 
 body {
   overflow-y: auto;
@@ -6,18 +9,11 @@ body {
 }
 
 code {
-  font-weight: 600;
-  padding: 3px 5px;
-  border-radius: 2px;
-  background-color: var(--color-background-mute);
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    SF Mono,
-    Menlo,
-    Consolas,
-    Liberation Mono,
-    monospace;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-active);
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   font-size: 85%;
 }
 
@@ -26,56 +22,75 @@ code {
   min-height: 100vh;
 }
 
+svg {
+  display: block;
+}
+
 /* Shared, cross-feature UI primitives (buttons, banners, hints) - kept here rather than in a
    single feature's stylesheet since Sidebar, MainPanel, TerminalPanel, and the status/cluster-form
    features all rely on them. */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   cursor: pointer;
-  border: 1px solid var(--ev-button-alt-border);
-  border-radius: 6px;
-  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--ev-button-alt-text);
-  background-color: var(--ev-button-alt-bg);
+  font-weight: 510;
+  font-family: inherit;
+  color: var(--color-text-1);
+  background-color: var(--color-surface-active);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 .btn:hover {
-  color: var(--ev-button-alt-hover-text);
-  background-color: var(--ev-button-alt-hover-bg);
+  background-color: var(--color-surface-hover);
+}
+
+.btn:active {
+  transform: translateY(0.5px);
 }
 
 .btn-primary {
-  background-color: #2f6fed;
-  color: white;
+  background-color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .btn-primary:hover {
-  background-color: #4a80f0;
+  background-color: var(--color-accent-hover);
 }
 
 .btn-danger {
   background-color: transparent;
-  border-color: #a83c3c;
-  color: #e07a7a;
+  border-color: rgba(240, 85, 95, 0.35);
+  color: var(--color-offline);
 }
 
 .btn-danger:hover {
-  background-color: #a83c3c33;
+  background-color: rgba(240, 85, 95, 0.12);
 }
 
 .error-banner {
-  background-color: #a83c3c33;
-  border: 1px solid #a83c3c;
-  color: #f0a9a9;
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  background-color: rgba(240, 85, 95, 0.1);
+  border: 1px solid rgba(240, 85, 95, 0.3);
+  color: #ffb3b8;
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .hint {
-  font-size: 11px;
-  color: var(--ev-c-text-3);
+  font-size: 12px;
+  color: var(--color-text-3);
   margin-top: 2px;
 }

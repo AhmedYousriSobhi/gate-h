@@ -105,7 +105,9 @@ Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.
 ## Tech stack
 
 - **Shell**: Electron (Linux-first; cross-platform later if needed)
-- **UI**: React + TypeScript, bundled with Vite (`electron-vite`)
+- **UI**: React + TypeScript, bundled with Vite (`electron-vite`); Inter (UI text) and JetBrains
+  Mono (hostnames/code), both self-hosted via `@fontsource*` so the app never depends on network
+  access just to render its own typography; icons from `lucide-react`
 - **SSH / terminal**: `ssh2` (SSH client, password/key/agent auth, jump-host chaining) +
   `@xterm/xterm` for the embedded terminal (no local PTY needed - every session is a remote SSH
   channel)

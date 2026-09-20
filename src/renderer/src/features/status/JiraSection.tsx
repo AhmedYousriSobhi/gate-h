@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
+import { Plus } from 'lucide-react'
 import type { ClusterSummary, JiraIssueSummary } from '../../../../shared/types'
+
+function issueStatusClass(status: string): string {
+  const normalized = status.toLowerCase()
+  if (normalized.includes('done') || normalized.includes('closed')) return 'issue-status-done'
+  if (normalized.includes('progress')) return 'issue-status-active'
+  return 'issue-status-todo'
+}
 
 interface JiraSectionProps {
   cluster: ClusterSummary
@@ -75,7 +83,7 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
               </a>{' '}
               {issue.summary}
             </div>
-            <span className="issue-status">{issue.status}</span>
+            <span className={`issue-status ${issueStatusClass(issue.status)}`}>{issue.status}</span>
           </div>
         ))}
       </div>
@@ -87,6 +95,7 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
             onChange={(e) => setNewSummary(e.target.value)}
           />
           <button type="submit" className="btn btn-primary" disabled={creating}>
+            <Plus size={14} strokeWidth={2.5} />
             {creating ? 'Creating...' : 'Create ticket'}
           </button>
         </form>
