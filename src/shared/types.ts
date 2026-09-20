@@ -175,4 +175,11 @@ export interface GateHApi {
     markAllRead(): void
     onCreated(callback: (notification: ClusterNotification) => void): () => void
   }
+  windowControls: {
+    minimize(): void
+    toggleMaximize(): void
+    close(): void
+    isMaximized(): Promise<boolean>
+    onMaximizedChange(callback: (maximized: boolean) => void): () => void
+  }
 }

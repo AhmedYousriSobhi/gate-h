@@ -73,6 +73,18 @@ const api: GateHApi = {
       ipcRenderer.on('notifications:created', listener)
       return () => ipcRenderer.removeListener('notifications:created', listener)
     }
+  },
+  windowControls: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    toggleMaximize: () => ipcRenderer.send('window:toggleMaximize'),
+    close: () => ipcRenderer.send('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onMaximizedChange: (callback: (maximized: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, maximized: boolean): void =>
+        callback(maximized)
+      ipcRenderer.on('window:maximized-changed', listener)
+      return () => ipcRenderer.removeListener('window:maximized-changed', listener)
+    }
   }
 }
 
