@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto'
 import type { WebContents } from 'electron'
 import { getCluster, getClusterSecrets } from '../clusters'
 import { addNotification } from '../notifications/store'
+import { checkKnownHost } from './knownHosts'
 import type { ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
@@ -29,12 +30,50 @@ function expandHome(path: string): string {
   return path.startsWith('~') ? join(homedir(), path.slice(1)) : path
 }
 
-function buildConnectConfig(profile: ConnectionProfile, secret: string | null): ConnectConfig {
+interface HostContext {
+  clusterId: string
+  clusterName: string
+  /** How this host is described in a mismatch notification, e.g. "login node" or "jump host". */
+  role: string
+}
+
+/** Trust-on-first-use host key verification (see `../ssh/knownHosts.ts`) plus SSH-level keepalive.
+ *  ssh2 sends no keepalive and does no host verification by default - both matter specifically
+ *  for HPC clusters: login nodes are frequently reached over a VPN or through firewalls/NAT that
+ *  silently drop idle connections (keepalive lets the client detect that instead of sitting in a
+ *  falsely "connected" state), and a cluster's public-facing login node is exactly the kind of
+ *  target worth pinning a host key for. */
+function buildConnectConfig(
+  profile: ConnectionProfile,
+  secret: string | null,
+  hostContext: HostContext
+): ConnectConfig {
   const config: ConnectConfig = {
     host: profile.host,
     port: profile.port,
     username: profile.username,
-    readyTimeout: 20000
+    readyTimeout: 20000,
+    keepaliveInterval: 15000,
+    keepaliveCountMax: 3,
+    hostHash: 'sha256',
+    hostVerifier: (fingerprint: string) => {
+      const result = checkKnownHost(profile.host, profile.port, fingerprint)
+      if (result === 'mismatch') {
+        addNotification({
+          clusterId: hostContext.clusterId,
+          clusterName: hostContext.clusterName,
+          kind: 'ssh',
+          severity: 'warning',
+          message:
+            `Host key for the ${hostContext.role} (${profile.host}:${profile.port}) changed ` +
+            `since the last connection - refused to connect. This happens after a legitimate ` +
+            `reinstall, but can also mean someone is intercepting the connection; verify with ` +
+            `whoever administers the cluster before trusting the new key.`
+        })
+        return false
+      }
+      return true
+    }
   }
 
   if (profile.authMethod === 'password') {
@@ -55,10 +94,25 @@ function buildConnectConfig(profile: ConnectionProfile, secret: string | null): 
 function connectClient(config: ConnectConfig): Promise<Client> {
   return new Promise((resolve, reject) => {
     const client = new Client()
-    client.on('ready', () => resolve(client))
-    client.on('error', reject)
+    const onConnectError = (err: Error): void => reject(err)
+    client.once('ready', () => {
+      // Drop the connect-time rejection handler now that the promise has settled - otherwise it
+      // stays attached for the life of the connection, silently swallowing any later 'error'
+      // (calling reject() after a promise has settled is a no-op) instead of letting the caller's
+      // own post-connect listener see it.
+      client.removeListener('error', onConnectError)
+      resolve(client)
+    })
+    client.on('error', onConnectError)
     client.connect(config)
   })
+}
+
+/** Sends only if the renderer's WebContents is still alive - a session's streams can keep
+ *  emitting events after the window that owns them has been destroyed (e.g. app quit while a
+ *  session was mid-teardown), and calling `send` on a destroyed WebContents throws. */
+function safeSend(sender: WebContents, channel: string, payload: unknown): void {
+  if (!sender.isDestroyed()) sender.send(channel, payload)
 }
 
 function openForward(
@@ -92,7 +146,11 @@ export async function openSshSession(
   const secrets = getClusterSecrets(clusterId)
 
   let jumpClient: Client | null = null
-  let targetConfig = buildConnectConfig(cluster.connection, secrets.connectionSecret)
+  let targetConfig = buildConnectConfig(cluster.connection, secrets.connectionSecret, {
+    clusterId,
+    clusterName: cluster.name,
+    role: 'login node'
+  })
 
   if (cluster.connection.jumpHost) {
     const jump = cluster.connection.jumpHost
@@ -110,9 +168,18 @@ export async function openSshSession(
           authMethod: jump.authMethod,
           privateKeyPath: jump.privateKeyPath
         },
-        jumpSecret
+        jumpSecret,
+        { clusterId, clusterName: cluster.name, role: 'jump host' }
       )
     )
+    // Once connected, connectClient's own error listener is gone (see its comment) - without a
+    // replacement, an error on this client (e.g. the jump host drops mid-session) would be an
+    // unhandled 'error' event, which crashes the whole main process. The forwarded stream closing
+    // already surfaces "session closed unexpectedly" to the user (below), so this just needs to
+    // exist and not crash - the exact reason still goes to the console for debugging.
+    jumpClient.on('error', (err: Error) => {
+      console.error(`[gate-h] jump host ${jump.host}:${jump.port} error:`, err.message)
+    })
     const forwardStream = await openForward(
       jumpClient,
       cluster.connection.host,
@@ -128,13 +195,13 @@ export async function openSshSession(
   sessions.set(sessionId, { clusterId, clusterName: cluster.name, jumpClient, client, stream })
 
   stream.on('data', (chunk: Buffer) => {
-    sender.send('ssh:data', { sessionId, chunk: chunk.toString('utf8') })
+    safeSend(sender, 'ssh:data', { sessionId, chunk: chunk.toString('utf8') })
   })
   stream.stderr.on('data', (chunk: Buffer) => {
-    sender.send('ssh:data', { sessionId, chunk: chunk.toString('utf8') })
+    safeSend(sender, 'ssh:data', { sessionId, chunk: chunk.toString('utf8') })
   })
   stream.on('close', () => {
-    sender.send('ssh:closed', { sessionId })
+    safeSend(sender, 'ssh:closed', { sessionId })
     if (!intentionalCloses.has(sessionId)) {
       addNotification({
         clusterId,
@@ -148,7 +215,7 @@ export async function openSshSession(
     closeSession(sessionId)
   })
   client.on('error', (err: Error) => {
-    sender.send('ssh:error', { sessionId, message: err.message })
+    safeSend(sender, 'ssh:error', { sessionId, message: err.message })
   })
 
   return { sessionId }

@@ -16,11 +16,16 @@ export function useProfiles(): {
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  async function refresh(): Promise<void> {
+  async function fetchProfiles(): Promise<{ list: Profile[]; activeId: string }> {
     const [list, activeId] = await Promise.all([
       window.api.profiles.list(),
       window.api.profiles.getActiveId()
     ])
+    return { list, activeId }
+  }
+
+  async function refresh(): Promise<void> {
+    const { list, activeId } = await fetchProfiles()
     setProfiles(list)
     setActiveProfileId(activeId)
     setLoading(false)
@@ -28,16 +33,12 @@ export function useProfiles(): {
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      const [list, activeId] = await Promise.all([
-        window.api.profiles.list(),
-        window.api.profiles.getActiveId()
-      ])
+    fetchProfiles().then(({ list, activeId }) => {
       if (cancelled) return
       setProfiles(list)
       setActiveProfileId(activeId)
       setLoading(false)
-    })()
+    })
     return () => {
       cancelled = true
     }

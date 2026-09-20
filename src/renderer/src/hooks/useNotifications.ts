@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ClusterNotification } from '../../../shared/types'
 
+// Mirrors the cap in src/main/notifications/store.ts - the main process's own list is bounded to
+// this many, but it broadcasts every new one regardless of that cap, so without a matching bound
+// here a very long-running session would grow this array forever.
+const MAX_NOTIFICATIONS = 200
+
 /** Live cross-cluster notification feed (reachability changes, Jira ticket activity, unexpected
  *  SSH disconnects) - the main process is the source of truth; this just mirrors it into state
  *  and keeps new arrivals sorted to the front. */
@@ -19,7 +24,7 @@ export function useNotifications(): {
     })
 
     const off = window.api.notifications.onCreated((notification) => {
-      setNotifications((prev) => [notification, ...prev])
+      setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS))
     })
 
     return () => {
