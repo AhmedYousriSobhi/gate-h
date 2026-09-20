@@ -1,4 +1,5 @@
 import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
+import { toClusterSlug } from '../../shared/clusterSlug'
 
 // Talks to a cluster's Jira instance (Cloud or Data Center/Server) over its REST API. Uses the
 // v2 endpoints deliberately: v3 requires issue descriptions in Atlassian Document Format, while
@@ -85,23 +86,36 @@ export async function listJiraIssues(
 export async function createJiraIssue(
   profile: JiraProfile,
   token: string,
-  input: CreateJiraIssueInput
+  input: CreateJiraIssueInput,
+  clusterName: string
 ): Promise<JiraIssueSummary> {
   if (!profile.projectKey) {
     throw new Error('This cluster has no default Jira project key configured.')
   }
 
-  const created = await jiraFetch(profile, token, '/rest/api/2/issue', {
-    method: 'POST',
-    body: JSON.stringify({
-      fields: {
-        project: { key: profile.projectKey },
-        summary: input.summary,
-        description: input.description ?? '',
-        issuetype: { name: 'Task' }
-      }
-    })
-  }).then((res) => res.json() as Promise<{ key: string }>)
+  const baseFields = {
+    project: { key: profile.projectKey },
+    summary: input.summary,
+    description: input.description ?? '',
+    issuetype: { name: 'Task' }
+  }
+
+  // Best-effort: tag the ticket with the cluster's own identity (see docs/JIRA_GUIDE.md) so it
+  // shows up under a JQL filter like `labels = "<cluster>"` without the user tagging it by hand.
+  // Falls back to creating without a label if this Jira project's create screen doesn't have a
+  // Labels field configured, rather than failing the whole ticket creation over a nice-to-have.
+  const createIssue = (fields: Record<string, unknown>): Promise<{ key: string }> =>
+    jiraFetch(profile, token, '/rest/api/2/issue', {
+      method: 'POST',
+      body: JSON.stringify({ fields })
+    }).then((res) => res.json() as Promise<{ key: string }>)
+
+  let created: { key: string }
+  try {
+    created = await createIssue({ ...baseFields, labels: [toClusterSlug(clusterName)] })
+  } catch {
+    created = await createIssue(baseFields)
+  }
 
   const issue = await jiraFetch(
     profile,

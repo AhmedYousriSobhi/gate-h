@@ -23,7 +23,8 @@ this repo or its history.)
 | Live reachability monitoring | ✅ Done | main process TCP-probes every cluster's SSH port on a timer (`src/main/monitor/`); sidebar shows a green/red/gray LED per cluster, always up to date |
 | Embedded SSH terminal | ✅ Done | `ssh2` + `@xterm/xterm`; closes cleanly to a "closed" state with a Reconnect button instead of a stuck full-page view; one session at a time |
 | Grafana status | ✅ Done | health check, per-dashboard title/link, panel snapshot image if `grafana-image-renderer` is installed |
-| Jira issues | ✅ Done | list via JQL, file new tickets; supports both Jira Cloud (email + API token) and Data Center (PAT) |
+| Jira issues | ✅ Done | list via JQL, file new tickets (auto-labeled with the cluster's own identity, see `docs/JIRA_GUIDE.md`); supports both Jira Cloud (email + API token) and Data Center (PAT) |
+| Confluence integration | ❌ Not started | no client/auth/UI exists; `docs/JIRA_GUIDE.md` documents a no-code-change workaround (link in the cluster's description) and the intended future pattern (search by the same cluster-identity label Jira uses) |
 | Linux packaging | ✅ Done | AppImage via `electron-builder`, built reproducibly inside Docker (`./build-desktop.sh`) |
 | App icon / branding | ✅ Done | custom mark, see `resources/icon.svg`; product renamed H-Gate → Gate-H after user feedback |
 | Visual design system | ✅ Done | token-based dark theme (`assets/base.css`), self-hosted Inter/JetBrains Mono, `lucide-react` icons throughout - see the redesign entry in `CHANGELOG.md` |
