@@ -85,6 +85,15 @@ const api: GateHApi = {
       ipcRenderer.on('window:maximized-changed', listener)
       return () => ipcRenderer.removeListener('window:maximized-changed', listener)
     }
+  },
+  profiles: {
+    list: () => ipcRenderer.invoke('profiles:list'),
+    getActiveId: () => ipcRenderer.invoke('profiles:getActiveId'),
+    setActiveId: (id: string) => ipcRenderer.send('profiles:setActiveId', id),
+    create: (name: string) => ipcRenderer.invoke('profiles:create', name),
+    rename: (id: string, name: string) => ipcRenderer.invoke('profiles:rename', id, name),
+    remove: (id: string) => ipcRenderer.invoke('profiles:remove', id),
+    countClusters: (id: string) => ipcRenderer.invoke('profiles:countClusters', id)
   }
 }
 

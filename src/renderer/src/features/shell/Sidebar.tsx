@@ -1,7 +1,13 @@
-import { Pencil, Plus, Trash2 } from 'lucide-react'
-import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
+import { LayoutDashboard, Pencil, Plus, Trash2 } from 'lucide-react'
+import type {
+  ClusterNotification,
+  ClusterReachability,
+  ClusterSummary
+} from '../../../../shared/types'
+import type { useProfiles } from '../../hooks/useProfiles'
 import StatusLed from './StatusLed'
 import NotificationBell from './NotificationBell'
+import ProfileSwitcher from './ProfileSwitcher'
 import { avatarColorFor, initialFor } from '../../lib/avatarColor'
 
 interface SidebarProps {
@@ -9,10 +15,16 @@ interface SidebarProps {
   reachability: Record<string, ClusterReachability>
   selectedClusterId: string | null
   onSelect: (cluster: ClusterSummary) => void
+  onShowOverview: () => void
   onAdd: () => void
   onEdit: (cluster: ClusterSummary) => void
   onRemove: (cluster: ClusterSummary) => void
+  notifications: ClusterNotification[]
+  markNotificationRead: (id: string) => void
+  markAllNotificationsRead: () => void
   onNotificationNavigate: (clusterId: string, tab?: 'terminal' | 'status') => void
+  profilesState: ReturnType<typeof useProfiles>
+  onProfileChanged: () => void
 }
 
 export default function Sidebar({
@@ -20,17 +32,28 @@ export default function Sidebar({
   reachability,
   selectedClusterId,
   onSelect,
+  onShowOverview,
   onAdd,
   onEdit,
   onRemove,
-  onNotificationNavigate
+  notifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  onNotificationNavigate,
+  profilesState,
+  onProfileChanged
 }: SidebarProps): React.JSX.Element {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <span className="sidebar-brand">Gate-H</span>
+        <ProfileSwitcher profilesState={profilesState} onProfileChanged={onProfileChanged} />
         <div className="sidebar-header-actions">
-          <NotificationBell onNavigate={onNotificationNavigate} />
+          <NotificationBell
+            notifications={notifications}
+            markRead={markNotificationRead}
+            markAllRead={markAllNotificationsRead}
+            onNavigate={onNotificationNavigate}
+          />
           <button className="btn btn-primary btn-sm" onClick={onAdd}>
             <Plus size={14} strokeWidth={2.5} />
             Add
@@ -39,6 +62,18 @@ export default function Sidebar({
       </div>
 
       <div className="cluster-rows">
+        <div
+          className={`cluster-row overview-row${selectedClusterId === null ? ' cluster-row-active' : ''}`}
+          onClick={onShowOverview}
+        >
+          <span className="overview-row-icon">
+            <LayoutDashboard size={15} strokeWidth={2} />
+          </span>
+          <div className="cluster-row-main">
+            <div className="cluster-row-name">Overview</div>
+          </div>
+        </div>
+
         {clusters.length === 0 && (
           <p className="hint sidebar-empty">
             No clusters yet. Click &quot;Add&quot; to register one.

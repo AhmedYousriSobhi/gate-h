@@ -4,16 +4,23 @@ import ClusterForm from '../clusters/ClusterForm'
 import Sidebar from './Sidebar'
 import MainPanel from './MainPanel'
 import TitleBar from './TitleBar'
+import OverviewDashboard from './OverviewDashboard'
 import { useReachability } from '../../hooks/useReachability'
+import { useNotifications } from '../../hooks/useNotifications'
+import { useProfiles } from '../../hooks/useProfiles'
 import './shell.css'
+
+type Tab = 'terminal' | 'status'
 
 export default function AppShell(): React.JSX.Element {
   const [clusters, setClusters] = useState<ClusterSummary[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'terminal' | 'status'>('terminal')
+  const [activeTab, setActiveTab] = useState<Tab>('terminal')
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
   const [reconnectSignal, setReconnectSignal] = useState(0)
+  const profilesState = useProfiles()
+  const { notifications, markRead, markAllRead } = useNotifications()
   const reachability = useReachability((clusterId, from, to) => {
     // A single, one-shot nudge - not a retry loop - when the *currently open* cluster's
     // connection comes back after being down (e.g. the user just reconnected their VPN), so they
@@ -69,9 +76,26 @@ export default function AppShell(): React.JSX.Element {
     await refresh()
   }
 
-  function handleNotificationNavigate(clusterId: string, tab?: 'terminal' | 'status'): void {
+  function handleNotificationNavigate(clusterId: string, tab?: Tab): void {
     setSelectedClusterId(clusterId)
     if (tab) setActiveTab(tab)
+  }
+
+  function handleConnect(cluster: ClusterSummary): void {
+    setSelectedClusterId(cluster.id)
+    setActiveTab('terminal')
+  }
+
+  function handleViewStatus(cluster: ClusterSummary): void {
+    setSelectedClusterId(cluster.id)
+    setActiveTab('status')
+  }
+
+  function handleProfileChanged(): void {
+    // Clusters are scoped to the active profile server-side, so switching profiles means the
+    // previously selected cluster (if any) almost certainly doesn't belong to the new one.
+    setSelectedClusterId(null)
+    void refresh()
   }
 
   const selectedCluster = clusters.find((c) => c.id === selectedClusterId) ?? null
@@ -85,22 +109,38 @@ export default function AppShell(): React.JSX.Element {
           reachability={reachability}
           selectedClusterId={selectedClusterId}
           onSelect={(cluster) => setSelectedClusterId(cluster.id)}
+          onShowOverview={() => setSelectedClusterId(null)}
           onAdd={() => setEditing('new')}
           onEdit={(cluster) => setEditing(cluster)}
           onRemove={handleRemove}
+          notifications={notifications}
+          markNotificationRead={markRead}
+          markAllNotificationsRead={markAllRead}
           onNotificationNavigate={handleNotificationNavigate}
+          profilesState={profilesState}
+          onProfileChanged={handleProfileChanged}
         />
 
         {loadError ? (
           <div className="main-panel main-panel-empty">
             <div className="error-banner">{loadError}</div>
           </div>
-        ) : (
+        ) : selectedCluster ? (
           <MainPanel
             cluster={selectedCluster}
             tab={activeTab}
             onTabChange={setActiveTab}
             reconnectSignal={reconnectSignal}
+          />
+        ) : (
+          <OverviewDashboard
+            profileName={profilesState.activeProfile?.name ?? ''}
+            clusters={clusters}
+            reachability={reachability}
+            notifications={notifications}
+            onConnect={handleConnect}
+            onViewStatus={handleViewStatus}
+            onAdd={() => setEditing('new')}
           />
         )}
 

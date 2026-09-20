@@ -26,13 +26,19 @@
   tickets, and unexpected SSH disconnects from every cluster in one place, so you don't have to
   click into each one to notice something changed. Clicking a notification jumps straight to the
   relevant cluster and tab.
+- **Overview dashboard** — the default view is a grid of every cluster in the current profile,
+  with its reachability, tags, configured integrations, and unread notification count at a
+  glance - not just a blank "pick something" screen.
+- **Profiles** — group clusters under separate named profiles (e.g. "Work" vs "Research"), each
+  with its own cluster list and dashboard; switch between them from the sidebar without one
+  profile's clusters cluttering another's view.
 
 ## Preview
 
 <p align="center">
-  <img src="docs/assets/screenshots/sidebar-overview.png" alt="Sidebar with cluster list and reachability LEDs" width="720"><br/>
-  <sub>Every cluster in a persistent sidebar - the colored dot shows live reachability - with a
-  main panel for whichever one you're working on.</sub>
+  <img src="docs/assets/screenshots/overview-dashboard.png" alt="Overview dashboard showing every cluster in the active profile" width="720"><br/>
+  <sub>The default view: every cluster in the active profile, with reachability, tags,
+  integrations, and unread notifications at a glance.</sub>
 </p>
 
 <table>
@@ -54,6 +60,12 @@
 <td width="50%" align="center">
   <img src="docs/assets/screenshots/add-cluster-form.png" alt="Add cluster form" width="360"><br/>
   <sub>Register a cluster: SSH, optional jump host, Grafana, Jira</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/profile-switcher.png" alt="Profile switcher dropdown" width="360"><br/>
+  <sub>Switch profiles, or add/rename/delete one, from the sidebar</sub>
 </td>
 </tr>
 </table>
@@ -97,11 +109,17 @@ locally. See [docker/build.Dockerfile](docker/build.Dockerfile) for exactly what
 
 Then, inside the app:
 
-1. Click **+ Add** in the sidebar and fill in a name plus its SSH connection details (host, user,
+1. You start in a single default profile ("Personal") - click the profile name at the top of the
+   sidebar if you want separate profiles for separate contexts (e.g. "Work" vs "Research"), each
+   with its own clusters and dashboard.
+2. Click **+ Add** in the sidebar and fill in a name plus its SSH connection details (host, user,
    auth method). Grafana and Jira are optional per cluster.
-2. Click a cluster in the sidebar to open its embedded SSH **Terminal** tab - the sidebar (and its
-   live reachability LEDs) stays visible the whole time, so switching clusters is just a click.
-3. Switch to its **Status** tab to see Grafana health/dashboards and Jira issues, and to file a
+3. The **Overview** dashboard (the default view) shows every cluster in the current profile at a
+   glance - reachability, tags, configured integrations, unread notifications.
+4. Click a cluster in the sidebar (or its card on Overview) to open its embedded SSH **Terminal**
+   tab - the sidebar (and its live reachability LEDs) stays visible the whole time, so switching
+   clusters is just a click.
+5. Switch to its **Status** tab to see Grafana health/dashboards and Jira issues, and to file a
    new ticket.
 
 ## Development

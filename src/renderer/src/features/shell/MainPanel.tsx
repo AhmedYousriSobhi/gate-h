@@ -1,4 +1,4 @@
-import { Activity, MousePointerClick, Terminal as TerminalIcon } from 'lucide-react'
+import { Activity, Terminal as TerminalIcon } from 'lucide-react'
 import type { ClusterSummary } from '../../../../shared/types'
 import TerminalPanel from '../terminal/TerminalPanel'
 import StatusPanel from '../status/StatusPanel'
@@ -6,7 +6,7 @@ import StatusPanel from '../status/StatusPanel'
 type Tab = 'terminal' | 'status'
 
 interface MainPanelProps {
-  cluster: ClusterSummary | null
+  cluster: ClusterSummary
   tab: Tab
   onTabChange: (tab: Tab) => void
   reconnectSignal: number
@@ -18,15 +18,6 @@ export default function MainPanel({
   onTabChange,
   reconnectSignal
 }: MainPanelProps): React.JSX.Element {
-  if (!cluster) {
-    return (
-      <div className="main-panel main-panel-empty">
-        <MousePointerClick size={28} strokeWidth={1.5} className="empty-icon" />
-        <p className="hint">Select a cluster on the left, or add one to get started.</p>
-      </div>
-    )
-  }
-
   return (
     <div className="main-panel" key={cluster.id}>
       <div className="panel-tabs">

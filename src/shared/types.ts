@@ -141,8 +141,18 @@ export interface ClusterNotification {
   read: boolean
 }
 
+/** A profile groups a set of clusters (and, by extension, their overview dashboard) under one
+ *  name - e.g. separate "Work" and "Research" profiles with entirely different clusters. */
+export interface Profile {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface GateHApi {
   clusters: {
+    /** Only the active profile's clusters - see `profiles` below. */
     list(): Promise<ClusterSummary[]>
     get(id: string): Promise<ClusterSummary | null>
     create(input: ClusterInput): Promise<ClusterSummary>
@@ -181,5 +191,15 @@ export interface GateHApi {
     close(): void
     isMaximized(): Promise<boolean>
     onMaximizedChange(callback: (maximized: boolean) => void): () => void
+  }
+  profiles: {
+    list(): Promise<Profile[]>
+    getActiveId(): Promise<string>
+    setActiveId(id: string): void
+    create(name: string): Promise<Profile>
+    rename(id: string, name: string): Promise<Profile>
+    /** Rejects if this would delete the last remaining profile. */
+    remove(id: string): Promise<void>
+    countClusters(id: string): Promise<number>
   }
 }

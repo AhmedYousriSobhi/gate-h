@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { getDb } from './db'
 import { decryptSecret, encryptSecret } from './secrets'
+import { getActiveProfileId } from './profiles'
 import type {
   Cluster,
   ClusterInput,
@@ -45,10 +46,20 @@ function rowToSummary(row: ClusterRow): ClusterSummary {
   }
 }
 
+/** All clusters, across every profile - used internally by the reachability/Jira monitors, which
+ *  watch everything regardless of which profile is currently active in the UI. */
 export function listClusters(): ClusterSummary[] {
   const rows = getDb()
     .prepare('SELECT * FROM clusters ORDER BY name COLLATE NOCASE')
     .all() as ClusterRow[]
+  return rows.map(rowToSummary)
+}
+
+/** Clusters belonging to one profile - what the sidebar/overview dashboard actually show. */
+export function listClustersByProfile(profileId: string): ClusterSummary[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM clusters WHERE profile_id = ? ORDER BY name COLLATE NOCASE')
+    .all(profileId) as ClusterRow[]
   return rows.map(rowToSummary)
 }
 
@@ -75,11 +86,12 @@ export function createCluster(input: ClusterInput): ClusterSummary {
   getDb()
     .prepare(
       `INSERT INTO clusters
-        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, created_at, updated_at)
-       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @created_at, @updated_at)`
+        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, created_at, updated_at, profile_id)
+       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @created_at, @updated_at, @profile_id)`
     )
     .run({
       id,
+      profile_id: getActiveProfileId(),
       name: input.name,
       description: input.description,
       tags: JSON.stringify(input.tags),
