@@ -20,7 +20,8 @@ this repo or its history.)
 | SSH connection profiles | ✅ Done | password / private key (+ passphrase) / SSH agent, optional jump host |
 | SSH keepalive & host key pinning | ✅ Done | SSH-level keepalive (`keepaliveInterval`/`keepaliveCountMax` in `src/main/ssh/manager.ts`) so idle sessions through a VPN/firewall are detected as dead instead of sitting falsely "connected"; trust-on-first-use host key verification (`src/main/ssh/knownHosts.ts`) refuses to connect - and notifies - if a host's key ever changes, the same model as OpenSSH's `known_hosts` |
 | Secrets storage | ✅ Done | `electron.safeStorage` (OS keychain, e.g. libsecret on Linux) — never round-tripped to the renderer |
-| Sidebar + panel shell | ✅ Done | persistent cluster sidebar (no scrolling away to "go back"); a main panel with Terminal/Status tabs per selected cluster |
+| Sidebar + panel shell | ✅ Done | persistent cluster sidebar (no scrolling away to "go back"); a main panel showing a selected cluster's widgets |
+| Dynamic split-pane widgets | ✅ Done | Terminal and Status render side by side (or stacked) instead of behind tabs (`src/renderer/src/features/shell/MainPanel.tsx`); a toolbar lets you swap pane order, flip orientation, and toggle either widget via a picker (`WidgetPicker.tsx`) that also previews planned widgets - see the roadmap below. Both widgets stay mounted even when hidden, so toggling Terminal off never disconnects its SSH session |
 | Live reachability monitoring | ✅ Done | main process TCP-probes every cluster's SSH port on a timer (`src/main/monitor/`); sidebar shows a green/red/gray LED per cluster, always up to date |
 | Embedded SSH terminal | ✅ Done | `ssh2` + `@xterm/xterm`; closes cleanly to a "closed" state with a Reconnect button instead of a stuck full-page view; one session at a time |
 | Grafana status | ✅ Done | health check, per-dashboard title/link, panel snapshot image if `grafana-image-renderer` is installed |
@@ -56,6 +57,23 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 
 ## Known limitations / near-term roadmap
 
+- **Planned per-cluster widgets** — the widget picker (puzzle-piece icon on a cluster's panel)
+  already lists these as disabled "coming soon" entries; none exist yet, and each needs a real
+  backend (either a scheduler client run over the existing SSH session, or its own API), not just
+  a UI addition. Roughly in order of expected value, based on what HPC-specific monitoring stacks
+  (Slurm-web, Grafana's Slurm dashboards, XDMoD) surface that Gate-H doesn't yet:
+  - **Job queue** — pending/running jobs and wait times (`squeue`/`qstat`/`bjobs`).
+  - **GPU usage** — per-node GPU utilization, memory, and temperature.
+  - **Storage quota** — home/scratch usage vs. quota (`lfs quota`, `df`, GPFS `mmlsquota`).
+  - **Node health** — partition/node up, down, and drained state (`sinfo`/`pbsnodes`).
+  - **Job history** — completed job accounting, runtime, exit code (`sacct`).
+- **No drag-to-resize between panes** — the side-by-side/stacked split is a fixed 50/50 today
+  (`src/renderer/src/features/shell/shell.css`, `.panel-pane`); a draggable divider is a natural
+  follow-up once there's demand for uneven splits.
+- **Panel layout is a single global preference, not per-cluster** — swapping panes or hiding a
+  widget applies to whichever cluster you look at next too (session-only, resets on restart). Making
+  it remember a layout per cluster - or persisting it at all - is future work, not a limitation
+  discovered by testing so much as scope deliberately kept small for the first version.
 - **Can't move a cluster between profiles** — a cluster is assigned to whichever profile was
   active when it was created, and there's no "move to another profile" action yet; the only way is
   to delete it and re-add it under the target profile (re-entering its SSH/Grafana/Jira details).

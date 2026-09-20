@@ -9,6 +9,7 @@ import StatusLed from './StatusLed'
 import NotificationBell from './NotificationBell'
 import ProfileSwitcher from './ProfileSwitcher'
 import { avatarColorFor, initialFor } from '../../lib/avatarColor'
+import type { WidgetType } from './panelLayout'
 
 interface SidebarProps {
   clusters: ClusterSummary[]
@@ -22,7 +23,7 @@ interface SidebarProps {
   notifications: ClusterNotification[]
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
-  onNotificationNavigate: (clusterId: string, tab?: 'terminal' | 'status') => void
+  onNotificationNavigate: (clusterId: string, widget?: WidgetType) => void
   profilesState: ReturnType<typeof useProfiles>
   onProfileChanged: () => void
 }

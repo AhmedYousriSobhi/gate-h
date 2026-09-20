@@ -8,15 +8,17 @@ import OverviewDashboard from './OverviewDashboard'
 import { useReachability } from '../../hooks/useReachability'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useProfiles } from '../../hooks/useProfiles'
+import { DEFAULT_LAYOUT, withWidgetVisible, type PanelLayout, type WidgetType } from './panelLayout'
 import './shell.css'
-
-type Tab = 'terminal' | 'status'
 
 export default function AppShell(): React.JSX.Element {
   const [clusters, setClusters] = useState<ClusterSummary[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<Tab>('terminal')
+  // Deliberately one shared layout rather than per-cluster: it's a workspace preference ("I like
+  // Terminal and Status side by side") more than cluster-specific state, and keeping it simple
+  // avoids a persistence story this feature doesn't need yet. Session-only - resets on restart.
+  const [panelLayout, setPanelLayout] = useState<PanelLayout>(DEFAULT_LAYOUT)
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
   const [reconnectSignal, setReconnectSignal] = useState(0)
   const profilesState = useProfiles()
@@ -76,19 +78,19 @@ export default function AppShell(): React.JSX.Element {
     await refresh()
   }
 
-  function handleNotificationNavigate(clusterId: string, tab?: Tab): void {
+  function handleNotificationNavigate(clusterId: string, widget?: WidgetType): void {
     setSelectedClusterId(clusterId)
-    if (tab) setActiveTab(tab)
+    if (widget) setPanelLayout((layout) => withWidgetVisible(layout, widget))
   }
 
   function handleConnect(cluster: ClusterSummary): void {
     setSelectedClusterId(cluster.id)
-    setActiveTab('terminal')
+    setPanelLayout((layout) => withWidgetVisible(layout, 'terminal'))
   }
 
   function handleViewStatus(cluster: ClusterSummary): void {
     setSelectedClusterId(cluster.id)
-    setActiveTab('status')
+    setPanelLayout((layout) => withWidgetVisible(layout, 'status'))
   }
 
   function handleProfileChanged(): void {
@@ -128,8 +130,8 @@ export default function AppShell(): React.JSX.Element {
         ) : selectedCluster ? (
           <MainPanel
             cluster={selectedCluster}
-            tab={activeTab}
-            onTabChange={setActiveTab}
+            layout={panelLayout}
+            onLayoutChange={setPanelLayout}
             reconnectSignal={reconnectSignal}
           />
         ) : (
