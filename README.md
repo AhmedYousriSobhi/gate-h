@@ -22,10 +22,15 @@
   Grafana instance using the Grafana REST API.
 - **Jira integration** — view matching issues and file new tickets against a cluster's Jira
   project, for both Jira Cloud and Jira Data Center/Server.
+- **Side-by-side widgets, not tabs** — a cluster's Terminal and Status live in the same view at
+  once instead of switching back and forth; toggle either one on/off, swap their positions, or
+  flip between a side-by-side and stacked layout, all from the panel's toolbar. The widget picker
+  also previews what's planned next (job queue, GPU usage, storage quota, node health, job
+  history) - see [docs/STATUS.md](docs/STATUS.md) for the roadmap.
 - **Cross-cluster notifications** — a bell icon collects reachability changes, new/updated Jira
   tickets, and unexpected SSH disconnects from every cluster in one place, so you don't have to
   click into each one to notice something changed. Clicking a notification jumps straight to the
-  relevant cluster and tab.
+  relevant cluster and brings the right widget into view.
 - **Overview dashboard** — the default view is a grid of every cluster in the current profile,
   with its reachability, tags, configured integrations, and unread notification count at a
   glance - not just a blank "pick something" screen.
@@ -41,28 +46,28 @@
   integrations, and unread notifications at a glance.</sub>
 </p>
 
+<p align="center">
+  <img src="docs/assets/screenshots/split-view.png" alt="Terminal and Status shown side by side for a cluster" width="720"><br/>
+  <sub>A cluster's Terminal and Status side by side, not tabs - toggle, swap, or stack them from
+  the toolbar.</sub>
+</p>
+
 <table>
 <tr>
 <td width="50%" align="center">
-  <img src="docs/assets/screenshots/terminal-panel.png" alt="Embedded SSH terminal" width="360"><br/>
-  <sub>Connect over SSH - the sidebar stays put</sub>
+  <img src="docs/assets/screenshots/widget-picker.png" alt="Widget picker listing available and planned widgets" width="360"><br/>
+  <sub>Toggle widgets on/off; disabled entries preview what's planned next</sub>
 </td>
-<td width="50%" align="center">
-  <img src="docs/assets/screenshots/status-panel.png" alt="Cluster status panel" width="360"><br/>
-  <sub>Grafana health/snapshots + Jira issues, per cluster</sub>
-</td>
-</tr>
-<tr>
 <td width="50%" align="center">
   <img src="docs/assets/screenshots/notifications.png" alt="Notification bell dropdown" width="360"><br/>
   <sub>One bell for reachability, Jira, and session events across every cluster</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" align="center">
   <img src="docs/assets/screenshots/add-cluster-form.png" alt="Add cluster form" width="360"><br/>
   <sub>Register a cluster: SSH, optional jump host, Grafana, Jira</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" align="center">
   <img src="docs/assets/screenshots/profile-switcher.png" alt="Profile switcher dropdown" width="360"><br/>
   <sub>Switch profiles, or add/rename/delete one, from the sidebar</sub>
@@ -116,11 +121,14 @@ Then, inside the app:
    auth method). Grafana and Jira are optional per cluster.
 3. The **Overview** dashboard (the default view) shows every cluster in the current profile at a
    glance - reachability, tags, configured integrations, unread notifications.
-4. Click a cluster in the sidebar (or its card on Overview) to open its embedded SSH **Terminal**
-   tab - the sidebar (and its live reachability LEDs) stays visible the whole time, so switching
-   clusters is just a click.
-5. Switch to its **Status** tab to see Grafana health/dashboards and Jira issues, and to file a
-   new ticket.
+4. Click a cluster in the sidebar (or its card on Overview) to open it - its embedded SSH
+   **Terminal** and **Status** (Grafana health/dashboards + Jira issues) widgets show side by
+   side by default, not as tabs; the sidebar (and its live reachability LEDs) stays visible the
+   whole time, so switching clusters is just a click.
+5. Use the toolbar above the widgets to swap their left/right (or top/bottom) order, switch
+   between side-by-side and stacked, or open the widget picker (puzzle-piece icon) to hide/show
+   either one - it also previews widgets planned for later (job queue, GPU usage, storage quota,
+   and more).
 
 ## Development
 

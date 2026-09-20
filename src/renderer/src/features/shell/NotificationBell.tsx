@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Bell, CheckCheck, Ticket, TerminalSquare, WifiOff } from 'lucide-react'
 import type { ClusterNotification, NotificationKind } from '../../../../shared/types'
 import { timeAgo } from '../../lib/timeAgo'
+import type { WidgetType } from './panelLayout'
 
 interface NotificationBellProps {
   notifications: ClusterNotification[]
   markRead: (id: string) => void
   markAllRead: () => void
-  onNavigate: (clusterId: string, tab?: 'terminal' | 'status') => void
+  onNavigate: (clusterId: string, widget?: WidgetType) => void
 }
 
 const KIND_ICON: Record<
@@ -19,7 +20,7 @@ const KIND_ICON: Record<
   ssh: TerminalSquare
 }
 
-const KIND_TAB: Record<NotificationKind, 'terminal' | 'status' | undefined> = {
+const KIND_WIDGET: Record<NotificationKind, WidgetType | undefined> = {
   reachability: undefined,
   jira: 'status',
   ssh: 'terminal'
@@ -48,7 +49,7 @@ export default function NotificationBell({
 
   function handleClick(notification: ClusterNotification): void {
     markRead(notification.id)
-    onNavigate(notification.clusterId, KIND_TAB[notification.kind])
+    onNavigate(notification.clusterId, KIND_WIDGET[notification.kind])
     setOpen(false)
   }
 

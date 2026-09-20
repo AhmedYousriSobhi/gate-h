@@ -569,3 +569,39 @@ rather than a single reported bug.
   actual keepalive/host-key behavior against a real SSH server or a real man-in-the-middle - only
   the TOFU pinning logic itself (against a real database) and that the config values are wired
   through correctly.
+
+### 2026-09-21 — `feature/split-panel-widgets`: side-by-side Terminal/Status, dynamic layout, widget picker
+
+Feedback on the Terminal/Status tabs: switching back and forth to check status while working in
+the terminal was annoying, and there was no reason to assume Terminal and Status would always be
+the only two things worth a cluster's panel - a more extensible model was wanted for whatever gets
+added next.
+
+- **Side by side by default, not tabs** (`src/renderer/src/features/shell/MainPanel.tsx`): a
+  cluster's Terminal and Status widgets now render at the same time, split horizontally by
+  default. Both stay mounted in the DOM at all times (CSS `display`/`order`, not conditional
+  rendering) exactly like the old tab implementation already did for the tab you weren't on - so
+  toggling a widget off never disconnects the Terminal's SSH session, and toggling it back on is
+  instant, not a reconnect.
+- **Dynamic layout controls**, in a small toolbar above the panel: swap pane order (left/right or
+  top/bottom), switch between side-by-side and stacked orientation, and a widget picker
+  (puzzle-piece icon) to toggle Terminal/Status on or off individually. New shared layout model in
+  `src/renderer/src/features/shell/panelLayout.ts` (`{ visible: WidgetType[], orientation }`) -
+  adding a future widget type only means adding it to `ALL_WIDGET_TYPES` and to the picker, not
+  touching the layout logic itself.
+- **Widget picker also doubles as a visible roadmap** (`WidgetPicker.tsx`): below the two toggle-able
+  widgets, a disabled "Coming soon" section lists ideas for future per-cluster widgets researched
+  against what HPC-specific monitoring stacks (Slurm-web, Grafana's Slurm dashboards, XDMoD)
+  surface that Gate-H doesn't yet - job queue, GPU usage, storage quota, node health, job history.
+  None of these are implemented; they're listed (and in `docs/STATUS.md`'s roadmap) so the picker
+  communicates what's planned, not just what's togglable today.
+- Layout state (which widgets are visible, which orientation) is a single global, session-only
+  preference for now, not persisted and not per-cluster - kept deliberately simple; noted as a
+  possible follow-up in `docs/STATUS.md` rather than built speculatively.
+- Regenerated the README's Terminal/Status screenshots as a single split-view screenshot plus a
+  widget-picker screenshot, replacing the old separate-tab pair.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass, and visually verified
+  via the headless-browser pipeline: default horizontal split, orientation toggle to stacked, the
+  widget picker (including the disabled roadmap items), hiding Status to confirm Terminal alone
+  fills the panel, swapping pane order, and hiding both widgets (confirmed via the DOM that the
+  Terminal component - and so its session - stays mounted even then).
