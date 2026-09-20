@@ -261,3 +261,35 @@ always visible instead of a full-page swap between "list" and "terminal"/"status
   Chromium + mocked `window.api` pipeline as before (see `docs/STATUS.md` for how). Updated
   `docs/STATUS.md`'s feature table and limitations to match.
 - Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass.
+
+### 2026-09-20 — fix: reachability monitor was tripping cluster intrusion detection
+
+Real-world fallout from the LED feature above, caught within the same testing session: shortly
+after using it against TestCluster, a genuine `Connect` attempt started failing with `ssh2`'s "Timed out
+while waiting for handshake" - the TCP port was reachable (the LED was green), but the SSH
+protocol handshake itself never completed.
+
+- **Root cause**: the original `checkTcpReachable` opened a TCP connection and immediately
+  destroyed it without ever speaking SSH - a bare "connect then hang up." That specific pattern
+  makes `sshd` log `Did not receive identification string from <ip>`, which is the exact signature
+  `fail2ban`/`sshguard` and most HPC-center intrusion detection use to identify port scanners. At
+  a 20-second polling interval, that's ~30 "scanner-shaped" connections in a 10-minute window -
+  comfortably past the default `fail2ban` sshd jail threshold (5 in 10 minutes) - so it's the
+  most likely explanation for why a real connection attempt started timing out shortly after the
+  monitor had been running for a while.
+- **Fix**: `checkTcpReachable` now waits for the server's `SSH-2.0-...` identification banner and
+  replies with one of its own before closing, the same "connect, read the banner, reply,
+  disconnect" pattern used by standard SSH-aware monitoring tools (e.g. Nagios/Icinga's
+  `check_ssh`) - recognizable as benign monitoring rather than a scan. Also raised the sweep
+  interval from 20s to 60s, matching those tools' typical default check interval, as further
+  headroom.
+- Verified the fix in isolation (outside Electron, which this sandbox can't run) against three
+  mock TCP servers: one that sends a real SSH banner and expects a reply (confirms it now behaves
+  like a real client), one that accepts the connection but never sends anything (confirms it
+  still correctly reports "unreachable" rather than hanging), and a closed port. All three
+  matched expectations.
+- **This fix prevents future occurrences but can't undo an existing block** - if a cluster's login
+  node has already rate-limited or temporarily banned the connecting IP because of the old
+  behavior, that block is outside this app's control; it should clear on its own after the
+  cluster's ban window elapses (commonly 10 minutes to an hour), or sooner if its HPC support team
+  lifts it directly.

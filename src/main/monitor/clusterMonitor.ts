@@ -2,7 +2,10 @@ import { listClusters } from '../clusters'
 import { checkTcpReachable } from './reachability'
 import type { ClusterReachability } from '../../shared/types'
 
-const SWEEP_INTERVAL_MS = 20_000
+// 60s matches the default check interval of standard SSH-aware monitoring tools (e.g.
+// Nagios/Icinga's check_ssh) - frequent enough for a "live" LED, conservative enough not to look
+// like abuse to a cluster's intrusion detection.
+const SWEEP_INTERVAL_MS = 60_000
 
 const state = new Map<string, ClusterReachability>()
 let broadcast: ((event: ClusterReachability) => void) | null = null
