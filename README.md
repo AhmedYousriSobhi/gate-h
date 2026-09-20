@@ -63,13 +63,19 @@
 > environment can't open an actual Electron window) — see [docs/STATUS.md](docs/STATUS.md) for
 > exactly how, and what's still unverified against real infrastructure.
 
-## Quickstart
+## Get the app
+
+The reproducible way to get a runnable H-Gate, no local Node/toolchain setup required — just
+[Docker](https://docs.docker.com/engine/install/):
 
 ```bash
-git clone <this-repo> hgate && cd hgate   # or just cd into your existing clone
-npm install                                # install dependencies (Node.js 20+ required)
-npm run dev                                # launch H-Gate in development mode
+./build-desktop.sh
+./dist/H-Gate-*.AppImage
 ```
+
+`build-desktop.sh` builds a pinned Node + native-module toolchain image, then builds and packages
+H-Gate inside a container from it — the same result on any machine, regardless of what's installed
+locally. See [docker/build.Dockerfile](docker/build.Dockerfile) for exactly what's in that image.
 
 Then, inside the app:
 
@@ -79,10 +85,14 @@ Then, inside the app:
 3. Click **Status** on a cluster card to see its Grafana health/dashboards and Jira issues, and to
    file a new ticket.
 
-To build a distributable Linux package instead of running in dev mode:
+## Development
+
+For active development (with hot reload), run H-Gate directly with Node instead — Docker doesn't
+give you a GUI window, so it's only used for reproducible packaging above, not for `dev`:
 
 ```bash
-npm run build:linux   # produces an AppImage and a .deb under dist/
+npm install       # install dependencies (Node.js 20+ required)
+npm run dev       # launch H-Gate in development mode
 ```
 
 Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.

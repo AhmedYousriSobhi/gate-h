@@ -9,6 +9,9 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!docs/**'
+  - '!docker/**'
+  - '!build-desktop.sh'
 asarUnpack:
   - resources/**
 win:
@@ -31,9 +34,8 @@ dmg:
 linux:
   target:
     - AppImage
-    - deb
   maintainer: ahmedyousrisobhi
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}.${ext}
 npmRebuild: false

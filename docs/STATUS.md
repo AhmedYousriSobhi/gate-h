@@ -18,7 +18,7 @@ The core loop works end-to-end: add a cluster → connect to it over SSH → vie
 | Embedded SSH terminal | ✅ Done | `ssh2` + `@xterm/xterm`, one session at a time |
 | Grafana status | ✅ Done | health check, per-dashboard title/link, panel snapshot image if `grafana-image-renderer` is installed |
 | Jira issues | ✅ Done | list via JQL, file new tickets; supports both Jira Cloud (email + API token) and Data Center (PAT) |
-| Linux packaging | ✅ Done | AppImage + `.deb` via `electron-builder` |
+| Linux packaging | ✅ Done | AppImage via `electron-builder`, built reproducibly inside Docker (`./build-desktop.sh`) |
 | App icon / branding | ✅ Done | custom mark, see `resources/icon.svg` |
 | Automated tests | ❌ Not started | verification so far is `typecheck` + `lint` + `build` on every change, no unit/e2e suite yet |
 | Multi-session terminal (tabs) | ❌ Not started | only one SSH session open at a time currently |
@@ -57,9 +57,17 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   headless-browser screenshot pipeline for UI changes) rather than with a test suite. Adding one
   (component tests for the renderer, and integration tests for the main-process SSH/Grafana/Jira
   clients against local mock servers) is the biggest gap before this could be called production-ready.
-- **Reproducible builds / Docker** — not yet decided; see the open question in the project
-  conversation history. The current recommendation is to containerize the *build* toolchain (a
-  pinned Node + native-module build environment for `electron-builder`) rather than the packaged
-  app itself, since H-Gate is a GUI app meant to run natively on the user's desktop and Electron
-  GUIs inside Docker require finicky X11/Wayland socket forwarding that undermines the
-  "standalone desktop app" goal.
+- **`.deb` packaging is dropped for now** — electron-builder's `.deb` target (via `fpm`) requires
+  a `homepage` field in `package.json`, and there's no public repo/homepage URL for this project
+  yet to put there truthfully. Only `AppImage` is built until one exists; re-adding `deb` to
+  `linux.target` in `electron-builder.yml` plus a real `homepage` field is a one-line change once
+  it does.
+- **Reproducible builds via Docker** — done: `./build-desktop.sh` builds a pinned Node +
+  native-module toolchain image (`docker/build.Dockerfile`) and runs the actual build inside it,
+  bind-mounting the repo rather than baking source into the image, so editing code never requires
+  rebuilding the image. It deliberately does **not** run the packaged *app* itself in Docker - a
+  GUI app inside a container needs finicky X11/Wayland socket forwarding and would undermine the
+  "standalone desktop app" goal - only the build toolchain is containerized. The container runs as
+  the host user (`--user "$(id -u):$(id -g)"`) so `dist/` output is host-owned, and `node_modules`
+  plus the npm/electron-builder download caches live in named Docker volumes (never bind-mounted
+  from the host), so it can't collide with a `node_modules` used for local `npm run dev`.
