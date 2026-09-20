@@ -8,6 +8,7 @@ import { registerGrafanaIpcHandlers } from './ipc/grafana'
 import { registerJiraIpcHandlers } from './ipc/jira'
 import { registerReachabilityIpcHandlers } from './ipc/reachability'
 import { registerNotificationIpcHandlers } from './ipc/notifications'
+import { registerWindowIpcHandlers } from './ipc/window'
 import { closeAllSessions } from './ssh/manager'
 import { startClusterMonitor, stopClusterMonitor } from './monitor/clusterMonitor'
 import { startJiraMonitor, stopJiraMonitor } from './monitor/jiraMonitor'
@@ -21,11 +22,17 @@ initUserDataDir()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  // Create the browser window.
+  // Create the browser window. Frameless with a custom title bar (see
+  // src/renderer/src/features/shell/TitleBar.tsx) rather than the OS-native one - double-click-to-
+  // maximize on a native title bar is a window-manager behavior Electron doesn't control on Linux,
+  // and it's inconsistent across WMs/compositors. A custom title bar makes it work everywhere.
   const win = new BrowserWindow({
     width: 900,
     height: 670,
+    minWidth: 640,
+    minHeight: 480,
     show: false,
+    frame: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -38,6 +45,9 @@ function createWindow(): void {
   win.on('ready-to-show', () => {
     win.show()
   })
+
+  win.on('maximize', () => win.webContents.send('window:maximized-changed', true))
+  win.on('unmaximize', () => win.webContents.send('window:maximized-changed', false))
 
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -73,6 +83,7 @@ app.whenReady().then(() => {
   registerJiraIpcHandlers()
   registerReachabilityIpcHandlers()
   registerNotificationIpcHandlers()
+  registerWindowIpcHandlers(() => mainWindow)
 
   createWindow()
 

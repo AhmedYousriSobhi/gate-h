@@ -428,3 +428,27 @@ has its own distinct login/compute/controller hostnames that don't make sense as
   this sandbox) - the fallback-on-failure path means a misconfigured Jira project degrades to the
   previous (unlabeled) behavior rather than breaking ticket creation, but that path itself is
   also unverified against a real API response.
+
+### 2026-09-20 — fix: double-clicking the title bar didn't maximize the window
+
+Root cause: on Linux, double-click-to-maximize on a *native* title bar is handled entirely by the
+window manager/compositor, not by Electron - it's inconsistent across WMs and, on at least some
+Wayland setups, doesn't fire for Electron windows at all. There was no reliable way to fix this
+while still using the OS-native frame.
+
+- **Went frameless** (`frame: false` on the `BrowserWindow`) and added a custom title bar
+  (`src/renderer/src/features/shell/TitleBar.tsx`) with its own minimize/maximize/close buttons
+  and a draggable region (`-webkit-app-region: drag`), so this now works identically everywhere
+  instead of depending on window-manager behavior. Double-clicking the drag region (but not the
+  buttons themselves) calls the same toggle-maximize path as the maximize button.
+- Added `window:minimize` / `window:toggleMaximize` / `window:close` / `window:isMaximized` IPC
+  (`src/main/ipc/window.ts`) and a `window:maximized-changed` event so the maximize button's icon
+  reflects the real window state (including when maximized/restored via the OS, e.g. a keyboard
+  shortcut or snapping to a screen edge).
+- Set `minWidth`/`minHeight` on the window - frameless windows lose the OS's usual minimum-size
+  affordance along with the rest of the native chrome.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Verified the
+  double-click → toggle → icon-swap logic end-to-end via the headless-browser pipeline (with a
+  mock that actually simulates the maximized-state-changed round trip, unlike a bare stub).
+  **Could not verify actual OS-level window maximizing** - that only happens in a real window
+  manager, which this sandbox doesn't have; this needs confirming on a real desktop.

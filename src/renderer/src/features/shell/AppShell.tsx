@@ -3,6 +3,7 @@ import type { ClusterInput, ClusterSummary } from '../../../../shared/types'
 import ClusterForm from '../clusters/ClusterForm'
 import Sidebar from './Sidebar'
 import MainPanel from './MainPanel'
+import TitleBar from './TitleBar'
 import { useReachability } from '../../hooks/useReachability'
 import './shell.css'
 
@@ -67,33 +68,36 @@ export default function AppShell(): React.JSX.Element {
   const selectedCluster = clusters.find((c) => c.id === selectedClusterId) ?? null
 
   return (
-    <div className="shell">
-      <Sidebar
-        clusters={clusters}
-        reachability={reachability}
-        selectedClusterId={selectedClusterId}
-        onSelect={(cluster) => setSelectedClusterId(cluster.id)}
-        onAdd={() => setEditing('new')}
-        onEdit={(cluster) => setEditing(cluster)}
-        onRemove={handleRemove}
-        onNotificationNavigate={handleNotificationNavigate}
-      />
-
-      {loadError ? (
-        <div className="main-panel main-panel-empty">
-          <div className="error-banner">{loadError}</div>
-        </div>
-      ) : (
-        <MainPanel cluster={selectedCluster} tab={activeTab} onTabChange={setActiveTab} />
-      )}
-
-      {editing && (
-        <ClusterForm
-          initial={editing === 'new' ? undefined : editing}
-          onCancel={() => setEditing(null)}
-          onSubmit={handleSubmit}
+    <div className="app-frame">
+      <TitleBar />
+      <div className="shell">
+        <Sidebar
+          clusters={clusters}
+          reachability={reachability}
+          selectedClusterId={selectedClusterId}
+          onSelect={(cluster) => setSelectedClusterId(cluster.id)}
+          onAdd={() => setEditing('new')}
+          onEdit={(cluster) => setEditing(cluster)}
+          onRemove={handleRemove}
+          onNotificationNavigate={handleNotificationNavigate}
         />
-      )}
+
+        {loadError ? (
+          <div className="main-panel main-panel-empty">
+            <div className="error-banner">{loadError}</div>
+          </div>
+        ) : (
+          <MainPanel cluster={selectedCluster} tab={activeTab} onTabChange={setActiveTab} />
+        )}
+
+        {editing && (
+          <ClusterForm
+            initial={editing === 'new' ? undefined : editing}
+            onCancel={() => setEditing(null)}
+            onSubmit={handleSubmit}
+          />
+        )}
+      </div>
     </div>
   )
 }
