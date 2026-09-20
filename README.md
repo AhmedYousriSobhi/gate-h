@@ -1,7 +1,13 @@
-# H-Gate
+<p align="center">
+  <img src="resources/icon.png" alt="H-Gate icon" width="96" height="96">
+</p>
 
-H-Gate is a standalone desktop application (not a browser app) for managing HPC (High Performance
-Computing) workloads across multiple clusters, from a single Linux desktop.
+<h1 align="center">H-Gate</h1>
+
+<p align="center">
+  A standalone desktop app (not a browser app) for managing HPC workloads across multiple
+  clusters, from a single Linux desktop.
+</p>
 
 ## What it does
 
@@ -14,20 +20,72 @@ Computing) workloads across multiple clusters, from a single Linux desktop.
 - **Jira integration** — view matching issues and file new tickets against a cluster's Jira
   project, for both Jira Cloud and Jira Data Center/Server.
 
-## Status
+## Preview
 
-v0.1 — the core loop works end-to-end: add a cluster → connect to it over SSH → view its Grafana
-status → view/file its Jira tickets. See [CHANGELOG.md](./CHANGELOG.md) for the running build log
-and [docs/ANALYSIS.md](./docs/ANALYSIS.md) for the prior-art research and architecture decisions.
+<p align="center">
+  <img src="docs/assets/screenshots/cluster-list.png" alt="Cluster list" width="720"><br/>
+  <sub>Every cluster you manage, with its connection, Grafana, and Jira status at a glance.</sub>
+</p>
 
-Known limitations, to be picked up next:
+<table>
+<tr>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/ssh-terminal.png" alt="Embedded SSH terminal" width="360"><br/>
+  <sub>Connect over SSH without leaving the app</sub>
+</td>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/cluster-status.png" alt="Cluster status screen" width="360"><br/>
+  <sub>Grafana health/snapshots + Jira issues, per cluster</sub>
+</td>
+</tr>
+</table>
 
-- Single terminal session at a time (no tabs/multi-session yet).
-- A jump host with its own password (different from the target cluster's) isn't supported yet -
-  see the note in `src/main/ssh/manager.ts`.
-- Grafana dashboard snapshots require the `grafana-image-renderer` plugin on the target Grafana;
-  without it, H-Gate falls back to showing the dashboard title/link only.
-- No automated test suite yet - each feature has so far been verified via `typecheck`/`lint`/`build`.
+### Procedures
+
+<table>
+<tr>
+<td align="center">
+  <b>Add a cluster</b><br/><br/>
+  <img src="docs/assets/gifs/add-cluster.gif" alt="Adding a cluster" width="320">
+</td>
+<td align="center">
+  <b>Connect over SSH</b><br/><br/>
+  <img src="docs/assets/gifs/ssh-connect.gif" alt="Connecting over SSH" width="320">
+</td>
+<td align="center">
+  <b>Status + file a Jira ticket</b><br/><br/>
+  <img src="docs/assets/gifs/cluster-status.gif" alt="Viewing status and filing a Jira ticket" width="320">
+</td>
+</tr>
+</table>
+
+> These were captured by driving the real UI code in a headless browser against sample data (this
+> environment can't open an actual Electron window) — see [docs/STATUS.md](docs/STATUS.md) for
+> exactly how, and what's still unverified against real infrastructure.
+
+## Quickstart
+
+```bash
+git clone <this-repo> hgate && cd hgate   # or just cd into your existing clone
+npm install                                # install dependencies (Node.js 20+ required)
+npm run dev                                # launch H-Gate in development mode
+```
+
+Then, inside the app:
+
+1. Click **+ Add cluster** and fill in a name plus its SSH connection details (host, user, auth
+   method). Grafana and Jira are optional per cluster.
+2. Click **Connect** on a cluster card to open an embedded SSH terminal to it.
+3. Click **Status** on a cluster card to see its Grafana health/dashboards and Jira issues, and to
+   file a new ticket.
+
+To build a distributable Linux package instead of running in dev mode:
+
+```bash
+npm run build:linux   # produces an AppImage and a .deb under dist/
+```
+
+Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.
 
 ## Tech stack
 
@@ -43,22 +101,7 @@ Known limitations, to be picked up next:
 - **Integrations**: Grafana HTTP API (service-account token), Jira REST API (Cloud: email + API
   token; Data Center: Personal Access Token)
 
-## Development
-
-See [docs/ANALYSIS.md](./docs/ANALYSIS.md) for architecture details and the build plan. Each
-feature is developed on its own `feature/*` branch and merged into `main` once it builds, lints,
-and typechecks cleanly.
-
-```bash
-npm install          # install dependencies
-npm run dev           # run the app in development mode
-npm run lint           # eslint
-npm run typecheck      # tsc, main + renderer
-npm run build           # production build (main/preload/renderer)
-npm run build:linux      # package as AppImage + .deb
-```
-
-Requires Node.js 20+. Project layout:
+Project layout:
 
 ```
 src/
@@ -67,3 +110,17 @@ src/
   preload/    # contextBridge API exposed to the renderer
   renderer/   # React UI (cluster list, terminal, Grafana/Jira status screens)
 ```
+
+## Learn more / project status
+
+This README stays focused on what H-Gate is and how to run it. For anything deeper:
+
+- **[docs/STATUS.md](docs/STATUS.md)** — current feature completeness, how each feature has been
+  verified so far, and known limitations/roadmap.
+- **[CHANGELOG.md](CHANGELOG.md)** — the chronological build log: every change, in the order it
+  happened, and why.
+- **[docs/ANALYSIS.md](docs/ANALYSIS.md)** — prior-art research (Open OnDemand, ColdFront/XDMoD,
+  Slurm-web, etc.) and the architecture decisions behind H-Gate.
+
+Each feature is developed on its own `feature/*` branch and merged into `main` once it builds,
+lints, and typechecks cleanly.
