@@ -103,3 +103,23 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   against a real Grafana instance in this sandbox (no reachable Grafana server here, plus the
   GUI limitation noted above) — recommend verifying the Status screen against a real Grafana
   instance (with and without grafana-image-renderer installed) after `npm run dev`.
+
+### 2026-09-20 — `feature/jira-integration`
+
+- Added a Jira REST client (`src/main/jira/client.ts`) supporting both **Jira Cloud** (Basic auth
+  with account email + API token) and **Jira Data Center/Server** (Bearer + Personal Access
+  Token), per the two auth modes captured on a cluster's Jira profile. Uses the `/rest/api/2/*`
+  endpoints deliberately (not v3) so issue descriptions can stay plain strings instead of
+  requiring Atlassian Document Format, keeping one code path generic across both Jira flavors.
+  - `listJiraIssues` runs the cluster's configured JQL (or a default `project = X ORDER BY
+    updated DESC`); `createJiraIssue` files a new ticket against the cluster's default project
+    and returns its live status.
+- Added `jira:list` / `jira:create` IPC handlers (`src/main/ipc/jira.ts`) and the matching
+  `window.api.jira.*` preload bridge.
+- Added a Jira section to the cluster Status screen (`src/renderer/src/features/status/JiraSection.tsx`):
+  lists matching issues with a link to open each in the browser, and a small inline form to file
+  a new ticket against the cluster's default project.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Could not test
+  against a real Jira instance in this sandbox (no reachable Jira server here, plus the GUI
+  limitation noted above) — recommend verifying issue listing/creation against both a Jira Cloud
+  and a Jira Data Center instance after `npm run dev`.
