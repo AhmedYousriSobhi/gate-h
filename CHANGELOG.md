@@ -123,3 +123,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   against a real Jira instance in this sandbox (no reachable Jira server here, plus the GUI
   limitation noted above) — recommend verifying issue listing/creation against both a Jira Cloud
   and a Jira Data Center instance after `npm run dev`.
+
+### 2026-09-20 — v0.1 wrap-up
+
+- The originally planned `feature/dashboard-shell` branch was folded into the work already done
+  in `feature/ssh-terminal` and `feature/grafana-integration`: the single-window view-switching
+  in `src/renderer/src/App.tsx` (cluster list ↔ terminal ↔ status) already covers that need, so a
+  separate branch would have just re-touched the same files without adding anything new.
+- Updated `README.md` to reflect the actual v0.1 feature set, tech stack (`safeStorage` instead of
+  the originally-considered `keytar`, no `node-pty` since every terminal session is a remote SSH
+  channel rather than a local shell), and known limitations/next steps: single terminal session at
+  a time, jump-host-with-its-own-password not yet supported, Grafana snapshots need the
+  `grafana-image-renderer` plugin, and no automated test suite yet.
+- End-to-end result: add a cluster (with SSH connection, optional jump host, optional Grafana and
+  Jira profiles) → Connect opens an embedded SSH terminal → Status shows Grafana health/dashboard
+  snapshots and Jira issues, with the ability to file a new ticket - all from one standalone
+  Electron app, verified via `npm run typecheck`, `npm run lint`, and `npm run build` at every step.
