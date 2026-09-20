@@ -5,6 +5,7 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 import type { WebContents } from 'electron'
 import { getCluster, getClusterSecrets } from '../clusters'
+import { addNotification } from '../notifications/store'
 import type { ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
@@ -13,12 +14,16 @@ import type { ConnectionProfile } from '../../shared/types'
 
 interface Session {
   clusterId: string
+  clusterName: string
   jumpClient: Client | null
   client: Client
   stream: ClientChannel
 }
 
 const sessions = new Map<string, Session>()
+// Session ids whose closure was requested by the app (switching clusters, quitting, etc.) rather
+// than the remote end hanging up on its own - used to avoid notifying on every routine disconnect.
+const intentionalCloses = new Set<string>()
 
 function expandHome(path: string): string {
   return path.startsWith('~') ? join(homedir(), path.slice(1)) : path
@@ -120,7 +125,7 @@ export async function openSshSession(
   const stream = await openShell(client)
 
   const sessionId = randomUUID()
-  sessions.set(sessionId, { clusterId, jumpClient, client, stream })
+  sessions.set(sessionId, { clusterId, clusterName: cluster.name, jumpClient, client, stream })
 
   stream.on('data', (chunk: Buffer) => {
     sender.send('ssh:data', { sessionId, chunk: chunk.toString('utf8') })
@@ -130,6 +135,16 @@ export async function openSshSession(
   })
   stream.on('close', () => {
     sender.send('ssh:closed', { sessionId })
+    if (!intentionalCloses.has(sessionId)) {
+      addNotification({
+        clusterId,
+        clusterName: cluster.name,
+        kind: 'ssh',
+        severity: 'warning',
+        message: `SSH session to ${cluster.name} was closed unexpectedly`
+      })
+    }
+    intentionalCloses.delete(sessionId)
     closeSession(sessionId)
   })
   client.on('error', (err: Error) => {
@@ -150,6 +165,7 @@ export function resizeSession(sessionId: string, cols: number, rows: number): vo
 export function closeSession(sessionId: string): void {
   const session = sessions.get(sessionId)
   if (!session) return
+  intentionalCloses.add(sessionId)
   session.stream.end()
   session.client.end()
   session.jumpClient?.end()

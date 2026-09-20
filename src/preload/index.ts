@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   ClusterInput,
+  ClusterNotification,
   ClusterReachability,
   CreateJiraIssueInput,
   GateHApi,
@@ -60,6 +61,17 @@ const api: GateHApi = {
         callback(payload)
       ipcRenderer.on('reachability:update', listener)
       return () => ipcRenderer.removeListener('reachability:update', listener)
+    }
+  },
+  notifications: {
+    list: () => ipcRenderer.invoke('notifications:list'),
+    markRead: (id: string) => ipcRenderer.send('notifications:markRead', id),
+    markAllRead: () => ipcRenderer.send('notifications:markAllRead'),
+    onCreated: (callback: (notification: ClusterNotification) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: ClusterNotification): void =>
+        callback(payload)
+      ipcRenderer.on('notifications:created', listener)
+      return () => ipcRenderer.removeListener('notifications:created', listener)
     }
   }
 }

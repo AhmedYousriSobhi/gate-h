@@ -1,6 +1,7 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import StatusLed from './StatusLed'
+import NotificationBell from './NotificationBell'
 import { avatarColorFor, initialFor } from '../../lib/avatarColor'
 
 interface SidebarProps {
@@ -11,6 +12,7 @@ interface SidebarProps {
   onAdd: () => void
   onEdit: (cluster: ClusterSummary) => void
   onRemove: (cluster: ClusterSummary) => void
+  onNotificationNavigate: (clusterId: string, tab?: 'terminal' | 'status') => void
 }
 
 export default function Sidebar({
@@ -20,16 +22,20 @@ export default function Sidebar({
   onSelect,
   onAdd,
   onEdit,
-  onRemove
+  onRemove,
+  onNotificationNavigate
 }: SidebarProps): React.JSX.Element {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <span className="sidebar-brand">Gate-H</span>
-        <button className="btn btn-primary btn-sm" onClick={onAdd}>
-          <Plus size={14} strokeWidth={2.5} />
-          Add
-        </button>
+        <div className="sidebar-header-actions">
+          <NotificationBell onNavigate={onNotificationNavigate} />
+          <button className="btn btn-primary btn-sm" onClick={onAdd}>
+            <Plus size={14} strokeWidth={2.5} />
+            Add
+          </button>
+        </div>
       </div>
 
       <div className="cluster-rows">

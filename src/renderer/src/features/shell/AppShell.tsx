@@ -10,6 +10,7 @@ export default function AppShell(): React.JSX.Element {
   const [clusters, setClusters] = useState<ClusterSummary[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'terminal' | 'status'>('terminal')
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
   const reachability = useReachability()
 
@@ -58,6 +59,11 @@ export default function AppShell(): React.JSX.Element {
     await refresh()
   }
 
+  function handleNotificationNavigate(clusterId: string, tab?: 'terminal' | 'status'): void {
+    setSelectedClusterId(clusterId)
+    if (tab) setActiveTab(tab)
+  }
+
   const selectedCluster = clusters.find((c) => c.id === selectedClusterId) ?? null
 
   return (
@@ -70,6 +76,7 @@ export default function AppShell(): React.JSX.Element {
         onAdd={() => setEditing('new')}
         onEdit={(cluster) => setEditing(cluster)}
         onRemove={handleRemove}
+        onNotificationNavigate={handleNotificationNavigate}
       />
 
       {loadError ? (
@@ -77,7 +84,7 @@ export default function AppShell(): React.JSX.Element {
           <div className="error-banner">{loadError}</div>
         </div>
       ) : (
-        <MainPanel cluster={selectedCluster} />
+        <MainPanel cluster={selectedCluster} tab={activeTab} onTabChange={setActiveTab} />
       )}
 
       {editing && (
