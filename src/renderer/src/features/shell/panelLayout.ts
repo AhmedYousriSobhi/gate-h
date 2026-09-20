@@ -1,24 +1,16 @@
-// The set of widgets a cluster's main panel can show side by side, and the layout controls
-// (which are visible, in what order, split which way) that make that dynamic instead of a fixed
-// pair of tabs. New widget types plug in here and into WIDGET_DEFS in WidgetPicker.tsx - nothing
-// else needs to change to add one to the picker.
-export type WidgetType = 'terminal' | 'status'
+// Renderer-side helpers for the layout defined in src/shared/types.ts (WidgetType, PanelLayout,
+// etc.) - shared with the main process because it validates and persists the layout too (see
+// src/main/settings.ts). New widget types plug in over there and into WidgetPicker.tsx's list -
+// nothing here needs to change to add one to the picker.
+import {
+  ALL_WIDGET_TYPES,
+  DEFAULT_PANEL_LAYOUT,
+  type PanelLayout,
+  type WidgetType
+} from '../../../../shared/types'
 
-export const ALL_WIDGET_TYPES: WidgetType[] = ['terminal', 'status']
-
-export type PanelOrientation = 'horizontal' | 'vertical'
-
-export interface PanelLayout {
-  /** Which widgets are currently shown, in left-to-right (horizontal) or top-to-bottom (vertical)
-   *  order - reordering this is what "swapping" two panes means. */
-  visible: WidgetType[]
-  orientation: PanelOrientation
-}
-
-export const DEFAULT_LAYOUT: PanelLayout = {
-  visible: ['terminal', 'status'],
-  orientation: 'horizontal'
-}
+export type { PanelLayout, PanelOrientation, WidgetType } from '../../../../shared/types'
+export { ALL_WIDGET_TYPES, DEFAULT_PANEL_LAYOUT }
 
 /** Adds a widget to the layout if it isn't already visible - used when something outside the
  *  panel itself (Connect on a cluster card, clicking a notification) wants to make sure a

@@ -150,6 +150,24 @@ export interface Profile {
   updatedAt: string
 }
 
+// The widgets a cluster's main panel can show side by side (see
+// src/renderer/src/features/shell/panelLayout.ts for the renderer-side helpers built on this).
+// Shared rather than renderer-only because the main process persists and validates it too.
+export type WidgetType = 'terminal' | 'status'
+export const ALL_WIDGET_TYPES: WidgetType[] = ['terminal', 'status']
+
+export type PanelOrientation = 'horizontal' | 'vertical'
+
+export interface PanelLayout {
+  visible: WidgetType[]
+  orientation: PanelOrientation
+}
+
+export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
+  visible: ['terminal', 'status'],
+  orientation: 'horizontal'
+}
+
 export interface GateHApi {
   clusters: {
     /** Only the active profile's clusters - see `profiles` below. */
@@ -201,5 +219,11 @@ export interface GateHApi {
     /** Rejects if this would delete the last remaining profile. */
     remove(id: string): Promise<void>
     countClusters(id: string): Promise<number>
+  }
+  layout: {
+    /** Always resolves to a valid layout - falls back to DEFAULT_PANEL_LAYOUT if nothing was
+     *  saved yet or the saved value doesn't parse. */
+    get(): Promise<PanelLayout>
+    set(layout: PanelLayout): void
   }
 }
