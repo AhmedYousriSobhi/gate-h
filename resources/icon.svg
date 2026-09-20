@@ -1,0 +1,45 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#141c30"/>
+      <stop offset="100%" stop-color="#0a0f1c"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7db2ff"/>
+      <stop offset="100%" stop-color="#2f6fed"/>
+    </linearGradient>
+    <radialGradient id="node" cx="0.35" cy="0.3" r="0.75">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#bfe0ff"/>
+      <stop offset="100%" stop-color="#7ec8ff"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0.30  0 0 0 0 0.55  0 0 0 0 1  0 0 0 0.9 0" result="tint"/>
+      <feMerge>
+        <feMergeNode in="tint"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="nodeGlow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0.55  0 0 0 0 0.78  0 0 0 0 1  0 0 0 1 0" result="tint"/>
+      <feMerge>
+        <feMergeNode in="tint"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)"/>
+
+  <g filter="url(#glow)">
+    <rect x="298" y="256" width="120" height="530" rx="60" fill="url(#bar)"/>
+    <rect x="606" y="256" width="120" height="530" rx="60" fill="url(#bar)"/>
+    <rect x="298" y="466" width="428" height="110" rx="55" fill="url(#bar)"/>
+  </g>
+
+  <circle cx="512" cy="521" r="46" fill="url(#node)" filter="url(#nodeGlow)"/>
+</svg>

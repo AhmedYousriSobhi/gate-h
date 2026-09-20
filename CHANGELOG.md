@@ -139,3 +139,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Jira profiles) → Connect opens an embedded SSH terminal → Status shows Grafana health/dashboard
   snapshots and Jira issues, with the ability to file a new ticket - all from one standalone
   Electron app, verified via `npm run typecheck`, `npm run lint`, and `npm run build` at every step.
+
+### 2026-09-20 — `feature/app-icon`
+
+- Replaced the default electron-vite/Electron logo with a custom H-Gate mark: two rounded bars
+  forming an "H" doubling as a gate/frame silhouette, with a glowing status node on the crossbar
+  (nodding to the app's live Grafana monitoring), gradient blue on a dark navy rounded-square
+  background - designed to read clearly down to a 16px taskbar size.
+- No SVG/image tooling (ImageMagick, Inkscape, librsvg) is installed in this sandbox and there's
+  no root access to add it, so the icon was rasterized by loading the SVG in the headless
+  Chromium already cached here (from Playwright, itself installed for the screenshot work below)
+  at each exact target resolution (16 to 1024px) rather than downscaling a single render - and
+  `icon.ico` / `icon.icns` were assembled by hand (both formats accept plain PNG-encoded entries)
+  since no packaging tool for those formats was available either.
+- Replaced `resources/icon.png`, `build/icon.png`, `build/icon.ico`, and `build/icon.icns`; added
+  `resources/icon.svg` as the editable vector source for future changes.
+- Verified `npm run build` still succeeds with the new assets.
