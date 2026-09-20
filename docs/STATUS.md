@@ -9,8 +9,10 @@ research behind the design decisions, see [ANALYSIS.md](./ANALYSIS.md).
 
 The core loop works end-to-end: add a cluster → connect to it over SSH → view its Grafana status
 → view/file its Jira tickets — all inside one standalone Electron app, with no browser involved.
-As of this update, a real user (testing on a real the research center cluster called "TestCluster") tried v0.1 and gave
-feedback that directly shaped the sidebar layout, live LEDs, and terminal-close behavior below.
+As of this update, a real user tried v0.1 against one of their own HPC clusters and gave feedback
+that directly shaped the sidebar layout, live LEDs, and terminal-close behavior below. (Exact
+cluster identity/hostnames from that testing session are deliberately not recorded anywhere in
+this repo or its history.)
 
 | Area | Status | Notes |
 |---|---|---|

@@ -206,8 +206,8 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ### 2026-09-20 — `feature/rebrand-gate-h`
 
 - First real user testing happened: the packaged AppImage was actually installed and used to
-  connect to a real cluster ("TestCluster"). Feedback from that session drove this and the following
-  changes.
+  connect to a real HPC cluster. Feedback from that session drove this and the following changes.
+  (The specific cluster's identity/hostnames are deliberately not recorded anywhere in this repo.)
 - Renamed the product from "H-Gate" to "Gate-H" everywhere: the in-app header, `package.json`
   (`name`, `description`), `electron-builder.yml` (`appId`, `productName`, `win.executableName` -
   the packaged AppImage is now `Gate-H-<version>.AppImage`), the `<title>` tag (previously still
@@ -217,7 +217,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Protected existing user data across the rename**: Electron was deriving the userData directory
   (where the cluster database lives) from the old `hgate` package name, so renaming it outright
   would have made the app start looking in a new, empty directory - silently "losing" a real
-  user's already-saved clusters (including the "TestCluster" cluster from the testing session above).
+  user's already-saved clusters (including the one from the testing session above).
   Added `src/main/userData.ts`: it now pins `userData` to an explicit `gate-h` directory
   (independent of whatever the npm package happens to be named, so this class of bug can't recur),
   and on first run after the rename, moves a pre-existing `~/.config/hgate/hgate.sqlite3` into the
@@ -265,9 +265,9 @@ always visible instead of a full-page swap between "list" and "terminal"/"status
 ### 2026-09-20 — fix: reachability monitor was tripping cluster intrusion detection
 
 Real-world fallout from the LED feature above, caught within the same testing session: shortly
-after using it against TestCluster, a genuine `Connect` attempt started failing with `ssh2`'s "Timed out
-while waiting for handshake" - the TCP port was reachable (the LED was green), but the SSH
-protocol handshake itself never completed.
+after using it against a real cluster, a genuine `Connect` attempt started failing with `ssh2`'s
+"Timed out while waiting for handshake" - the TCP port was reachable (the LED was green), but the
+SSH protocol handshake itself never completed.
 
 - **Root cause**: the original `checkTcpReachable` opened a TCP connection and immediately
   destroyed it without ever speaking SSH - a bare "connect then hang up." That specific pattern
@@ -293,3 +293,33 @@ protocol handshake itself never completed.
   behavior, that block is outside this app's control; it should clear on its own after the
   cluster's ban window elapses (commonly 10 minutes to an hour), or sooner if its HPC support team
   lifts it directly.
+- Unconfirmed either way: the tester's follow-up attempt was made without the VPN connection
+  needed to reach that cluster at all, so whether the original timeout was really a ban versus
+  something else couldn't be re-tested. The scanner-signature bug above is real and worth fixing
+  regardless of which explanation was correct for this specific incident.
+
+### 2026-09-20 — privacy cleanup: scrubbed the real test cluster's identity from history
+
+The manual testing described in the last few entries above was done against one of the tester's
+own real HPC clusters. Its name, hostnames, and username were never meant to be kept anywhere -
+they'd only ended up in this repo (in prose, and rendered into the README preview
+screenshots/GIFs) because the tester's own screenshot was used as reference material while fixing
+bugs. Once flagged, the identifying details were removed properly rather than just edited out of
+the current files:
+
+- Rewrote every commit's message and file content across **all local branches** (via
+  `git-filter-repo`) to replace the cluster's name and organization with generic placeholders -
+  this is a real history rewrite (every commit got a new hash), not just a new commit papering
+  over old ones, so the identifying strings aren't recoverable from this repo's history either.
+- Fully purged every historical version of `docs/assets/` (the only place the identity appeared
+  in binary, non-text form - baked into rendered screenshots/GIFs) rather than trying to redact
+  pixels, then regenerated the entire README preview (all screenshots and all three procedure
+  GIFs) from scratch using fully fictional sample data (`Frontier-Dev`, `login.frontier.example.org`,
+  `demo-user`, etc.) - the same generic placeholders used before real-cluster testing ever
+  happened.
+- The prose in the last few changelog entries above was reworded by hand afterward to read
+  naturally without the mechanical placeholder text the history rewrite left behind, while still
+  keeping the substance of what was learned (real user, real cluster, real bugs found and fixed).
+- **What this can't reach**: this repo's own git history and working tree are clean, but the
+  identifying details were also visible earlier in this project's chat conversation, which lives
+  outside this repository - scrubbing that is outside what a code change can do.
