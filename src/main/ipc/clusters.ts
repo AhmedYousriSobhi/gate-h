@@ -1,10 +1,17 @@
 import { ipcMain } from 'electron'
-import { createCluster, getCluster, listClusters, removeCluster, updateCluster } from '../clusters'
+import {
+  createCluster,
+  getCluster,
+  listClustersByProfile,
+  removeCluster,
+  updateCluster
+} from '../clusters'
 import { refreshCluster } from '../monitor/clusterMonitor'
+import { getActiveProfileId } from '../profiles'
 import type { ClusterInput } from '../../shared/types'
 
 export function registerClusterIpcHandlers(): void {
-  ipcMain.handle('clusters:list', () => listClusters())
+  ipcMain.handle('clusters:list', () => listClustersByProfile(getActiveProfileId()))
   ipcMain.handle('clusters:get', (_event, id: string) => getCluster(id))
   ipcMain.handle('clusters:create', (_event, input: ClusterInput) => {
     const created = createCluster(input)

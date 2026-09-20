@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bell, CheckCheck, Ticket, TerminalSquare, WifiOff } from 'lucide-react'
 import type { ClusterNotification, NotificationKind } from '../../../../shared/types'
-import { useNotifications } from '../../hooks/useNotifications'
 import { timeAgo } from '../../lib/timeAgo'
 
 interface NotificationBellProps {
+  notifications: ClusterNotification[]
+  markRead: (id: string) => void
+  markAllRead: () => void
   onNavigate: (clusterId: string, tab?: 'terminal' | 'status') => void
 }
 
@@ -23,8 +25,12 @@ const KIND_TAB: Record<NotificationKind, 'terminal' | 'status' | undefined> = {
   ssh: 'terminal'
 }
 
-export default function NotificationBell({ onNavigate }: NotificationBellProps): React.JSX.Element {
-  const { notifications, markRead, markAllRead } = useNotifications()
+export default function NotificationBell({
+  notifications,
+  markRead,
+  markAllRead,
+  onNavigate
+}: NotificationBellProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const unreadCount = notifications.filter((n) => !n.read).length

@@ -9,6 +9,7 @@ import { registerJiraIpcHandlers } from './ipc/jira'
 import { registerReachabilityIpcHandlers } from './ipc/reachability'
 import { registerNotificationIpcHandlers } from './ipc/notifications'
 import { registerWindowIpcHandlers } from './ipc/window'
+import { registerProfileIpcHandlers } from './ipc/profiles'
 import { closeAllSessions } from './ssh/manager'
 import {
   startClusterMonitor,
@@ -94,6 +95,7 @@ app.whenReady().then(() => {
   registerReachabilityIpcHandlers()
   registerNotificationIpcHandlers()
   registerWindowIpcHandlers(() => mainWindow)
+  registerProfileIpcHandlers()
 
   createWindow()
 

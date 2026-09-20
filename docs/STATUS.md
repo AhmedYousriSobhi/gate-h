@@ -29,6 +29,8 @@ this repo or its history.)
 | App icon / branding | ✅ Done | custom mark, see `resources/icon.svg`; product renamed H-Gate → Gate-H after user feedback |
 | Visual design system | ✅ Done | token-based dark theme (`assets/base.css`), self-hosted Inter/JetBrains Mono, `lucide-react` icons throughout - see the redesign entry in `CHANGELOG.md` |
 | Custom title bar | ✅ Done | frameless window with its own minimize/maximize/close + double-click-to-maximize, fixing a Linux window-manager inconsistency where the native title bar's double-click-to-maximize didn't work |
+| Profiles | ✅ Done | clusters belong to a profile (`profiles`/`app_settings` tables, migrated in automatically for existing installs); switch/create/rename/delete from the sidebar. Reachability and Jira monitoring watch every cluster in every profile regardless of which is active - only the sidebar/dashboard view is scoped |
+| Overview dashboard | ✅ Done | the default view (nothing selected) is a card grid of every cluster in the active profile - reachability, tags, Grafana/Jira badges, unread notification count, quick Connect/Status actions |
 | Cross-cluster notifications | ⚠️ Partial | bell icon covers reachability changes, Jira ticket activity, and unexpected SSH disconnects (all generic, cluster-agnostic signals). **Does not** cover scheduler-level events like Slurm node drains/downs - see the limitation below. |
 | Automated tests | ❌ Not started | verification so far is `typecheck` + `lint` + `build` on every change, no unit/e2e suite yet |
 | Multi-session terminal (tabs) | ❌ Not started | only one SSH session open at a time currently; switching clusters in the sidebar disconnects the previous session |
@@ -53,6 +55,9 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 
 ## Known limitations / near-term roadmap
 
+- **Can't move a cluster between profiles** — a cluster is assigned to whichever profile was
+  active when it was created, and there's no "move to another profile" action yet; the only way is
+  to delete it and re-add it under the target profile (re-entering its SSH/Grafana/Jira details).
 - **No scheduler-level event detection (e.g. Slurm node drains)** — deliberately not implemented
   yet, rather than faked. The notification bell's signals (`src/main/monitor/clusterMonitor.ts`,
   `jiraMonitor.ts`, `src/main/ssh/manager.ts`) are all things H-Gate can observe generically across

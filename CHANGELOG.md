@@ -485,3 +485,39 @@ the cluster was reachable again on its own.
   offline→online flap while already connected triggers zero further connects. **Could not verify
   against a real cluster or real VPN** - only the transition-handling logic itself, via mocked
   reachability events.
+
+### 2026-09-20 — `feature/profiles`: profiles and an overview dashboard
+
+Two more requests, implemented together since the dashboard is naturally profile-scoped: "a
+profile mode where each profile has its own dashboard and clusters" and "an intro dashboard
+showing all connected clusters."
+
+- **Data model** (`src/main/db.ts`, new `src/main/profiles.ts`): added a `profiles` table and an
+  `app_settings` key/value table (for the active profile id), and a `profile_id` column on
+  `clusters`. Written as a migration that runs on every launch but only ever does real work once:
+  it creates a default "Personal" profile if none exist, backfills any cluster with no
+  `profile_id` into it, and points `activeProfileId` at a real profile - so an existing install
+  upgrading into this doesn't lose or orphan any clusters. Verified directly against a real
+  better-sqlite3 database (not just typechecked): ran the exact migration SQL against a simulated
+  pre-profiles database, confirmed it backfills correctly, is idempotent (running it twice doesn't
+  duplicate anything), and that deleting a profile cascades to its clusters and reassigns the
+  active profile if needed.
+- **Scoping**: `clusters:list` (what the sidebar/dashboard show) is now scoped to the active
+  profile; a new cluster is assigned to whichever profile is active when it's created. Deliberately
+  left the reachability and Jira monitors watching *every* cluster in *every* profile regardless of
+  which is active, so notifications keep arriving for a profile you're not currently looking at.
+- **`ProfileSwitcher`**: a dropdown in the sidebar (replacing the static "Gate-H" label) to switch
+  profiles, and create/rename/delete them - deleting warns how many clusters will go with it via
+  `profiles:countClusters`, and refuses to delete the last remaining profile.
+- **`OverviewDashboard`**: the new default view (nothing selected) - a card grid of every cluster
+  in the active profile with its reachability LED, tags, configured integrations, unread
+  notification count, and Connect/Status actions, plus a summary line (N clusters · N online · N
+  unreachable). A pinned "Overview" row above the cluster list gets back to it at any time.
+- Regenerated all README screenshots against the new UI (title bar + profile switcher are now
+  visible in every shot).
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass; visually confirmed
+  the dashboard and profile switcher (including the create-profile form) via the headless-browser
+  pipeline. **Not verified**: switching between two profiles that actually have different clusters
+  end-to-end in a real running app (the mock used for screenshots doesn't re-filter clusters by
+  profile) - the underlying scoping logic is the same `listClustersByProfile` query exercised in
+  the migration test above, but the full round trip through Electron IPC is unverified here.
