@@ -452,3 +452,36 @@ while still using the OS-native frame.
   mock that actually simulates the maximized-state-changed round trip, unlike a bare stub).
   **Could not verify actual OS-level window maximizing** - that only happens in a real window
   manager, which this sandbox doesn't have; this needs confirming on a real desktop.
+
+### 2026-09-20 — fix: cluster didn't auto-reconnect after VPN came back
+
+Reported after real testing: a cluster's SSH session had dropped, and after reconnecting the VPN,
+Gate-H kept showing it as closed until "Reconnect" was clicked by hand - it should have noticed
+the cluster was reachable again on its own.
+
+- **`useReachability`** can now take an `onTransition` callback that fires once per genuine
+  online↔offline flip (not the transient "checking" state, and not the first reading). `AppShell`
+  uses it to bump a `reconnectSignal` counter - but only when the transition is for the currently
+  *selected* cluster and specifically offline→online.
+- **`TerminalPanel`** watches that signal and, if its session is currently sitting `closed`,
+  retries exactly once. This is a single nudge, not a retry loop: a second offline→online flap
+  while already connected does nothing, since there's nothing to nudge - verified directly (see
+  below), which also means it can't turn into repeated connection attempts against the cluster.
+- **Caught up faster on refocus**: added `triggerImmediateSweepIfStale()` to
+  `clusterMonitor.ts`, called when the window regains focus (e.g. switching back to Gate-H right
+  after turning a VPN on) - but only if at least 15 seconds have passed since the last sweep, so
+  alt-tabbing in and out repeatedly can't increase how often a cluster gets probed beyond the
+  normal 60-second cadence.
+- To be clear about what "reachable" already means here: the existing reachability probe
+  (`src/main/monitor/reachability.ts`, from the earlier fix) already does a real check - it
+  connects, waits for the SSH server's identification banner, and replies with one - not a bare
+  ping. This fix is about *reacting* to that check's result automatically, not about the check
+  itself being more thorough.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Verified the full
+  scenario end-to-end via the headless-browser pipeline with a mock that counts `ssh:connect`
+  calls: selecting a cluster connects once (StrictMode's dev-only double-invoke aside - that
+  doesn't happen in production builds), an unexpected close then an offline→online transition
+  triggers exactly one more connect and lands on "connected" with no click, and a *second*
+  offline→online flap while already connected triggers zero further connects. **Could not verify
+  against a real cluster or real VPN** - only the transition-handling logic itself, via mocked
+  reachability events.

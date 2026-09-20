@@ -9,12 +9,14 @@ interface MainPanelProps {
   cluster: ClusterSummary | null
   tab: Tab
   onTabChange: (tab: Tab) => void
+  reconnectSignal: number
 }
 
 export default function MainPanel({
   cluster,
   tab,
-  onTabChange
+  onTabChange,
+  reconnectSignal
 }: MainPanelProps): React.JSX.Element {
   if (!cluster) {
     return (
@@ -44,7 +46,7 @@ export default function MainPanel({
         </button>
       </div>
       <div className="panel-content" style={{ display: tab === 'terminal' ? 'flex' : 'none' }}>
-        <TerminalPanel cluster={cluster} />
+        <TerminalPanel cluster={cluster} reconnectSignal={reconnectSignal} />
       </div>
       <div className="panel-content" style={{ display: tab === 'status' ? 'block' : 'none' }}>
         <StatusPanel cluster={cluster} />

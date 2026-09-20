@@ -8,15 +8,37 @@ import './terminal.css'
 
 interface TerminalPanelProps {
   cluster: ClusterSummary
+  /** Bumped by AppShell exactly once when this cluster's reachability flips offline -> online
+   *  (e.g. the user just reconnected their VPN) - a one-shot nudge to retry, not a retry loop, so
+   *  it can't turn into repeated connection attempts against the cluster. */
+  reconnectSignal: number
 }
 
 type SessionStatus = 'connecting' | 'connected' | 'closed'
 
-export default function TerminalPanel({ cluster }: TerminalPanelProps): React.JSX.Element {
+export default function TerminalPanel({
+  cluster,
+  reconnectSignal
+}: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [attempt, setAttempt] = useState(0)
+  const statusRef = useRef<SessionStatus>(status)
+  useEffect(() => {
+    statusRef.current = status
+  })
+  const lastHandledReconnectSignal = useRef(reconnectSignal)
+
+  useEffect(() => {
+    if (reconnectSignal === lastHandledReconnectSignal.current) return
+    lastHandledReconnectSignal.current = reconnectSignal
+    // Only worth retrying if the session was actually sitting closed - if it's already
+    // connecting/connected there's nothing to nudge.
+    if (statusRef.current === 'closed') {
+      setAttempt((n) => n + 1)
+    }
+  }, [reconnectSignal])
 
   useEffect(() => {
     if (!containerRef.current) return
