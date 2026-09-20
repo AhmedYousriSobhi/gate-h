@@ -40,3 +40,25 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   local storage, Grafana/Jira REST integration details), and the branch-by-branch build plan.
 - Verified the scaffold end-to-end: `npm install`, `npm run typecheck`, `npm run lint`, and
   `npm run build` all pass cleanly.
+
+### 2026-09-20 — `feature/cluster-store`
+
+- Added the shared `Cluster` / `ClusterInput` / `ClusterSummary` data model
+  (`src/shared/types.ts`) covering a cluster's identity, its SSH connection profile (host, port,
+  user, auth method, optional jump/bastion host), and its optional Grafana and Jira profiles.
+- Implemented the local cluster store: `better-sqlite3` for structured data
+  (`src/main/db.ts`, `src/main/clusters.ts`) and `electron.safeStorage` for encrypting SSH
+  passphrases/API tokens at rest (`src/main/secrets.ts`) — `keytar` was deliberately avoided since
+  it is deprecated; `safeStorage` (OS keychain-backed, libsecret on Linux) is Electron's current
+  recommended replacement.
+- Exposed cluster CRUD to the renderer through a narrow `contextBridge` API
+  (`src/preload/index.ts`, IPC handlers in `src/main/ipc/clusters.ts`) — secrets are write-only
+  across this bridge and are never sent back to the renderer once saved.
+- Built the first real UI: a cluster list/dashboard shell and an add/edit cluster form covering
+  SSH connection details (including the jump-host toggle), Grafana config, and Jira config
+  (`src/renderer/src/features/clusters/`), replacing the electron-vite demo page.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass cleanly. Could not
+  visually smoke-test the running app in this sandbox: it has no working Electron GUI runtime
+  (`ELECTRON_RUN_AS_NODE=1` is enforced here, which forces the Electron binary to run as plain
+  Node rather than launch a window) — recommend running `npm run dev` on a normal desktop to
+  visually verify this screen.

@@ -1,8 +1,18 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { ClusterInput, HGateApi } from '../shared/types'
 
-// Custom APIs for renderer
-const api = {}
+// Custom APIs for renderer - a narrow, explicit surface over IPC. The renderer never gets
+// direct Node/Electron access, and secrets never travel back across this bridge.
+const api: HGateApi = {
+  clusters: {
+    list: () => ipcRenderer.invoke('clusters:list'),
+    get: (id: string) => ipcRenderer.invoke('clusters:get', id),
+    create: (input: ClusterInput) => ipcRenderer.invoke('clusters:create', input),
+    update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
+    remove: (id: string) => ipcRenderer.invoke('clusters:remove', id)
+  }
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
