@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { ClusterInput, HGateApi } from '../shared/types'
+import type {
+  ClusterInput,
+  HGateApi,
+  SshClosedEvent,
+  SshDataEvent,
+  SshErrorEvent
+} from '../shared/types'
 
 // Custom APIs for renderer - a narrow, explicit surface over IPC. The renderer never gets
 // direct Node/Electron access, and secrets never travel back across this bridge.
@@ -11,6 +17,31 @@ const api: HGateApi = {
     create: (input: ClusterInput) => ipcRenderer.invoke('clusters:create', input),
     update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
     remove: (id: string) => ipcRenderer.invoke('clusters:remove', id)
+  },
+  ssh: {
+    connect: (clusterId: string) => ipcRenderer.invoke('ssh:connect', clusterId),
+    write: (sessionId: string, data: string) => ipcRenderer.send('ssh:write', sessionId, data),
+    resize: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.send('ssh:resize', sessionId, cols, rows),
+    disconnect: (sessionId: string) => ipcRenderer.send('ssh:disconnect', sessionId),
+    onData: (callback: (event: SshDataEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: SshDataEvent): void =>
+        callback(payload)
+      ipcRenderer.on('ssh:data', listener)
+      return () => ipcRenderer.removeListener('ssh:data', listener)
+    },
+    onClosed: (callback: (event: SshClosedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: SshClosedEvent): void =>
+        callback(payload)
+      ipcRenderer.on('ssh:closed', listener)
+      return () => ipcRenderer.removeListener('ssh:closed', listener)
+    },
+    onError: (callback: (event: SshErrorEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: SshErrorEvent): void =>
+        callback(payload)
+      ipcRenderer.on('ssh:error', listener)
+      return () => ipcRenderer.removeListener('ssh:error', listener)
+    }
   }
 }
 

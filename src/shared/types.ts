@@ -71,6 +71,20 @@ export type ClusterSummary = Cluster & {
   hasJiraToken: boolean
 }
 
+export interface SshDataEvent {
+  sessionId: string
+  chunk: string
+}
+
+export interface SshClosedEvent {
+  sessionId: string
+}
+
+export interface SshErrorEvent {
+  sessionId: string
+  message: string
+}
+
 export interface HGateApi {
   clusters: {
     list(): Promise<ClusterSummary[]>
@@ -78,5 +92,14 @@ export interface HGateApi {
     create(input: ClusterInput): Promise<ClusterSummary>
     update(id: string, input: ClusterInput): Promise<ClusterSummary>
     remove(id: string): Promise<void>
+  }
+  ssh: {
+    connect(clusterId: string): Promise<{ sessionId: string }>
+    write(sessionId: string, data: string): void
+    resize(sessionId: string, cols: number, rows: number): void
+    disconnect(sessionId: string): void
+    onData(callback: (event: SshDataEvent) => void): () => void
+    onClosed(callback: (event: SshClosedEvent) => void): () => void
+    onError(callback: (event: SshErrorEvent) => void): () => void
   }
 }

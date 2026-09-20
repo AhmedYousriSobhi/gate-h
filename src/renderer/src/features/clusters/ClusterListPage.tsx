@@ -3,7 +3,11 @@ import type { ClusterInput, ClusterSummary } from '../../../../shared/types'
 import ClusterForm from './ClusterForm'
 import './clusters.css'
 
-export default function ClusterListPage(): React.JSX.Element {
+interface ClusterListPageProps {
+  onConnect: (cluster: ClusterSummary) => void
+}
+
+export default function ClusterListPage({ onConnect }: ClusterListPageProps): React.JSX.Element {
   const [clusters, setClusters] = useState<ClusterSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -99,6 +103,9 @@ export default function ClusterListPage(): React.JSX.Element {
               {cluster.connection.jumpHost ? <span>via jump host</span> : null}
             </div>
             <div className="card-actions">
+              <button className="btn btn-primary" onClick={() => onConnect(cluster)}>
+                Connect
+              </button>
               <button className="btn" onClick={() => setEditing(cluster)}>
                 Edit
               </button>
