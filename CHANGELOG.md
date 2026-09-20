@@ -84,3 +84,22 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Could not test an
   actual SSH connection end-to-end in this sandbox (no reachable SSH server here, and see the GUI
   limitation noted above) — recommend testing `Connect` against a real cluster after `npm run dev`.
+
+### 2026-09-20 — `feature/grafana-integration`
+
+- Added a Grafana HTTP API client (`src/main/grafana/client.ts`) using a cluster's stored
+  service-account token: `/api/health` for reachability/version, `/api/dashboards/uid/{uid}` for
+  each configured dashboard's title/panel count, and `/render/d-solo/{uid}` (grafana-image-renderer)
+  for a snapshot image of the first panel, falling back to just the title/link when the renderer
+  plugin isn't installed.
+  - Chose image-rendering over parsing per-panel queries directly so H-Gate stays genuinely
+    datasource-agnostic — it works the same regardless of whether a cluster's Grafana sits on
+    Prometheus, InfluxDB, or anything else, without H-Gate needing to understand that data source.
+- Added `grafana:status` IPC handler (`src/main/ipc/grafana.ts`) and `window.api.grafana.getStatus`
+  in preload.
+- Added a cluster "Status" screen (`src/renderer/src/features/status/`) reachable via a new
+  "Status" button on each cluster card, showing Grafana reachability and per-dashboard snapshots/links.
+- Verified `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Could not test
+  against a real Grafana instance in this sandbox (no reachable Grafana server here, plus the
+  GUI limitation noted above) — recommend verifying the Status screen against a real Grafana
+  instance (with and without grafana-image-renderer installed) after `npm run dev`.

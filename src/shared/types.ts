@@ -85,6 +85,26 @@ export interface SshErrorEvent {
   message: string
 }
 
+export interface GrafanaHealth {
+  ok: boolean
+  version?: string
+  message?: string
+}
+
+export interface GrafanaDashboardStatus {
+  uid: string
+  title: string
+  url: string
+  panelCount: number
+  snapshotDataUrl: string | null
+  error?: string
+}
+
+export interface GrafanaStatusResult {
+  health: GrafanaHealth
+  dashboards: GrafanaDashboardStatus[]
+}
+
 export interface HGateApi {
   clusters: {
     list(): Promise<ClusterSummary[]>
@@ -92,6 +112,9 @@ export interface HGateApi {
     create(input: ClusterInput): Promise<ClusterSummary>
     update(id: string, input: ClusterInput): Promise<ClusterSummary>
     remove(id: string): Promise<void>
+  }
+  grafana: {
+    getStatus(clusterId: string): Promise<GrafanaStatusResult>
   }
   ssh: {
     connect(clusterId: string): Promise<{ sessionId: string }>
