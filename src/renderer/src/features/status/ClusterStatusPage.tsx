@@ -1,5 +1,6 @@
 import type { ClusterSummary } from '../../../../shared/types'
 import GrafanaStatusSection from './GrafanaStatusSection'
+import JiraSection from './JiraSection'
 import './status.css'
 
 interface ClusterStatusPageProps {
@@ -23,6 +24,10 @@ export default function ClusterStatusPage({
         <section>
           <h2>Grafana</h2>
           <GrafanaStatusSection cluster={cluster} />
+        </section>
+        <section>
+          <h2>Jira</h2>
+          <JiraSection cluster={cluster} />
         </section>
       </div>
     </div>

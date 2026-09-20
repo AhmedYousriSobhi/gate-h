@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   ClusterInput,
+  CreateJiraIssueInput,
   HGateApi,
   SshClosedEvent,
   SshDataEvent,
@@ -20,6 +21,11 @@ const api: HGateApi = {
   },
   grafana: {
     getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId)
+  },
+  jira: {
+    list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),
+    create: (clusterId: string, input: CreateJiraIssueInput) =>
+      ipcRenderer.invoke('jira:create', clusterId, input)
   },
   ssh: {
     connect: (clusterId: string) => ipcRenderer.invoke('ssh:connect', clusterId),

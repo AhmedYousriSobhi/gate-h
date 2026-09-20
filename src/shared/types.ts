@@ -105,6 +105,20 @@ export interface GrafanaStatusResult {
   dashboards: GrafanaDashboardStatus[]
 }
 
+export interface JiraIssueSummary {
+  key: string
+  summary: string
+  status: string
+  issueType: string
+  updated: string
+  url: string
+}
+
+export interface CreateJiraIssueInput {
+  summary: string
+  description?: string
+}
+
 export interface HGateApi {
   clusters: {
     list(): Promise<ClusterSummary[]>
@@ -115,6 +129,10 @@ export interface HGateApi {
   }
   grafana: {
     getStatus(clusterId: string): Promise<GrafanaStatusResult>
+  }
+  jira: {
+    list(clusterId: string): Promise<JiraIssueSummary[]>
+    create(clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary>
   }
   ssh: {
     connect(clusterId: string): Promise<{ sessionId: string }>
