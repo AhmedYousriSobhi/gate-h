@@ -154,7 +154,8 @@ Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.
 - **Secrets**: `electron.safeStorage` (OS keychain-backed, e.g. libsecret on Linux) - SSH
   passphrases and Grafana/Jira API tokens are encrypted at rest and never sent back to the
   renderer once saved
-- **Local persistence**: `better-sqlite3` for cluster/profile configuration
+- **Local persistence**: `better-sqlite3` for cluster/profile configuration and app preferences
+  (e.g. the panel layout)
 - **Integrations**: Grafana HTTP API (service-account token), Jira REST API (Cloud: email + API
   token; Data Center: Personal Access Token)
 

@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import { getDb } from './db'
+import { getSetting, setSetting } from './settings'
 import type { Profile } from '../shared/types'
 
 interface ProfileRow {
@@ -71,10 +72,8 @@ export function countClustersInProfile(id: string): number {
 }
 
 export function getActiveProfileId(): string {
-  const row = getDb()
-    .prepare('SELECT value FROM app_settings WHERE key = ?')
-    .get('activeProfileId') as { value: string } | undefined
-  if (!row) {
+  const value = getSetting('activeProfileId')
+  if (!value) {
     // Should never happen post-migration, but fall back to the oldest profile rather than throw.
     const fallback = getDb()
       .prepare('SELECT id FROM profiles ORDER BY created_at ASC LIMIT 1')
@@ -83,13 +82,9 @@ export function getActiveProfileId(): string {
     }
     return fallback.id
   }
-  return row.value
+  return value
 }
 
 export function setActiveProfileId(id: string): void {
-  getDb()
-    .prepare(
-      'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-    )
-    .run('activeProfileId', id)
+  setSetting('activeProfileId', id)
 }
