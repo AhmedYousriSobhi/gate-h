@@ -605,3 +605,38 @@ added next.
   widget picker (including the disabled roadmap items), hiding Status to confirm Terminal alone
   fills the panel, swapping pane order, and hiding both widgets (confirmed via the DOM that the
   Terminal component - and so its session - stays mounted even then).
+
+### 2026-09-21 — persist the panel layout across restarts
+
+Follow-up from the split-panel widgets work: the layout (which widgets are visible, which
+orientation) was session-only, resetting to the default every time Gate-H restarted. Asked which
+scope to persist at - one shared layout for the app (simplest, matches how it already behaved) vs.
+a separate layout per cluster - the answer was to keep it a single global preference, just make it
+survive restarts.
+
+- **`src/main/settings.ts`** (new): generic key/value helpers (`getSetting`/`setSetting`) over the
+  existing `app_settings` table - the same table `profiles.ts` already used just for
+  `activeProfileId` - plus `getPanelLayout()`/`setPanelLayout()` on top, which JSON-encode the
+  layout and validate it on the way back out. A corrupt value or a widget type that no longer
+  exists (e.g. after a downgrade) falls back to the default layout instead of throwing or wedging
+  the panel.
+- Moved `WidgetType`/`PanelOrientation`/`PanelLayout`/`ALL_WIDGET_TYPES`/`DEFAULT_PANEL_LAYOUT`
+  from the renderer's `panelLayout.ts` into `src/shared/types.ts`, since the main process now
+  needs them too (to validate a saved layout); the renderer module re-exports them so nothing else
+  had to change its imports.
+- New `layout:get`/`layout:set` IPC channels (`src/main/ipc/layout.ts`) and a `usePanelLayout()`
+  hook (mirroring `useProfiles`/`useNotifications`'s load-on-mount pattern) that AppShell now uses
+  instead of a plain `useState` - a change confined to swapping one hook for another, the rest of
+  the split-panel feature (toolbar, picker, swap/orientation logic) didn't need to change.
+- Refactored `profiles.ts`'s `getActiveProfileId`/`setActiveProfileId` to use the same new
+  `getSetting`/`setSetting` helpers instead of duplicating the same `app_settings` SQL a second
+  time.
+- Verified the validation/fallback logic directly against a real `better-sqlite3` database (6
+  assertions: default when unset, round-trips a saved layout, overwrites on a second save, and
+  falls back to the default on corrupt JSON, an unknown widget type, or a bad orientation value -
+  all pass). Verified the renderer wiring via the headless-browser pipeline with a mock
+  `window.api.layout`: a previously-saved vertical/status-only layout is restored on load, and
+  changing the orientation calls `layout.set` with the updated value.
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified**: an actual
+  restart of the packaged app (this sandbox can't open a real Electron window) - only the
+  persistence logic and the IPC wiring around it.
