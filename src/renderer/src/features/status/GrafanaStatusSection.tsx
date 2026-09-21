@@ -29,7 +29,9 @@ export default function GrafanaStatusSection({
     return () => {
       cancelled = true
     }
-  }, [cluster.id])
+    // Re-fetch whenever this cluster's saved config changes (e.g. a new Grafana token), not just
+    // when a different cluster is selected - `cluster.id` alone doesn't change on edit.
+  }, [cluster.id, cluster.updatedAt])
 
   if (!cluster.grafana) {
     return <p className="hint">No Grafana instance configured for this cluster.</p>
