@@ -132,7 +132,7 @@ export default function ClusterForm({
             dashboardUids: splitList(form.grafanaDashboardUids)
           }
         : null,
-      grafanaApiToken: form.grafanaApiToken || undefined,
+      grafanaApiToken: form.grafanaApiToken.trim() || undefined,
       jira: form.useJira
         ? {
             baseUrl: form.jiraBaseUrl.trim(),
@@ -142,7 +142,7 @@ export default function ClusterForm({
             jql: form.jiraJql.trim() || undefined
           }
         : null,
-      jiraApiToken: form.jiraApiToken || undefined
+      jiraApiToken: form.jiraApiToken.trim() || undefined
     }
 
     setSaving(true)
