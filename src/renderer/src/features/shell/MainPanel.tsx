@@ -16,12 +16,15 @@ interface MainPanelProps {
 // Both widgets stay mounted at all times regardless of visibility - `display: none` instead of
 // unmounting - so hiding the Terminal never disconnects its SSH session, and re-showing it is
 // instant. `order` (not DOM position) controls which side/row a pane appears on, so "swap" is a
-// pure CSS reorder with no remount either.
-function paneStyle(visible: WidgetType[], type: WidgetType): React.CSSProperties {
+// pure CSS reorder with no remount either. Orders are 0/2 (not 0/1) to leave room for the resize
+// handle at order 1, always sitting between the two panes regardless of swap.
+function paneStyle(visible: WidgetType[], type: WidgetType, ratio: number): React.CSSProperties {
   const index = visible.indexOf(type)
+  const flexGrow = index === 0 ? ratio : index === 1 ? 1 - ratio : 1
   return {
     display: index === -1 ? 'none' : 'flex',
-    order: index === -1 ? 99 : index
+    order: index === -1 ? 99 : index * 2,
+    flexGrow
   }
 }
 
@@ -32,7 +35,30 @@ export default function MainPanel({
   reconnectSignal
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [dragRatio, setDragRatio] = useState<number | null>(null)
   const { visible, orientation } = layout
+  const ratio = dragRatio ?? layout.splitRatio ?? 0.5
+
+  function handleResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handleResizeMove(e: React.PointerEvent<HTMLDivElement>): void {
+    if (e.buttons !== 1) return
+    const container = e.currentTarget.parentElement
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const fraction =
+      orientation === 'horizontal'
+        ? (e.clientX - rect.left) / rect.width
+        : (e.clientY - rect.top) / rect.height
+    setDragRatio(Math.min(0.85, Math.max(0.15, fraction)))
+  }
+
+  function handleResizeEnd(): void {
+    if (dragRatio !== null) onLayoutChange({ ...layout, splitRatio: dragRatio })
+    setDragRatio(null)
+  }
 
   return (
     <div className="main-panel" key={cluster.id}>
@@ -88,10 +114,19 @@ export default function MainPanel({
             Every widget is hidden - click the puzzle-piece icon above to add one back.
           </div>
         )}
-        <div className="panel-pane" style={paneStyle(visible, 'terminal')}>
+        <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
           <TerminalPanel cluster={cluster} reconnectSignal={reconnectSignal} />
         </div>
-        <div className="panel-pane" style={paneStyle(visible, 'status')}>
+        {visible.length === 2 && (
+          <div
+            className={`panel-resizer panel-resizer-${orientation}`}
+            style={{ order: 1 }}
+            onPointerDown={handleResizeStart}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+          />
+        )}
+        <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
           <StatusPanel cluster={cluster} />
         </div>
       </div>

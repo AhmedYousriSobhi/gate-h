@@ -161,11 +161,16 @@ export type PanelOrientation = 'horizontal' | 'vertical'
 export interface PanelLayout {
   visible: WidgetType[]
   orientation: PanelOrientation
+  /** Fraction (0.15-0.85) of the split's main-axis space given to the first visible pane (in
+   *  `visible` order, i.e. after any swap). Optional so layouts saved before this field existed
+   *  still parse - readers default to 0.5 when absent. */
+  splitRatio?: number
 }
 
 export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   visible: ['terminal', 'status'],
-  orientation: 'horizontal'
+  orientation: 'horizontal',
+  splitRatio: 0.5
 }
 
 export interface GateHApi {

@@ -311,6 +311,28 @@
   background: var(--color-bg);
 }
 
+.panel-resizer {
+  flex: 0 0 auto;
+  background: var(--color-border);
+  position: relative;
+  z-index: 1;
+}
+
+.panel-resizer:hover,
+.panel-resizer:active {
+  background: var(--color-accent);
+}
+
+.panel-resizer-horizontal {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.panel-resizer-vertical {
+  height: 4px;
+  cursor: row-resize;
+}
+
 .widget-picker-anchor {
   position: relative;
 }

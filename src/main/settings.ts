@@ -27,7 +27,11 @@ function isValidPanelLayout(value: unknown): value is PanelLayout {
   return (
     Array.isArray(candidate.visible) &&
     candidate.visible.every((w) => (ALL_WIDGET_TYPES as string[]).includes(w)) &&
-    (candidate.orientation === 'horizontal' || candidate.orientation === 'vertical')
+    (candidate.orientation === 'horizontal' || candidate.orientation === 'vertical') &&
+    (candidate.splitRatio === undefined ||
+      (typeof candidate.splitRatio === 'number' &&
+        candidate.splitRatio >= 0.15 &&
+        candidate.splitRatio <= 0.85))
   )
 }
 
