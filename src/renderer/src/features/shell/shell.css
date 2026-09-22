@@ -116,6 +116,18 @@
   text-overflow: ellipsis;
 }
 
+.standby-badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  font-size: 10px;
+  font-weight: 510;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  color: var(--color-text-3);
+  background-color: var(--color-surface-active);
+  vertical-align: middle;
+}
+
 .cluster-row-host {
   font-size: 11px;
   color: var(--color-text-3);
@@ -337,6 +349,13 @@
   font-size: 13px;
   text-align: center;
   background: var(--color-bg);
+}
+
+.panel-standby {
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 360px;
+  margin: 0 auto;
 }
 
 .panel-pane {
