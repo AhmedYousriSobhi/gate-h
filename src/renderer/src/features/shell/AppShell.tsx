@@ -35,9 +35,11 @@ export default function AppShell(): React.JSX.Element {
 
   // Pinned clusters stay mounted (hidden when not selected) so their Terminal/Grafana connections
   // keep running and auto-reconnecting in the background - see MainPanel's `hidden` prop and
-  // Cluster.keepAliveInBackground.
+  // Cluster.keepAliveInBackground. A cluster in standby (activeMonitoring false) never counts as
+  // pinned here even if the flag is set - standby is a master "no connections at all" switch that
+  // overrides it, rather than something pinning fights with.
   const pinnedClusterIds = useMemo(
-    () => clusters.filter((c) => c.keepAliveInBackground).map((c) => c.id),
+    () => clusters.filter((c) => c.keepAliveInBackground && c.activeMonitoring).map((c) => c.id),
     [clusters]
   )
   const activeClusterIds = useMemo(() => {
@@ -111,6 +113,11 @@ export default function AppShell(): React.JSX.Element {
     await refresh()
   }
 
+  async function handleToggleActiveMonitoring(cluster: ClusterSummary): Promise<void> {
+    await window.api.clusters.setActiveMonitoring(cluster.id, !cluster.activeMonitoring)
+    await refresh()
+  }
+
   function handleProfileChanged(): void {
     // Clusters are scoped to the active profile server-side, so switching profiles means the
     // previously selected cluster (if any) almost certainly doesn't belong to the new one.
@@ -141,6 +148,7 @@ export default function AppShell(): React.JSX.Element {
           onProfileChanged={handleProfileChanged}
           terminalStatuses={terminalStatuses}
           onToggleKeepAlive={handleToggleKeepAlive}
+          onToggleActiveMonitoring={handleToggleActiveMonitoring}
         />
 
         {loadError ? (
@@ -178,6 +186,7 @@ export default function AppShell(): React.JSX.Element {
                   onTerminalStatusChange={(status) =>
                     setTerminalStatuses((prev) => ({ ...prev, [id]: status }))
                   }
+                  onResumeMonitoring={() => handleToggleActiveMonitoring(cluster)}
                 />
               )
             })}

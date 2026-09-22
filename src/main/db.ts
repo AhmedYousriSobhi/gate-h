@@ -103,6 +103,12 @@ export function getDb(): Database.Database {
     db.exec('ALTER TABLE clusters ADD COLUMN keep_alive INTEGER NOT NULL DEFAULT 0')
   }
 
+  // Defaults to 1 (active), unlike keep_alive above - an existing cluster should keep connecting
+  // exactly as it did before this column existed, not silently go into standby.
+  if (!columnExists(db, 'clusters', 'active_monitoring')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN active_monitoring INTEGER NOT NULL DEFAULT 1')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,
