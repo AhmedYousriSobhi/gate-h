@@ -41,7 +41,12 @@
   background-color: var(--color-online);
 }
 
-.session-dot-closed {
+.session-dot-reconnecting {
+  background-color: var(--color-checking);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.session-dot-paused {
   background-color: var(--color-offline);
 }
 

@@ -6,9 +6,13 @@ import './status.css'
 
 interface StatusPanelProps {
   cluster: ClusterSummary
+  reconnectSignal: number
 }
 
-export default function StatusPanel({ cluster }: StatusPanelProps): React.JSX.Element {
+export default function StatusPanel({
+  cluster,
+  reconnectSignal
+}: StatusPanelProps): React.JSX.Element {
   return (
     <div className="status-body">
       <section>
@@ -16,7 +20,7 @@ export default function StatusPanel({ cluster }: StatusPanelProps): React.JSX.El
           <BarChart3 size={15} strokeWidth={2} />
           Grafana
         </h2>
-        <GrafanaStatusSection cluster={cluster} />
+        <GrafanaStatusSection cluster={cluster} reconnectSignal={reconnectSignal} />
       </section>
       <section>
         <h2>

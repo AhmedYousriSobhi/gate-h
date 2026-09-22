@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeftRight, Columns2, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterSummary } from '../../../../shared/types'
-import TerminalPanel from '../terminal/TerminalPanel'
+import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
 import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
@@ -11,6 +11,11 @@ interface MainPanelProps {
   layout: PanelLayout
   onLayoutChange: (layout: PanelLayout) => void
   reconnectSignal: number
+  /** True when this cluster isn't the one currently selected in the sidebar - kept mounted
+   *  (instead of unmounted) so a pinned cluster's Terminal/Grafana connections keep running in
+   *  the background, just visually hidden. */
+  hidden?: boolean
+  onTerminalStatusChange?: (status: SessionStatus) => void
 }
 
 // Both widgets stay mounted at all times regardless of visibility - `display: none` instead of
@@ -32,7 +37,9 @@ export default function MainPanel({
   cluster,
   layout,
   onLayoutChange,
-  reconnectSignal
+  reconnectSignal,
+  hidden = false,
+  onTerminalStatusChange
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
@@ -61,7 +68,7 @@ export default function MainPanel({
   }
 
   return (
-    <div className="main-panel" key={cluster.id}>
+    <div className={`main-panel${hidden ? ' main-panel-hidden' : ''}`}>
       <div className="panel-toolbar">
         <span className="panel-toolbar-title">{cluster.name}</span>
         <div className="panel-toolbar-actions">
@@ -115,7 +122,11 @@ export default function MainPanel({
           </div>
         )}
         <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
-          <TerminalPanel cluster={cluster} reconnectSignal={reconnectSignal} />
+          <TerminalPanel
+            cluster={cluster}
+            reconnectSignal={reconnectSignal}
+            onStatusChange={onTerminalStatusChange}
+          />
         </div>
         {visible.length === 2 && (
           <div
@@ -127,7 +138,7 @@ export default function MainPanel({
           />
         )}
         <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
-          <StatusPanel cluster={cluster} />
+          <StatusPanel cluster={cluster} reconnectSignal={reconnectSignal} />
         </div>
       </div>
     </div>
