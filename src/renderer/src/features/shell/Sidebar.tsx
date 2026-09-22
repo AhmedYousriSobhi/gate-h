@@ -1,4 +1,4 @@
-import { LayoutDashboard, Pencil, Pin, PinOff, Plus, Trash2 } from 'lucide-react'
+import { LayoutDashboard, Pencil, Pin, PinOff, Plus, Power, PowerOff, Trash2 } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
@@ -31,6 +31,7 @@ interface SidebarProps {
    *  stay connected in the background) - keyed by cluster id, absent for anything not mounted. */
   terminalStatuses: Record<string, SessionStatus>
   onToggleKeepAlive: (cluster: ClusterSummary) => void
+  onToggleActiveMonitoring: (cluster: ClusterSummary) => void
 }
 
 const KEEP_ALIVE_STATUS_LABEL: Record<SessionStatus, string> = {
@@ -56,7 +57,8 @@ export default function Sidebar({
   profilesState,
   onProfileChanged,
   terminalStatuses,
-  onToggleKeepAlive
+  onToggleKeepAlive,
+  onToggleActiveMonitoring
 }: SidebarProps): React.JSX.Element {
   return (
     <aside className="sidebar">
@@ -108,17 +110,40 @@ export default function Sidebar({
               <StatusLed status={reachability[cluster.id]?.status} />
             </span>
             <div className="cluster-row-main">
-              <div className="cluster-row-name">{cluster.name}</div>
+              <div className="cluster-row-name">
+                {cluster.name}
+                {!cluster.activeMonitoring && <span className="standby-badge">Standby</span>}
+              </div>
               <div className="cluster-row-host mono">{cluster.connection.host}</div>
-              {cluster.keepAliveInBackground && terminalStatuses[cluster.id] && (
-                <div
-                  className={`keep-alive-badge keep-alive-badge-${terminalStatuses[cluster.id]}`}
-                >
-                  {KEEP_ALIVE_STATUS_LABEL[terminalStatuses[cluster.id]]}
-                </div>
-              )}
+              {cluster.activeMonitoring &&
+                cluster.keepAliveInBackground &&
+                terminalStatuses[cluster.id] && (
+                  <div
+                    className={`keep-alive-badge keep-alive-badge-${terminalStatuses[cluster.id]}`}
+                  >
+                    {KEEP_ALIVE_STATUS_LABEL[terminalStatuses[cluster.id]]}
+                  </div>
+                )}
             </div>
             <div className="cluster-row-actions">
+              <button
+                className="icon-btn"
+                title={
+                  cluster.activeMonitoring
+                    ? 'Turn off Active Monitoring (standby - no connections at all)'
+                    : 'Turn on Active Monitoring'
+                }
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleActiveMonitoring(cluster)
+                }}
+              >
+                {cluster.activeMonitoring ? (
+                  <Power size={13} strokeWidth={2} />
+                ) : (
+                  <PowerOff size={13} strokeWidth={2} />
+                )}
+              </button>
               <button
                 className={`icon-btn${cluster.keepAliveInBackground ? ' icon-btn-active' : ''}`}
                 title={

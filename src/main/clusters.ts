@@ -24,6 +24,7 @@ interface ClusterRow {
   jira: string | null
   jira_token: string | null
   keep_alive: number
+  active_monitoring: number
   created_at: string
   updated_at: string
 }
@@ -38,6 +39,7 @@ function rowToSummary(row: ClusterRow): ClusterSummary {
     grafana: row.grafana ? (JSON.parse(row.grafana) as GrafanaProfile) : null,
     jira: row.jira ? (JSON.parse(row.jira) as JiraProfile) : null,
     keepAliveInBackground: Boolean(row.keep_alive),
+    activeMonitoring: Boolean(row.active_monitoring),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -89,8 +91,8 @@ export function createCluster(input: ClusterInput): ClusterSummary {
   getDb()
     .prepare(
       `INSERT INTO clusters
-        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, keep_alive, created_at, updated_at, profile_id)
-       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @keep_alive, @created_at, @updated_at, @profile_id)`
+        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, keep_alive, active_monitoring, created_at, updated_at, profile_id)
+       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @keep_alive, @active_monitoring, @created_at, @updated_at, @profile_id)`
     )
     .run({
       id,
@@ -105,6 +107,7 @@ export function createCluster(input: ClusterInput): ClusterSummary {
       jira: input.jira ? JSON.stringify(input.jira) : null,
       jira_token: input.jiraApiToken ? encryptSecret(input.jiraApiToken) : null,
       keep_alive: 0,
+      active_monitoring: 1,
       created_at: now,
       updated_at: now
     })
@@ -217,6 +220,23 @@ export function setClusterKeepAlive(id: string, keepAlive: boolean): ClusterSumm
   getDb()
     .prepare('UPDATE clusters SET keep_alive = @keep_alive WHERE id = @id')
     .run({ id, keep_alive: keepAlive ? 1 : 0 })
+
+  return getCluster(id) as ClusterSummary
+}
+
+/** Patches only the active-monitoring flag - the master Active/Standby switch toggled from the
+ *  sidebar, same lightweight-patch pattern as setClusterKeepAlive above. Bumps updated_at so the
+ *  Terminal/Status panels' own effects (keyed on it) pick the change up and connect/disconnect
+ *  immediately rather than waiting for some other trigger. */
+export function setClusterActiveMonitoring(id: string, active: boolean): ClusterSummary {
+  const existing = getDb().prepare('SELECT id FROM clusters WHERE id = ?').get(id)
+  if (!existing) throw new Error(`Cluster ${id} not found`)
+
+  getDb()
+    .prepare(
+      'UPDATE clusters SET active_monitoring = @active_monitoring, updated_at = @updated_at WHERE id = @id'
+    )
+    .run({ id, active_monitoring: active ? 1 : 0, updated_at: new Date().toISOString() })
 
   return getCluster(id) as ClusterSummary
 }
