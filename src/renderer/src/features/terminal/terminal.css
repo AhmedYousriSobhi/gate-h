@@ -41,7 +41,12 @@
   background-color: var(--color-online);
 }
 
-.session-dot-closed {
+.session-dot-reconnecting {
+  background-color: var(--color-checking);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.session-dot-paused {
   background-color: var(--color-offline);
 }
 
@@ -49,9 +54,37 @@
   margin: var(--space-3) var(--space-4) 0;
 }
 
+.terminal-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .terminal-container {
   flex: 1;
   padding: var(--space-2);
   background-color: #0a0a0c;
   overflow: hidden;
+}
+
+.terminal-shade {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  text-align: center;
+  background-color: rgba(10, 10, 12, 0.86);
+  color: var(--color-text-2);
+  font-size: 13px;
+}
+
+.terminal-shade-title {
+  color: var(--color-text-1);
+  font-size: 14px;
+  font-weight: 560;
 }

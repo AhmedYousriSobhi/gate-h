@@ -99,6 +99,10 @@ export function getDb(): Database.Database {
 
   migrateToProfiles(db)
 
+  if (!columnExists(db, 'clusters', 'keep_alive')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN keep_alive INTEGER NOT NULL DEFAULT 0')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,

@@ -4,6 +4,7 @@ import {
   getCluster,
   listClustersByProfile,
   removeCluster,
+  setClusterKeepAlive,
   updateCluster
 } from '../clusters'
 import { refreshCluster } from '../monitor/clusterMonitor'
@@ -24,4 +25,7 @@ export function registerClusterIpcHandlers(): void {
     return updated
   })
   ipcMain.handle('clusters:remove', (_event, id: string) => removeCluster(id))
+  ipcMain.handle('clusters:setKeepAlive', (_event, id: string, keepAlive: boolean) =>
+    setClusterKeepAlive(id, keepAlive)
+  )
 }
