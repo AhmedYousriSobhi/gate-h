@@ -1,17 +1,17 @@
 import { BarChart3, Ticket } from 'lucide-react'
-import type { ClusterSummary } from '../../../../shared/types'
+import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import GrafanaStatusSection from './GrafanaStatusSection'
 import JiraSection from './JiraSection'
 import './status.css'
 
 interface StatusPanelProps {
   cluster: ClusterSummary
-  reconnectSignal: number
+  reachability?: ClusterReachability
 }
 
 export default function StatusPanel({
   cluster,
-  reconnectSignal
+  reachability
 }: StatusPanelProps): React.JSX.Element {
   return (
     <div className="status-body">
@@ -20,7 +20,7 @@ export default function StatusPanel({
           <BarChart3 size={15} strokeWidth={2} />
           Grafana
         </h2>
-        <GrafanaStatusSection cluster={cluster} reconnectSignal={reconnectSignal} />
+        <GrafanaStatusSection cluster={cluster} reachability={reachability} />
       </section>
       <section>
         <h2>

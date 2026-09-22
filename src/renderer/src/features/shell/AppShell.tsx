@@ -22,22 +22,16 @@ export default function AppShell(): React.JSX.Element {
   // src/main/settings.ts.
   const { layout: panelLayout, setLayout: setPanelLayout } = usePanelLayout()
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
-  // Per-cluster, not a single shared counter - a recovery for cluster A shouldn't nudge cluster
-  // B's (possibly still-mounted, pinned) session.
-  const [reconnectSignals, setReconnectSignals] = useState<Record<string, number>>({})
   const [terminalStatuses, setTerminalStatuses] = useState<Record<string, SessionStatus>>({})
   const profilesState = useProfiles()
   const { notifications, markRead, markAllRead } = useNotifications()
-  const reachability = useReachability((clusterId, from, to) => {
-    // A single, one-shot nudge per cluster - not a retry loop - when a cluster's connection comes
-    // back after being down (e.g. the user just reconnected their VPN), so they don't have to
-    // remember to click Reconnect themselves, or switch to that cluster to trigger it. Applies to
-    // every cluster (not just the selected one) - see keepAliveInBackground below - but only has
-    // any effect on a cluster that's actually mounted (selected, or pinned to stay connected).
-    if (from === 'offline' && to === 'online') {
-      setReconnectSignals((prev) => ({ ...prev, [clusterId]: (prev[clusterId] ?? 0) + 1 }))
-    }
-  })
+  // Every mounted cluster's Terminal/Grafana get this raw, per-cluster reading straight through
+  // (see MainPanel/TerminalPanel/GrafanaStatusSection's `reachability` prop) instead of a one-shot
+  // "just came back online" signal derived here - a derived signal only fires on an observed
+  // offline -> online flip, which misses a cluster that's already online when its session first
+  // pauses (nothing to flip). Reading the live value directly lets a paused session recheck it on
+  // every push (roughly every 60s - see clusterMonitor's sweep interval), not just on a flip.
+  const reachability = useReachability()
 
   // Pinned clusters stay mounted (hidden when not selected) so their Terminal/Grafana connections
   // keep running and auto-reconnecting in the background - see MainPanel's `hidden` prop and
@@ -179,7 +173,7 @@ export default function AppShell(): React.JSX.Element {
                   cluster={cluster}
                   layout={panelLayout}
                   onLayoutChange={setPanelLayout}
-                  reconnectSignal={reconnectSignals[id] ?? 0}
+                  reachability={reachability[id]}
                   hidden={id !== selectedClusterId}
                   onTerminalStatusChange={(status) =>
                     setTerminalStatuses((prev) => ({ ...prev, [id]: status }))

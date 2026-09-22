@@ -2,16 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { RefreshCw } from 'lucide-react'
-import type { ClusterSummary } from '../../../../shared/types'
+import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 
 interface TerminalPanelProps {
   cluster: ClusterSummary
-  /** Bumped by AppShell whenever this specific cluster's reachability flips offline -> online
-   *  (e.g. the user just reconnected their VPN) - if the session is sitting paused/closed, this
-   *  resets the backoff window and retries immediately, instead of waiting out the rest of it. */
-  reconnectSignal: number
+  /** This cluster's live reachability reading, pushed by the main process roughly every 60s (see
+   *  src/main/monitor/clusterMonitor.ts) as well as right after focus/edit events - a *new object*
+   *  each time, even when the status value repeats. Read directly (not diffed against the
+   *  previous reading) so a session sitting `paused` gets re-checked on every one of those pushes,
+   *  not just the specific moment reachability flips offline -> online - the cluster can come back
+   *  online (or already be online at mount) with no such flip ever being observed here. */
+  reachability?: ClusterReachability
   onStatusChange?: (status: SessionStatus) => void
 }
 
@@ -28,7 +31,7 @@ const RECONNECT_JITTER_MS = 1_000
 
 export default function TerminalPanel({
   cluster,
-  reconnectSignal,
+  reachability,
   onStatusChange
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -47,7 +50,6 @@ export default function TerminalPanel({
   const windowStartRef = useRef(0)
   const attemptsRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastHandledReconnectSignal = useRef(reconnectSignal)
 
   function clearRetryTimer(): void {
     if (retryTimerRef.current) {
@@ -92,14 +94,15 @@ export default function TerminalPanel({
   }, [])
 
   useEffect(() => {
-    if (reconnectSignal === lastHandledReconnectSignal.current) return
-    lastHandledReconnectSignal.current = reconnectSignal
-    // Only worth nudging if the session is sitting idle - if it's already connecting/connected/
-    // retrying there's nothing to do.
-    if (statusRef.current === 'paused') {
+    // Re-checked on every reachability push for this cluster (roughly every 60s, same cadence the
+    // reachability sweep itself uses - frequent enough to notice the node coming back, restrained
+    // enough not to look like abuse), not just on a detected offline -> online flip - only worth
+    // acting on when the session is actually sitting paused; a connecting/connected/retrying
+    // session has nothing to nudge.
+    if (reachability?.status === 'online' && statusRef.current === 'paused') {
       resetAndReconnectNow()
     }
-  }, [reconnectSignal, resetAndReconnectNow])
+  }, [reachability, resetAndReconnectNow])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -189,15 +192,38 @@ export default function TerminalPanel({
           </span>
           <span className="terminal-status-word">{statusLabel}</span>
         </span>
-        {status === 'paused' && (
-          <button className="btn btn-sm" onClick={resetAndReconnectNow}>
-            <RefreshCw size={13} strokeWidth={2} />
-            Reconnect
-          </button>
-        )}
       </div>
       {connectError && <div className="error-banner terminal-error">{connectError}</div>}
-      <div className="terminal-container" ref={containerRef} />
+      <div className="terminal-body">
+        <div className="terminal-container" ref={containerRef} />
+        {/* Shades the (possibly stale) terminal buffer whenever there's no live session, so it's
+            never mistaken for a connected, responsive prompt. */}
+        {status !== 'connected' && (
+          <div className="terminal-shade">
+            {status === 'connecting' && <p>Connecting to {cluster.connection.host}...</p>}
+            {status === 'reconnecting' && (
+              <p>
+                Reconnecting to {cluster.connection.host} (attempt {retryAttempt}/
+                {MAX_RECONNECT_ATTEMPTS})...
+              </p>
+            )}
+            {status === 'paused' && (
+              <>
+                <p className="terminal-shade-title">Not connected</p>
+                <p>
+                  {reachability?.status === 'offline'
+                    ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
+                    : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
+                </p>
+                <button className="btn btn-sm" onClick={resetAndReconnectNow}>
+                  <RefreshCw size={13} strokeWidth={2} />
+                  Reconnect now
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
