@@ -23,7 +23,9 @@ const api: GateHApi = {
     remove: (id: string) => ipcRenderer.invoke('clusters:remove', id)
   },
   grafana: {
-    getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId)
+    getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId),
+    setPanelSelection: (clusterId: string, dashboardUid: string, panelIds: number[]) =>
+      ipcRenderer.invoke('grafana:setPanelSelection', clusterId, dashboardUid, panelIds)
   },
   jira: {
     list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),

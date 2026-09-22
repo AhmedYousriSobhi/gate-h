@@ -1,6 +1,7 @@
 import type {
   GrafanaDashboardStatus,
   GrafanaHealth,
+  GrafanaPanelSnapshot,
   GrafanaProfile,
   GrafanaStatusResult
 } from '../../shared/types'
@@ -62,7 +63,8 @@ async function fetchPanelSnapshot(
 async function getDashboardStatus(
   baseUrl: string,
   token: string,
-  uid: string
+  uid: string,
+  selectedPanelIds: number[] | undefined
 ): Promise<GrafanaDashboardStatus> {
   try {
     const res = await grafanaFetch(baseUrl, token, `/api/dashboards/uid/${uid}`)
@@ -71,19 +73,36 @@ async function getDashboardStatus(
     const panels = data.dashboard?.panels ?? []
     const title = data.dashboard?.title ?? uid
     const url = `${trimBaseUrl(baseUrl)}${data.meta?.url ?? `/d/${uid}`}`
-    const firstPanel = panels[0]
-    const snapshotDataUrl = firstPanel
-      ? await fetchPanelSnapshot(baseUrl, token, uid, firstPanel.id)
-      : null
 
-    return { uid, title, url, panelCount: panels.length, snapshotDataUrl }
+    // No selection saved yet (or it no longer matches any panel on the dashboard) - default to
+    // just the first panel, same as before panel selection existed.
+    const requested = selectedPanelIds?.filter((id) => panels.some((p) => p.id === id)) ?? []
+    const effectiveIds = requested.length > 0 ? requested : panels.slice(0, 1).map((p) => p.id)
+
+    const snapshots: GrafanaPanelSnapshot[] = await Promise.all(
+      effectiveIds.map(async (id) => ({
+        id,
+        title: panels.find((p) => p.id === id)?.title ?? String(id),
+        dataUrl: await fetchPanelSnapshot(baseUrl, token, uid, id)
+      }))
+    )
+
+    return {
+      uid,
+      title,
+      url,
+      panels: panels.map((p) => ({ id: p.id, title: p.title ?? String(p.id) })),
+      selectedPanelIds: effectiveIds,
+      snapshots
+    }
   } catch (err) {
     return {
       uid,
       title: uid,
       url: '',
-      panelCount: 0,
-      snapshotDataUrl: null,
+      panels: [],
+      selectedPanelIds: [],
+      snapshots: [],
       error: err instanceof Error ? err.message : 'Unknown error'
     }
   }
@@ -95,7 +114,9 @@ export async function getGrafanaStatus(
 ): Promise<GrafanaStatusResult> {
   const health = await checkGrafanaHealth(profile.baseUrl, token)
   const dashboards = await Promise.all(
-    profile.dashboardUids.map((uid) => getDashboardStatus(profile.baseUrl, token, uid))
+    profile.dashboardUids.map((uid) =>
+      getDashboardStatus(profile.baseUrl, token, uid, profile.panelSelections?.[uid])
+    )
   )
   return { health, dashboards }
 }
