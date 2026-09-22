@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import {
   CircleCheck,
   CircleX,
@@ -11,6 +11,7 @@ import {
   GRAFANA_EMBED_PARTITION,
   MAX_PANEL_EMBED_HEIGHT,
   MIN_PANEL_EMBED_HEIGHT,
+  MIN_PANEL_WIDTH_FRACTION,
   type ClusterSummary,
   type GrafanaStatusResult,
   type PanelOrientation
@@ -104,6 +105,64 @@ export default function GrafanaStatusSection({
       .then(setStatus)
       .catch((err: Error) => setError(err.message))
     setDragHeight(null)
+  }
+
+  // Drag-resize for the relative widths of side-by-side panels within one dashboard - a handle
+  // between panel `index` and `index + 1` moves weight between just that pair (their combined
+  // share stays fixed), same local-state-while-dragging/commit-on-release pattern as the height
+  // resizer above.
+  const [dragWidths, setDragWidths] = useState<{ uid: string; weights: number[] } | null>(null)
+  const widthDragStartRef = useRef<{
+    uid: string
+    index: number
+    startX: number
+    containerWidth: number
+    startWeights: number[]
+  } | null>(null)
+
+  function handleWidthResizeStart(
+    e: React.PointerEvent<HTMLDivElement>,
+    uid: string,
+    index: number,
+    currentWeights: number[]
+  ): void {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const container = e.currentTarget.parentElement
+    widthDragStartRef.current = {
+      uid,
+      index,
+      startX: e.clientX,
+      containerWidth: container?.getBoundingClientRect().width ?? 1,
+      startWeights: currentWeights
+    }
+  }
+
+  function handleWidthResizeMove(e: React.PointerEvent<HTMLDivElement>): void {
+    const start = widthDragStartRef.current
+    if (!start || e.buttons !== 1) return
+    const deltaFraction = (e.clientX - start.startX) / start.containerWidth
+    const pairSum = start.startWeights[start.index] + start.startWeights[start.index + 1]
+    const maxForFirst = pairSum - MIN_PANEL_WIDTH_FRACTION
+    const first = Math.min(
+      maxForFirst,
+      Math.max(MIN_PANEL_WIDTH_FRACTION, start.startWeights[start.index] + deltaFraction)
+    )
+    const weights = [...start.startWeights]
+    weights[start.index] = first
+    weights[start.index + 1] = pairSum - first
+    setDragWidths({ uid: start.uid, weights })
+  }
+
+  function handleWidthResizeEnd(): void {
+    const start = widthDragStartRef.current
+    widthDragStartRef.current = null
+    if (!start || dragWidths?.uid !== start.uid) return
+    window.api.grafana
+      .setPanelWidths(cluster.id, start.uid, dragWidths.weights)
+      .then(() => window.api.grafana.getStatus(cluster.id))
+      .then(setStatus)
+      .catch((err: Error) => setError(err.message))
+    setDragWidths(null)
   }
 
   useEffect(() => {
@@ -222,27 +281,49 @@ export default function GrafanaStatusSection({
                 {embedReady && dashboard.selectedPanelIds.length > 0 && (
                   <>
                     <div className={`panel-embed-list panel-embed-list-${dashboard.orientation}`}>
-                      {dashboard.selectedPanelIds.map((panelId) => {
-                        const panelTitle =
-                          dashboard.panels.find((p) => p.id === panelId)?.title ?? String(panelId)
-                        const embedUrl = `${grafanaBaseUrl}/d-solo/${dashboard.uid}?orgId=1&panelId=${panelId}&theme=dark&kiosk`
-                        const height =
-                          dragHeight?.uid === dashboard.uid
-                            ? dragHeight.height
-                            : dashboard.embedHeight
-                        return (
-                          <figure className="panel-embed" key={panelId}>
-                            <webview
-                              ref={hidePanelMenu}
-                              src={embedUrl}
-                              partition={GRAFANA_EMBED_PARTITION}
-                              allowpopups
-                              style={{ height }}
-                            />
-                            <figcaption>{panelTitle}</figcaption>
-                          </figure>
-                        )
-                      })}
+                      {(() => {
+                        const weights =
+                          dragWidths?.uid === dashboard.uid
+                            ? dragWidths.weights
+                            : dashboard.panelWidths
+                        return dashboard.selectedPanelIds.map((panelId, index) => {
+                          const panelTitle =
+                            dashboard.panels.find((p) => p.id === panelId)?.title ?? String(panelId)
+                          const embedUrl = `${grafanaBaseUrl}/d-solo/${dashboard.uid}?orgId=1&panelId=${panelId}&theme=dark&kiosk`
+                          const height =
+                            dragHeight?.uid === dashboard.uid
+                              ? dragHeight.height
+                              : dashboard.embedHeight
+                          const widthStyle =
+                            dashboard.orientation === 'horizontal' && weights[index] !== undefined
+                              ? { flex: `${weights[index]} 1 0%` }
+                              : undefined
+                          return (
+                            <Fragment key={panelId}>
+                              {dashboard.orientation === 'horizontal' && index > 0 && (
+                                <div
+                                  className="panel-embed-width-resizer"
+                                  onPointerDown={(e) =>
+                                    handleWidthResizeStart(e, dashboard.uid, index - 1, weights)
+                                  }
+                                  onPointerMove={handleWidthResizeMove}
+                                  onPointerUp={handleWidthResizeEnd}
+                                />
+                              )}
+                              <figure className="panel-embed" style={widthStyle}>
+                                <webview
+                                  ref={hidePanelMenu}
+                                  src={embedUrl}
+                                  partition={GRAFANA_EMBED_PARTITION}
+                                  allowpopups
+                                  style={{ height }}
+                                />
+                                <figcaption>{panelTitle}</figcaption>
+                              </figure>
+                            </Fragment>
+                          )
+                        })
+                      })()}
                     </div>
                     <div
                       className="panel-embed-resizer"

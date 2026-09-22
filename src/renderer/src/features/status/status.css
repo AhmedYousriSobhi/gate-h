@@ -102,9 +102,11 @@
   flex-direction: row;
 }
 
-/* flex-basis 0 (not a px value) so panels always share the row equally by shrinking, rather than
-   wrapping back into a vertical stack once their combined natural width exceeds the (often narrow)
-   status panel - a fixed basis made "side by side" indistinguishable from "stacked" in practice. */
+/* flex-basis 0 (not a px value) so panels share the row by shrinking rather than wrapping back
+   into a vertical stack once their combined natural width exceeds the (often narrow) status panel
+   - a fixed basis made "side by side" indistinguishable from "stacked" in practice. The weights
+   themselves (equal by default) are set inline per-panel from GrafanaDashboardStatus.panelWidths,
+   draggable via .panel-embed-width-resizer below - this is just the shrink/basis behavior. */
 .panel-embed-list-horizontal .panel-embed {
   flex: 1 1 0;
   min-width: 0;
@@ -133,6 +135,33 @@
 
 .panel-embed-resizer:hover::after,
 .panel-embed-resizer:active::after {
+  background: var(--color-accent);
+}
+
+/* Drag handle between two side-by-side panels, adjusting their relative widths - same full-height
+   hit target / thin centered bar pattern as .panel-embed-resizer above, just rotated 90deg. Fixed
+   size (not a flex participant sharing the row) so it doesn't eat into panelWidths' 0-1 fractions. */
+.panel-embed-width-resizer {
+  position: relative;
+  flex: 0 0 auto;
+  width: 10px;
+  cursor: col-resize;
+}
+
+.panel-embed-width-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+}
+
+.panel-embed-width-resizer:hover::after,
+.panel-embed-width-resizer:active::after {
   background: var(--color-accent);
 }
 

@@ -35,6 +35,8 @@ const api: GateHApi = {
       ipcRenderer.invoke('grafana:setDashboardOrientation', clusterId, dashboardUid, orientation),
     setPanelEmbedHeight: (clusterId: string, dashboardUid: string, height: number) =>
       ipcRenderer.invoke('grafana:setPanelEmbedHeight', clusterId, dashboardUid, height),
+    setPanelWidths: (clusterId: string, dashboardUid: string, widths: number[]) =>
+      ipcRenderer.invoke('grafana:setPanelWidths', clusterId, dashboardUid, widths),
     prepareEmbed: (clusterId: string) => ipcRenderer.invoke('grafana:prepareEmbed', clusterId)
   },
   jira: {

@@ -37,11 +37,19 @@ export interface GrafanaProfile {
   /** Height in px of a dashboard's embedded panels - keyed by uid, defaults to 240 when unset.
    *  Applies to every selected panel in that dashboard uniformly, in either orientation. */
   panelEmbedHeight?: Record<string, number>
+  /** Relative width of each selected panel when shown side by side - keyed by uid, see
+   *  GrafanaDashboardStatus.panelWidths. Absent, or stale (wrong length after the selection
+   *  changed), defaults to an equal split. */
+  panelWidths?: Record<string, number[]>
 }
 
 export const DEFAULT_PANEL_EMBED_HEIGHT = 240
 export const MIN_PANEL_EMBED_HEIGHT = 120
 export const MAX_PANEL_EMBED_HEIGHT = 640
+
+/** A side-by-side panel can't be dragged narrower than this fraction of the row - keeps every
+ *  panel (and its resizer) usably visible and clickable. */
+export const MIN_PANEL_WIDTH_FRACTION = 0.15
 
 export type JiraAuthMode = 'cloud' | 'datacenter'
 
@@ -127,6 +135,11 @@ export interface GrafanaDashboardStatus {
   orientation: PanelOrientation
   /** Height in px applied to every selected panel's embed - see GrafanaProfile.panelEmbedHeight. */
   embedHeight: number
+  /** Relative width of each selected panel when shown side by side (`orientation ===
+   *  'horizontal'`) - same order and length as `selectedPanelIds`, fractions summing to 1. Unused
+   *  in 'vertical' orientation. Always normalized server-side to match `selectedPanelIds`'
+   *  current length (defaulting to an equal split), so it's always safe to index directly. */
+  panelWidths: number[]
   error?: string
 }
 
@@ -228,6 +241,13 @@ export interface GateHApi {
       clusterId: string,
       dashboardUid: string,
       height: number
+    ): Promise<ClusterSummary>
+    /** Relative widths for the dashboard's selected panels when shown side by side - see
+     *  GrafanaDashboardStatus.panelWidths. */
+    setPanelWidths(
+      clusterId: string,
+      dashboardUid: string,
+      widths: number[]
     ): Promise<ClusterSummary>
     /** Arms the embed session (Authorization header + frame-blocking header stripping) for this
      *  cluster's Grafana origin - call and await before pointing a <webview> at it. */

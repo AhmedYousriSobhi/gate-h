@@ -194,6 +194,17 @@ export function setGrafanaDashboardOrientation(
   }))
 }
 
+export function setGrafanaPanelWidths(
+  id: string,
+  dashboardUid: string,
+  widths: number[]
+): ClusterSummary {
+  return patchGrafanaProfile(id, (grafana) => ({
+    ...grafana,
+    panelWidths: { ...grafana.panelWidths, [dashboardUid]: widths }
+  }))
+}
+
 export function setGrafanaPanelEmbedHeight(
   id: string,
   dashboardUid: string,

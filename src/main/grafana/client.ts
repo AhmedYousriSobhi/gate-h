@@ -43,6 +43,14 @@ interface DashboardLayoutPrefs {
   selectedPanelIds: number[] | undefined
   orientation: PanelOrientation | undefined
   embedHeight: number | undefined
+  panelWidths: number[] | undefined
+}
+
+/** An equal split when nothing's been dragged yet, or when the stored widths no longer match the
+ *  current panel selection (a panel was added/removed since they were saved). */
+function normalizePanelWidths(stored: number[] | undefined, panelCount: number): number[] {
+  if (stored?.length === panelCount) return stored
+  return panelCount > 0 ? Array<number>(panelCount).fill(1 / panelCount) : []
 }
 
 async function getDashboardStatus(
@@ -73,7 +81,8 @@ async function getDashboardStatus(
       panels: panels.map((p) => ({ id: p.id, title: p.title ?? String(p.id) })),
       selectedPanelIds: effectiveIds,
       orientation,
-      embedHeight
+      embedHeight,
+      panelWidths: normalizePanelWidths(prefs.panelWidths, effectiveIds.length)
     }
   } catch (err) {
     return {
@@ -84,6 +93,7 @@ async function getDashboardStatus(
       selectedPanelIds: [],
       orientation,
       embedHeight,
+      panelWidths: [],
       error: err instanceof Error ? err.message : 'Unknown error'
     }
   }
@@ -99,7 +109,8 @@ export async function getGrafanaStatus(
       getDashboardStatus(profile.baseUrl, token, uid, {
         selectedPanelIds: profile.panelSelections?.[uid],
         orientation: profile.panelOrientation?.[uid],
-        embedHeight: profile.panelEmbedHeight?.[uid]
+        embedHeight: profile.panelEmbedHeight?.[uid],
+        panelWidths: profile.panelWidths?.[uid]
       })
     )
   )
