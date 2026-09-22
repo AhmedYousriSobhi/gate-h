@@ -8,7 +8,8 @@ import type {
   ClusterSummary,
   ConnectionProfile,
   GrafanaProfile,
-  JiraProfile
+  JiraProfile,
+  PanelOrientation
 } from '../shared/types'
 
 interface ClusterRow {
@@ -149,31 +150,59 @@ export function updateCluster(id: string, input: ClusterInput): ClusterSummary {
   return getCluster(id) as ClusterSummary
 }
 
-/** Patches just one dashboard's panel selection into a cluster's Grafana config - used by the
- *  status panel's inline panel picker, which shouldn't need the full edit-cluster form to change
- *  which panels are shown. Bumps updated_at so the status panel's own effect (keyed on it) picks
- *  the change up automatically. */
-export function setGrafanaPanelSelection(
+/** Shared by setGrafanaPanelSelection/setGrafanaDashboardOrientation below - both patch a single
+ *  key into a cluster's Grafana config from the status panel (picker / orientation toggle), which
+ *  shouldn't need the full edit-cluster form. Bumps updated_at so the status panel's own effect
+ *  (keyed on it) picks the change up automatically. */
+function patchGrafanaProfile(
   id: string,
-  dashboardUid: string,
-  panelIds: number[]
+  patch: (grafana: GrafanaProfile) => GrafanaProfile
 ): ClusterSummary {
   const existing = getDb().prepare('SELECT * FROM clusters WHERE id = ?').get(id) as
     ClusterRow | undefined
   if (!existing) throw new Error(`Cluster ${id} not found`)
   if (!existing.grafana) throw new Error('This cluster has no Grafana instance configured.')
 
-  const grafana = JSON.parse(existing.grafana) as GrafanaProfile
-  const updatedGrafana: GrafanaProfile = {
-    ...grafana,
-    panelSelections: { ...grafana.panelSelections, [dashboardUid]: panelIds }
-  }
+  const updatedGrafana = patch(JSON.parse(existing.grafana) as GrafanaProfile)
 
   getDb()
     .prepare('UPDATE clusters SET grafana = @grafana, updated_at = @updated_at WHERE id = @id')
     .run({ id, grafana: JSON.stringify(updatedGrafana), updated_at: new Date().toISOString() })
 
   return getCluster(id) as ClusterSummary
+}
+
+export function setGrafanaPanelSelection(
+  id: string,
+  dashboardUid: string,
+  panelIds: number[]
+): ClusterSummary {
+  return patchGrafanaProfile(id, (grafana) => ({
+    ...grafana,
+    panelSelections: { ...grafana.panelSelections, [dashboardUid]: panelIds }
+  }))
+}
+
+export function setGrafanaDashboardOrientation(
+  id: string,
+  dashboardUid: string,
+  orientation: PanelOrientation
+): ClusterSummary {
+  return patchGrafanaProfile(id, (grafana) => ({
+    ...grafana,
+    panelOrientation: { ...grafana.panelOrientation, [dashboardUid]: orientation }
+  }))
+}
+
+export function setGrafanaPanelEmbedHeight(
+  id: string,
+  dashboardUid: string,
+  height: number
+): ClusterSummary {
+  return patchGrafanaProfile(id, (grafana) => ({
+    ...grafana,
+    panelEmbedHeight: { ...grafana.panelEmbedHeight, [dashboardUid]: height }
+  }))
 }
 
 export function removeCluster(id: string): void {

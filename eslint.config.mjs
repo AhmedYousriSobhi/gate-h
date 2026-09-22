@@ -25,7 +25,11 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules
+      ...eslintPluginReactRefresh.configs.vite.rules,
+      // `partition`/`allowpopups` are Electron <webview> attributes (see
+      // GrafanaStatusSection.tsx) - not standard DOM properties, so the plugin's built-in
+      // allowlist doesn't know them.
+      'react/no-unknown-property': ['error', { ignore: ['partition', 'allowpopups'] }]
     }
   },
   eslintConfigPrettier

@@ -3,10 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <title>Gate-H</title>
-    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
+         frame-src is intentionally broad: it's what lets a <webview> embed a cluster's Grafana
+         panels live (see GrafanaStatusSection.tsx / main/grafana/embed.ts) - the webview's `src`
+         is only ever set by our own code to a Grafana baseUrl the user configured, never to
+         arbitrary/untrusted content, so this doesn't open the app up to loading anything else. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src http: https:"
     />
   </head>
 
