@@ -30,7 +30,18 @@ export interface GrafanaProfile {
    *  the dashboard's first panel" (see getDashboardStatus in src/main/grafana/client.ts). Picked
    *  interactively from the status panel, not the cluster edit form. */
   panelSelections?: Record<string, number[]>
+  /** Layout of a dashboard's selected panels within its card - keyed by uid, defaults to
+   *  'vertical' (stacked) when unset. See PanelOrientation below - same concept as the
+   *  Terminal/Status split, reused here for consistency. */
+  panelOrientation?: Record<string, PanelOrientation>
+  /** Height in px of a dashboard's embedded panels - keyed by uid, defaults to 240 when unset.
+   *  Applies to every selected panel in that dashboard uniformly, in either orientation. */
+  panelEmbedHeight?: Record<string, number>
 }
+
+export const DEFAULT_PANEL_EMBED_HEIGHT = 240
+export const MIN_PANEL_EMBED_HEIGHT = 120
+export const MAX_PANEL_EMBED_HEIGHT = 640
 
 export type JiraAuthMode = 'cloud' | 'datacenter'
 
@@ -89,6 +100,10 @@ export interface SshErrorEvent {
   message: string
 }
 
+/** Electron session partition a <webview> must use to embed a cluster's Grafana panels live - see
+ *  src/main/grafana/embed.ts, which arms this exact partition's Authorization/frame headers. */
+export const GRAFANA_EMBED_PARTITION = 'persist:grafana-embed'
+
 export interface GrafanaHealth {
   ok: boolean
   version?: string
@@ -100,12 +115,6 @@ export interface GrafanaPanelInfo {
   title: string
 }
 
-export interface GrafanaPanelSnapshot {
-  id: number
-  title: string
-  dataUrl: string | null
-}
-
 export interface GrafanaDashboardStatus {
   uid: string
   title: string
@@ -113,7 +122,11 @@ export interface GrafanaDashboardStatus {
   /** Every panel on the dashboard, for the picker - not just the selected ones. */
   panels: GrafanaPanelInfo[]
   selectedPanelIds: number[]
-  snapshots: GrafanaPanelSnapshot[]
+  /** Layout of the selected panels within this dashboard's card - see
+   *  GrafanaProfile.panelOrientation. */
+  orientation: PanelOrientation
+  /** Height in px applied to every selected panel's embed - see GrafanaProfile.panelEmbedHeight. */
+  embedHeight: number
   error?: string
 }
 
@@ -206,6 +219,19 @@ export interface GateHApi {
       dashboardUid: string,
       panelIds: number[]
     ): Promise<ClusterSummary>
+    setDashboardOrientation(
+      clusterId: string,
+      dashboardUid: string,
+      orientation: PanelOrientation
+    ): Promise<ClusterSummary>
+    setPanelEmbedHeight(
+      clusterId: string,
+      dashboardUid: string,
+      height: number
+    ): Promise<ClusterSummary>
+    /** Arms the embed session (Authorization header + frame-blocking header stripping) for this
+     *  cluster's Grafana origin - call and await before pointing a <webview> at it. */
+    prepareEmbed(clusterId: string): Promise<void>
   }
   jira: {
     list(clusterId: string): Promise<JiraIssueSummary[]>

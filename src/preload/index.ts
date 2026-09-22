@@ -7,6 +7,7 @@ import type {
   CreateJiraIssueInput,
   GateHApi,
   PanelLayout,
+  PanelOrientation,
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent
@@ -25,7 +26,16 @@ const api: GateHApi = {
   grafana: {
     getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId),
     setPanelSelection: (clusterId: string, dashboardUid: string, panelIds: number[]) =>
-      ipcRenderer.invoke('grafana:setPanelSelection', clusterId, dashboardUid, panelIds)
+      ipcRenderer.invoke('grafana:setPanelSelection', clusterId, dashboardUid, panelIds),
+    setDashboardOrientation: (
+      clusterId: string,
+      dashboardUid: string,
+      orientation: PanelOrientation
+    ) =>
+      ipcRenderer.invoke('grafana:setDashboardOrientation', clusterId, dashboardUid, orientation),
+    setPanelEmbedHeight: (clusterId: string, dashboardUid: string, height: number) =>
+      ipcRenderer.invoke('grafana:setPanelEmbedHeight', clusterId, dashboardUid, height),
+    prepareEmbed: (clusterId: string) => ipcRenderer.invoke('grafana:prepareEmbed', clusterId)
   },
   jira: {
     list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),

@@ -5,6 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { registerClusterIpcHandlers } from './ipc/clusters'
 import { registerSshIpcHandlers } from './ipc/ssh'
 import { registerGrafanaIpcHandlers } from './ipc/grafana'
+import { setupGrafanaEmbedSession } from './grafana/embed'
 import { registerJiraIpcHandlers } from './ipc/jira'
 import { registerReachabilityIpcHandlers } from './ipc/reachability'
 import { registerNotificationIpcHandlers } from './ipc/notifications'
@@ -43,7 +44,11 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      // Only for embedding a cluster's own Grafana panels live (see grafana/embed.ts) - the
+      // webview is pointed exclusively at Grafana origins the user configured, in their own
+      // dedicated session partition.
+      webviewTag: true
     }
   })
   mainWindow = win
@@ -87,6 +92,21 @@ app.whenReady().then(() => {
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  setupGrafanaEmbedSession()
+
+  // Grafana's own panel-hover menu (View/Explore/...) opens via window.open() - webview guests
+  // block that outright unless allowed (see the `allowpopups` attribute on the <webview> in
+  // GrafanaStatusSection.tsx), and once allowed, Electron's default is to spawn a bare, unstyled
+  // popup window. Route it through the system browser instead, same as the main window's own
+  // external links (see win.webContents.setWindowOpenHandler above).
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return
+    contents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url)
+      return { action: 'deny' }
+    })
   })
 
   registerClusterIpcHandlers()
