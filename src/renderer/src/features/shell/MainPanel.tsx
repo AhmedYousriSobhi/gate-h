@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeftRight, Columns2, Puzzle, Rows2 } from 'lucide-react'
-import type { ClusterSummary } from '../../../../shared/types'
+import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
@@ -10,7 +10,9 @@ interface MainPanelProps {
   cluster: ClusterSummary
   layout: PanelLayout
   onLayoutChange: (layout: PanelLayout) => void
-  reconnectSignal: number
+  /** This cluster's live reachability reading - see TerminalPanel's prop of the same name for why
+   *  it's passed straight through rather than reduced to a one-shot signal. */
+  reachability?: ClusterReachability
   /** True when this cluster isn't the one currently selected in the sidebar - kept mounted
    *  (instead of unmounted) so a pinned cluster's Terminal/Grafana connections keep running in
    *  the background, just visually hidden. */
@@ -37,7 +39,7 @@ export default function MainPanel({
   cluster,
   layout,
   onLayoutChange,
-  reconnectSignal,
+  reachability,
   hidden = false,
   onTerminalStatusChange
 }: MainPanelProps): React.JSX.Element {
@@ -124,7 +126,7 @@ export default function MainPanel({
         <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
           <TerminalPanel
             cluster={cluster}
-            reconnectSignal={reconnectSignal}
+            reachability={reachability}
             onStatusChange={onTerminalStatusChange}
           />
         </div>
@@ -138,7 +140,7 @@ export default function MainPanel({
           />
         )}
         <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
-          <StatusPanel cluster={cluster} reconnectSignal={reconnectSignal} />
+          <StatusPanel cluster={cluster} reachability={reachability} />
         </div>
       </div>
     </div>

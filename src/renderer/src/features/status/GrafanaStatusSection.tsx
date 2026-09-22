@@ -11,6 +11,7 @@ import {
   GRAFANA_EMBED_PARTITION,
   MAX_PANEL_EMBED_HEIGHT,
   MIN_PANEL_EMBED_HEIGHT,
+  type ClusterReachability,
   type ClusterSummary,
   type GrafanaStatusResult,
   type PanelOrientation
@@ -18,10 +19,10 @@ import {
 
 interface GrafanaStatusSectionProps {
   cluster: ClusterSummary
-  /** Bumped by AppShell whenever this specific cluster's reachability flips offline -> online -
-   *  triggers an immediate status refresh (on top of the regular poll interval below) and resets
-   *  the failure-backoff state, the same recovery signal TerminalPanel reacts to. */
-  reconnectSignal: number
+  /** This cluster's live reachability reading - when its `status` value flips to 'online', an
+   *  immediate status refresh is triggered (on top of the regular poll interval below) and the
+   *  failure-backoff state resets, the same recovery TerminalPanel reacts to. */
+  reachability?: ClusterReachability
 }
 
 // How often to re-fetch dashboard/panel status in the background, matching the reachability
@@ -51,7 +52,7 @@ function hidePanelMenu(el: HTMLElement | null): void {
 
 export default function GrafanaStatusSection({
   cluster,
-  reconnectSignal
+  reachability
 }: GrafanaStatusSectionProps): React.JSX.Element {
   const [status, setStatus] = useState<GrafanaStatusResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -167,8 +168,9 @@ export default function GrafanaStatusSection({
     }
     // Re-fetches whenever this cluster's saved config changes (e.g. a new Grafana token), not
     // just when a different cluster is selected - `cluster.id` alone doesn't change on edit -
-    // and whenever this cluster's reachability recovers, resetting the backoff state above.
-  }, [cluster.id, cluster.updatedAt, reconnectSignal])
+    // and whenever this cluster's reachability status value changes (e.g. recovers), resetting
+    // the backoff state above.
+  }, [cluster.id, cluster.updatedAt, reachability?.status])
 
   useEffect(() => {
     if (!cluster.grafana) return
