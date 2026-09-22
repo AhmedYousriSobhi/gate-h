@@ -62,6 +62,10 @@ export interface Cluster {
   connection: ConnectionProfile
   grafana: GrafanaProfile | null
   jira: JiraProfile | null
+  /** When true, this cluster's Terminal/Grafana connections stay live in the background - kept
+   *  mounted (hidden) and auto-reconnecting even while a different cluster is selected - instead
+   *  of only existing while the cluster is the one currently selected in the sidebar. */
+  keepAliveInBackground: boolean
   createdAt: string
   updatedAt: string
 }
@@ -211,6 +215,9 @@ export interface GateHApi {
     create(input: ClusterInput): Promise<ClusterSummary>
     update(id: string, input: ClusterInput): Promise<ClusterSummary>
     remove(id: string): Promise<void>
+    /** Toggles whether this cluster's Terminal/Grafana connections stay alive in the background -
+     *  a lightweight patch (like the Grafana picker settings below), not a full edit-form submit. */
+    setKeepAlive(id: string, keepAlive: boolean): Promise<ClusterSummary>
   }
   grafana: {
     getStatus(clusterId: string): Promise<GrafanaStatusResult>

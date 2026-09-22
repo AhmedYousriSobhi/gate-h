@@ -1,10 +1,11 @@
-import { LayoutDashboard, Pencil, Plus, Trash2 } from 'lucide-react'
+import { LayoutDashboard, Pencil, Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
   ClusterSummary
 } from '../../../../shared/types'
 import type { useProfiles } from '../../hooks/useProfiles'
+import type { SessionStatus } from '../terminal/TerminalPanel'
 import StatusLed from './StatusLed'
 import NotificationBell from './NotificationBell'
 import ProfileSwitcher from './ProfileSwitcher'
@@ -26,6 +27,17 @@ interface SidebarProps {
   onNotificationNavigate: (clusterId: string, widget?: WidgetType) => void
   profilesState: ReturnType<typeof useProfiles>
   onProfileChanged: () => void
+  /** Live Terminal connection status for every currently-mounted cluster (selected, or pinned to
+   *  stay connected in the background) - keyed by cluster id, absent for anything not mounted. */
+  terminalStatuses: Record<string, SessionStatus>
+  onToggleKeepAlive: (cluster: ClusterSummary) => void
+}
+
+const KEEP_ALIVE_STATUS_LABEL: Record<SessionStatus, string> = {
+  connecting: 'Connecting',
+  connected: 'Connected',
+  reconnecting: 'Reconnecting',
+  paused: 'Paused'
 }
 
 export default function Sidebar({
@@ -42,7 +54,9 @@ export default function Sidebar({
   markAllNotificationsRead,
   onNotificationNavigate,
   profilesState,
-  onProfileChanged
+  onProfileChanged,
+  terminalStatuses,
+  onToggleKeepAlive
 }: SidebarProps): React.JSX.Element {
   return (
     <aside className="sidebar">
@@ -96,8 +110,33 @@ export default function Sidebar({
             <div className="cluster-row-main">
               <div className="cluster-row-name">{cluster.name}</div>
               <div className="cluster-row-host mono">{cluster.connection.host}</div>
+              {cluster.keepAliveInBackground && terminalStatuses[cluster.id] && (
+                <div
+                  className={`keep-alive-badge keep-alive-badge-${terminalStatuses[cluster.id]}`}
+                >
+                  {KEEP_ALIVE_STATUS_LABEL[terminalStatuses[cluster.id]]}
+                </div>
+              )}
             </div>
             <div className="cluster-row-actions">
+              <button
+                className={`icon-btn${cluster.keepAliveInBackground ? ' icon-btn-active' : ''}`}
+                title={
+                  cluster.keepAliveInBackground
+                    ? 'Stop keeping connected in the background'
+                    : 'Keep connected in the background'
+                }
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleKeepAlive(cluster)
+                }}
+              >
+                {cluster.keepAliveInBackground ? (
+                  <Pin size={13} strokeWidth={2} />
+                ) : (
+                  <PinOff size={13} strokeWidth={2} />
+                )}
+              </button>
               <button
                 className="icon-btn"
                 title="Edit"

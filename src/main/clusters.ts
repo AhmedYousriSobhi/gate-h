@@ -23,6 +23,7 @@ interface ClusterRow {
   grafana_token: string | null
   jira: string | null
   jira_token: string | null
+  keep_alive: number
   created_at: string
   updated_at: string
 }
@@ -36,6 +37,7 @@ function rowToSummary(row: ClusterRow): ClusterSummary {
     connection: JSON.parse(row.connection) as ConnectionProfile,
     grafana: row.grafana ? (JSON.parse(row.grafana) as GrafanaProfile) : null,
     jira: row.jira ? (JSON.parse(row.jira) as JiraProfile) : null,
+    keepAliveInBackground: Boolean(row.keep_alive),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -87,8 +89,8 @@ export function createCluster(input: ClusterInput): ClusterSummary {
   getDb()
     .prepare(
       `INSERT INTO clusters
-        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, created_at, updated_at, profile_id)
-       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @created_at, @updated_at, @profile_id)`
+        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, keep_alive, created_at, updated_at, profile_id)
+       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @keep_alive, @created_at, @updated_at, @profile_id)`
     )
     .run({
       id,
@@ -102,6 +104,7 @@ export function createCluster(input: ClusterInput): ClusterSummary {
       grafana_token: input.grafanaApiToken ? encryptSecret(input.grafanaApiToken) : null,
       jira: input.jira ? JSON.stringify(input.jira) : null,
       jira_token: input.jiraApiToken ? encryptSecret(input.jiraApiToken) : null,
+      keep_alive: 0,
       created_at: now,
       updated_at: now
     })
@@ -203,6 +206,19 @@ export function setGrafanaPanelEmbedHeight(
     ...grafana,
     panelEmbedHeight: { ...grafana.panelEmbedHeight, [dashboardUid]: height }
   }))
+}
+
+/** Patches only the keep-alive flag, bypassing the full edit-cluster form - toggled from a pin
+ *  button in the sidebar, same lightweight-patch pattern as the Grafana picker settings above. */
+export function setClusterKeepAlive(id: string, keepAlive: boolean): ClusterSummary {
+  const existing = getDb().prepare('SELECT id FROM clusters WHERE id = ?').get(id)
+  if (!existing) throw new Error(`Cluster ${id} not found`)
+
+  getDb()
+    .prepare('UPDATE clusters SET keep_alive = @keep_alive WHERE id = @id')
+    .run({ id, keep_alive: keepAlive ? 1 : 0 })
+
+  return getCluster(id) as ClusterSummary
 }
 
 export function removeCluster(id: string): void {
