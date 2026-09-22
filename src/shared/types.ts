@@ -26,6 +26,10 @@ export interface GrafanaProfile {
   baseUrl: string
   /** Dashboard UIDs to surface on this cluster's status screen. */
   dashboardUids: string[]
+  /** Which panel IDs to snapshot per dashboard UID - keyed by uid, absent/empty means "default to
+   *  the dashboard's first panel" (see getDashboardStatus in src/main/grafana/client.ts). Picked
+   *  interactively from the status panel, not the cluster edit form. */
+  panelSelections?: Record<string, number[]>
 }
 
 export type JiraAuthMode = 'cloud' | 'datacenter'
@@ -91,12 +95,25 @@ export interface GrafanaHealth {
   message?: string
 }
 
+export interface GrafanaPanelInfo {
+  id: number
+  title: string
+}
+
+export interface GrafanaPanelSnapshot {
+  id: number
+  title: string
+  dataUrl: string | null
+}
+
 export interface GrafanaDashboardStatus {
   uid: string
   title: string
   url: string
-  panelCount: number
-  snapshotDataUrl: string | null
+  /** Every panel on the dashboard, for the picker - not just the selected ones. */
+  panels: GrafanaPanelInfo[]
+  selectedPanelIds: number[]
+  snapshots: GrafanaPanelSnapshot[]
   error?: string
 }
 
@@ -184,6 +201,11 @@ export interface GateHApi {
   }
   grafana: {
     getStatus(clusterId: string): Promise<GrafanaStatusResult>
+    setPanelSelection(
+      clusterId: string,
+      dashboardUid: string,
+      panelIds: number[]
+    ): Promise<ClusterSummary>
   }
   jira: {
     list(clusterId: string): Promise<JiraIssueSummary[]>

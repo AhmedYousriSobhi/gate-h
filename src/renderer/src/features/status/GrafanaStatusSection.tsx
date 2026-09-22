@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CircleCheck, CircleX, ExternalLink } from 'lucide-react'
+import { CircleCheck, CircleX, ExternalLink, SlidersHorizontal } from 'lucide-react'
 import type { ClusterSummary, GrafanaStatusResult } from '../../../../shared/types'
 
 interface GrafanaStatusSectionProps {
@@ -12,6 +12,18 @@ export default function GrafanaStatusSection({
   const [status, setStatus] = useState<GrafanaStatusResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pickerUid, setPickerUid] = useState<string | null>(null)
+
+  function togglePanel(dashboardUid: string, panelId: number, current: number[]): void {
+    const next = current.includes(panelId)
+      ? current.filter((id) => id !== panelId)
+      : [...current, panelId]
+    window.api.grafana
+      .setPanelSelection(cluster.id, dashboardUid, next)
+      .then(() => window.api.grafana.getStatus(cluster.id))
+      .then(setStatus)
+      .catch((err: Error) => setError(err.message))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -56,18 +68,55 @@ export default function GrafanaStatusSection({
       <div className="dashboard-grid">
         {status.dashboards.map((dashboard) => (
           <div className="dashboard-card" key={dashboard.uid}>
-            <h4>{dashboard.title}</h4>
+            <div className="dashboard-card-header">
+              <h4>{dashboard.title}</h4>
+              {!dashboard.error && dashboard.panels.length > 0 && (
+                <button
+                  className={`btn-icon${pickerUid === dashboard.uid ? ' btn-icon-active' : ''}`}
+                  title="Choose panels"
+                  onClick={() =>
+                    setPickerUid((uid) => (uid === dashboard.uid ? null : dashboard.uid))
+                  }
+                >
+                  <SlidersHorizontal size={13} strokeWidth={2} />
+                </button>
+              )}
+            </div>
             {dashboard.error ? (
               <p className="hint">Could not load: {dashboard.error}</p>
             ) : (
               <>
-                {dashboard.snapshotDataUrl ? (
-                  <img src={dashboard.snapshotDataUrl} alt={`${dashboard.title} snapshot`} />
-                ) : (
-                  <p className="hint">
-                    {dashboard.panelCount} panel{dashboard.panelCount === 1 ? '' : 's'} - snapshot
-                    unavailable (grafana-image-renderer plugin not detected)
-                  </p>
+                {pickerUid === dashboard.uid && (
+                  <div className="panel-picker">
+                    {dashboard.panels.map((panel) => (
+                      <label key={panel.id} className="panel-picker-item">
+                        <input
+                          type="checkbox"
+                          checked={dashboard.selectedPanelIds.includes(panel.id)}
+                          onChange={() =>
+                            togglePanel(dashboard.uid, panel.id, dashboard.selectedPanelIds)
+                          }
+                        />
+                        {panel.title}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {dashboard.snapshots.length === 0 && (
+                  <p className="hint">No panels selected - pick some above.</p>
+                )}
+                {dashboard.snapshots.map((snapshot) =>
+                  snapshot.dataUrl ? (
+                    <figure className="panel-snapshot" key={snapshot.id}>
+                      <img src={snapshot.dataUrl} alt={`${snapshot.title} snapshot`} />
+                      <figcaption>{snapshot.title}</figcaption>
+                    </figure>
+                  ) : (
+                    <p className="hint" key={snapshot.id}>
+                      {snapshot.title}: snapshot unavailable (grafana-image-renderer plugin not
+                      detected)
+                    </p>
+                  )
                 )}
                 {dashboard.url && (
                   <a href={dashboard.url} target="_blank" rel="noreferrer">
