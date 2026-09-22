@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Columns2, Puzzle, Rows2 } from 'lucide-react'
+import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import StatusPanel from '../status/StatusPanel'
@@ -18,6 +18,8 @@ interface MainPanelProps {
    *  the background, just visually hidden. */
   hidden?: boolean
   onTerminalStatusChange?: (status: SessionStatus) => void
+  /** Flips `cluster.activeMonitoring` back on - offered from the standby placeholder below. */
+  onResumeMonitoring?: () => void
 }
 
 // Both widgets stay mounted at all times regardless of visibility - `display: none` instead of
@@ -41,7 +43,8 @@ export default function MainPanel({
   onLayoutChange,
   reachability,
   hidden = false,
-  onTerminalStatusChange
+  onTerminalStatusChange,
+  onResumeMonitoring
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
@@ -115,34 +118,50 @@ export default function MainPanel({
         </div>
       </div>
 
-      {/* Both panes stay in the DOM even with visible.length === 0 (see paneStyle) so hiding
-          every widget still never disconnects the terminal's SSH session. */}
-      <div className={`panel-split panel-split-${orientation}`}>
-        {visible.length === 0 && (
-          <div className="panel-split-empty">
-            Every widget is hidden - click the puzzle-piece icon above to add one back.
+      {cluster.activeMonitoring ? (
+        // Both panes stay in the DOM even with visible.length === 0 (see paneStyle) so hiding
+        // every widget still never disconnects the terminal's SSH session.
+        <div className={`panel-split panel-split-${orientation}`}>
+          {visible.length === 0 && (
+            <div className="panel-split-empty">
+              Every widget is hidden - click the puzzle-piece icon above to add one back.
+            </div>
+          )}
+          <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
+            <TerminalPanel
+              cluster={cluster}
+              reachability={reachability}
+              onStatusChange={onTerminalStatusChange}
+            />
           </div>
-        )}
-        <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
-          <TerminalPanel
-            cluster={cluster}
-            reachability={reachability}
-            onStatusChange={onTerminalStatusChange}
-          />
+          {visible.length === 2 && (
+            <div
+              className={`panel-resizer panel-resizer-${orientation}`}
+              style={{ order: 1 }}
+              onPointerDown={handleResizeStart}
+              onPointerMove={handleResizeMove}
+              onPointerUp={handleResizeEnd}
+            />
+          )}
+          <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
+            <StatusPanel cluster={cluster} reachability={reachability} />
+          </div>
         </div>
-        {visible.length === 2 && (
-          <div
-            className={`panel-resizer panel-resizer-${orientation}`}
-            style={{ order: 1 }}
-            onPointerDown={handleResizeStart}
-            onPointerMove={handleResizeMove}
-            onPointerUp={handleResizeEnd}
-          />
-        )}
-        <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
-          <StatusPanel cluster={cluster} reachability={reachability} />
+      ) : (
+        // Neither TerminalPanel nor StatusPanel is mounted at all here - no SSH session, no
+        // Grafana polling, no reconnect/backoff loop exists for this cluster while in standby.
+        <div className="panel-split-empty panel-standby">
+          <Power size={22} strokeWidth={1.5} />
+          <p>
+            Active Monitoring is off for {cluster.name} - no Terminal or Grafana connections are
+            running.
+          </p>
+          <button className="btn btn-sm" onClick={onResumeMonitoring}>
+            <Power size={13} strokeWidth={2} />
+            Resume monitoring
+          </button>
         </div>
-      </div>
+      )}
     </div>
   )
 }

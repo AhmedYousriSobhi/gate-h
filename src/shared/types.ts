@@ -64,8 +64,15 @@ export interface Cluster {
   jira: JiraProfile | null
   /** When true, this cluster's Terminal/Grafana connections stay live in the background - kept
    *  mounted (hidden) and auto-reconnecting even while a different cluster is selected - instead
-   *  of only existing while the cluster is the one currently selected in the sidebar. */
+   *  of only existing while the cluster is the one currently selected in the sidebar. Has no
+   *  effect while `activeMonitoring` is false - see below. */
   keepAliveInBackground: boolean
+  /** Master on/off switch for this cluster's Terminal/Grafana connections, independent of
+   *  `keepAliveInBackground` and of whether it's currently selected. False ("standby") means no
+   *  SSH session and no Grafana polling exist for this cluster at all, even if it's selected or
+   *  pinned - the reverse of pinning "on" more connections, this turns them all off. Defaults to
+   *  true so existing clusters keep behaving exactly as before this field existed. */
+  activeMonitoring: boolean
   createdAt: string
   updatedAt: string
 }
@@ -218,6 +225,8 @@ export interface GateHApi {
     /** Toggles whether this cluster's Terminal/Grafana connections stay alive in the background -
      *  a lightweight patch (like the Grafana picker settings below), not a full edit-form submit. */
     setKeepAlive(id: string, keepAlive: boolean): Promise<ClusterSummary>
+    /** Toggles this cluster's master Active/Standby switch - see Cluster.activeMonitoring. */
+    setActiveMonitoring(id: string, active: boolean): Promise<ClusterSummary>
   }
   grafana: {
     getStatus(clusterId: string): Promise<GrafanaStatusResult>
