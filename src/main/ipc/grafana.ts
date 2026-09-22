@@ -1,7 +1,14 @@
 import { ipcMain } from 'electron'
-import { getCluster, getClusterSecrets, setGrafanaPanelSelection } from '../clusters'
+import {
+  getCluster,
+  getClusterSecrets,
+  setGrafanaDashboardOrientation,
+  setGrafanaPanelEmbedHeight,
+  setGrafanaPanelSelection
+} from '../clusters'
 import { getGrafanaStatus } from '../grafana/client'
-import type { ClusterSummary, GrafanaStatusResult } from '../../shared/types'
+import { registerEmbedOrigin } from '../grafana/embed'
+import type { ClusterSummary, GrafanaStatusResult, PanelOrientation } from '../../shared/types'
 
 export function registerGrafanaIpcHandlers(): void {
   ipcMain.handle(
@@ -30,4 +37,40 @@ export function registerGrafanaIpcHandlers(): void {
       return setGrafanaPanelSelection(clusterId, dashboardUid, panelIds)
     }
   )
+
+  ipcMain.handle(
+    'grafana:setDashboardOrientation',
+    async (
+      _event,
+      clusterId: string,
+      dashboardUid: string,
+      orientation: PanelOrientation
+    ): Promise<ClusterSummary> => {
+      return setGrafanaDashboardOrientation(clusterId, dashboardUid, orientation)
+    }
+  )
+
+  ipcMain.handle(
+    'grafana:setPanelEmbedHeight',
+    async (
+      _event,
+      clusterId: string,
+      dashboardUid: string,
+      height: number
+    ): Promise<ClusterSummary> => {
+      return setGrafanaPanelEmbedHeight(clusterId, dashboardUid, height)
+    }
+  )
+
+  ipcMain.handle('grafana:prepareEmbed', async (_event, clusterId: string): Promise<void> => {
+    const cluster = getCluster(clusterId)
+    if (!cluster?.grafana) {
+      throw new Error('This cluster has no Grafana instance configured.')
+    }
+    const { grafanaApiToken } = getClusterSecrets(clusterId)
+    if (!grafanaApiToken) {
+      throw new Error('No Grafana API token is stored for this cluster.')
+    }
+    registerEmbedOrigin(cluster.grafana.baseUrl, grafanaApiToken)
+  })
 }
