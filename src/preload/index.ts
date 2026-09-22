@@ -21,7 +21,9 @@ const api: GateHApi = {
     get: (id: string) => ipcRenderer.invoke('clusters:get', id),
     create: (input: ClusterInput) => ipcRenderer.invoke('clusters:create', input),
     update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
-    remove: (id: string) => ipcRenderer.invoke('clusters:remove', id)
+    remove: (id: string) => ipcRenderer.invoke('clusters:remove', id),
+    setKeepAlive: (id: string, keepAlive: boolean) =>
+      ipcRenderer.invoke('clusters:setKeepAlive', id, keepAlive)
   },
   grafana: {
     getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId),
