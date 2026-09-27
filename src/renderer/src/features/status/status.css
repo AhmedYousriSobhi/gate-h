@@ -50,9 +50,12 @@
   color: var(--color-offline);
 }
 
+/* auto-fit, not auto-fill: auto-fill keeps empty column tracks, so a lone dashboard card stayed
+   one track wide and widening the Terminal/Status split only added more empty tracks instead of
+   growing the card (and the side-by-side panels inside it). */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: var(--space-4);
 }
 
