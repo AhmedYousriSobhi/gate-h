@@ -85,11 +85,29 @@ export default function GrafanaStatusSection({
       .catch((err: Error) => setError(err.message))
   }
 
+  // A drag's pointer moves directly over neighboring <webview> panels (immediately for a width
+  // drag, which sits between two of them; after a few px for a height drag, which sits right
+  // below the last one) - Electron's embedded guest view swallows pointer events before they
+  // reach the resizer despite its pointer capture (same webview-steals-input quirk as
+  // hidePanelMenu above), silently breaking the drag. Toggled imperatively (not via React state)
+  // so it's in effect *before* the first pointermove fires, not after - a state update reacting to
+  // that first move never happens if the webview has already swallowed it.
+  function setPanelWebviewsInteractive(container: Element | null, interactive: boolean): void {
+    container?.querySelectorAll('webview').forEach((el) => {
+      ;(el as HTMLElement).style.pointerEvents = interactive ? '' : 'none'
+    })
+  }
+
   // Drag-resize for a dashboard's embedded panel height - local state while dragging (cheap,
   // avoids an IPC/DB write per pointermove), committed via setPanelEmbedHeight on release, same
   // two-phase pattern as MainPanel's Terminal/Status split.
   const [dragHeight, setDragHeight] = useState<{ uid: string; height: number } | null>(null)
-  const dragStartRef = useRef<{ uid: string; startY: number; startHeight: number } | null>(null)
+  const dragStartRef = useRef<{
+    uid: string
+    startY: number
+    startHeight: number
+    container: Element | null
+  } | null>(null)
 
   function handleResizeStart(
     e: React.PointerEvent<HTMLDivElement>,
@@ -97,7 +115,9 @@ export default function GrafanaStatusSection({
     currentHeight: number
   ): void {
     e.currentTarget.setPointerCapture(e.pointerId)
-    dragStartRef.current = { uid, startY: e.clientY, startHeight: currentHeight }
+    const container = e.currentTarget.previousElementSibling
+    setPanelWebviewsInteractive(container, false)
+    dragStartRef.current = { uid, startY: e.clientY, startHeight: currentHeight, container }
   }
 
   function handleResizeMove(e: React.PointerEvent<HTMLDivElement>): void {
@@ -113,7 +133,9 @@ export default function GrafanaStatusSection({
   function handleResizeEnd(): void {
     const start = dragStartRef.current
     dragStartRef.current = null
-    if (!start || dragHeight?.uid !== start.uid) return
+    if (!start) return
+    setPanelWebviewsInteractive(start.container, true)
+    if (dragHeight?.uid !== start.uid) return
     window.api.grafana
       .setPanelEmbedHeight(cluster.id, start.uid, dragHeight.height)
       .then(() => window.api.grafana.getStatus(cluster.id))
@@ -138,6 +160,7 @@ export default function GrafanaStatusSection({
     startLeft: number
     startRight: number
     widths: Record<number, number>
+    container: Element | null
   } | null>(null)
 
   function handleWidthResizeStart(
@@ -148,7 +171,9 @@ export default function GrafanaStatusSection({
     widths: Record<number, number>
   ): void {
     e.currentTarget.setPointerCapture(e.pointerId)
-    const rowWidth = e.currentTarget.parentElement?.getBoundingClientRect().width ?? 0
+    const container = e.currentTarget.parentElement
+    setPanelWebviewsInteractive(container, false)
+    const rowWidth = container?.getBoundingClientRect().width ?? 0
     dragWidthStartRef.current = {
       uid,
       leftId,
@@ -157,7 +182,8 @@ export default function GrafanaStatusSection({
       rowWidth,
       startLeft: widths[leftId] ?? 0,
       startRight: widths[rightId] ?? 0,
-      widths
+      widths,
+      container
     }
   }
 
@@ -181,7 +207,9 @@ export default function GrafanaStatusSection({
   function handleWidthResizeEnd(): void {
     const start = dragWidthStartRef.current
     dragWidthStartRef.current = null
-    if (!start || dragWidths?.uid !== start.uid) return
+    if (!start) return
+    setPanelWebviewsInteractive(start.container, true)
+    if (dragWidths?.uid !== start.uid) return
     window.api.grafana
       .setPanelWidths(cluster.id, start.uid, dragWidths.widths)
       .then(() => window.api.grafana.getStatus(cluster.id))
@@ -346,11 +374,7 @@ export default function GrafanaStatusSection({
                 )}
                 {embedReady && dashboard.selectedPanelIds.length > 0 && (
                   <>
-                    <div
-                      className={`panel-embed-list panel-embed-list-${dashboard.orientation}${
-                        dragWidths?.uid === dashboard.uid ? ' panel-embed-list-dragging-width' : ''
-                      }`}
-                    >
+                    <div className={`panel-embed-list panel-embed-list-${dashboard.orientation}`}>
                       {dashboard.selectedPanelIds.flatMap((panelId, index) => {
                         const panelTitle =
                           dashboard.panels.find((p) => p.id === panelId)?.title ?? String(panelId)
