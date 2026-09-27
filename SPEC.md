@@ -22,6 +22,7 @@ ticket tracker separately.
 |---|---|---|
 | `Profile` | `id`, `name` | Groups a set of clusters (e.g. "Work" vs "Research"); exactly one profile is active at a time. |
 | `Cluster` | `id`, `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `keepAliveInBackground`, `activeMonitoring` | Belongs to exactly one `Profile`. `grafana`/`jira` are optional — a cluster may be SSH-only. |
+| `AzureTunnelConfig` | `mode` (`bastion`\|`az-ssh`), `subscription`, `resourceGroup`, `localPort`, Bastion name + target VM id or VM name | Optional per cluster. SSH dials `127.0.0.1:localPort`, and `connection.host`/`port` are the tunnel's far end. No secrets: the Azure CLI keeps its own tokens. |
 | `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | One SSH identity per cluster; a jump host chains a second SSH hop via `forwardOut`. |
 | `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
@@ -75,6 +76,16 @@ never the plaintext or ciphertext.
 - While a session isn't connected (initial connect, a retry in progress, or paused), the terminal
   view makes that state unmistakable — a stale output buffer must never be mistakable for a live,
   responsive prompt.
+
+### 3.3.1 Azure tunnel pre-flight
+- A cluster may require an Azure tunnel. Before its SSH session connects, the app signs in with
+  the Azure CLI (a device-code prompt if needed), selects the configured subscription, and opens
+  the tunnel. Each step shows in the terminal view.
+- The tunnel outlives individual SSH sessions: reconnecting reuses it, and reopens it if it died.
+  A connect failure through the tunnel replaces it, since a hung tunnel can keep listening.
+  Retries follow the same bounded backoff as §3.3.
+- The tunnel is closed on quit, on edit/removal of the cluster, and in standby (§3.6).
+- A tunneled cluster's reachability (§3.2) reflects the tunnel's health.
 
 ### 3.4 Grafana status
 - Per cluster, list configured dashboards and show a health check (reachable + version, or the

@@ -39,6 +39,9 @@ export default function TerminalPanel({
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [connectNonce, setConnectNonce] = useState(0)
+  // Latest Azure pre-flight progress line ("Checking Azure CLI session", a device-code login
+  // prompt, "Tunnel active on port X", ...) - shown while not connected.
+  const [tunnelMessage, setTunnelMessage] = useState<string | null>(null)
   const statusRef = useRef<SessionStatus>(status)
   useEffect(() => {
     statusRef.current = status
@@ -103,6 +106,14 @@ export default function TerminalPanel({
       resetAndReconnectNow()
     }
   }, [reachability, resetAndReconnectNow])
+
+  useEffect(
+    () =>
+      window.api.azure.onStatus((event) => {
+        if (event.clusterId === cluster.id) setTunnelMessage(event.message)
+      }),
+    [cluster.id]
+  )
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -189,6 +200,7 @@ export default function TerminalPanel({
           <span className={`session-dot session-dot-${status}`} />
           <span className="mono">
             {cluster.connection.username}@{cluster.connection.host}
+            {cluster.azureTunnel && ` via Azure tunnel :${cluster.azureTunnel.localPort}`}
           </span>
           <span className="terminal-status-word">{statusLabel}</span>
         </span>
@@ -207,13 +219,22 @@ export default function TerminalPanel({
                 {MAX_RECONNECT_ATTEMPTS})...
               </p>
             )}
+            {cluster.azureTunnel &&
+              tunnelMessage &&
+              (status === 'connecting' || status === 'reconnecting') && (
+                <p className="terminal-shade-detail">{tunnelMessage}</p>
+              )}
             {status === 'paused' && (
               <>
                 <p className="terminal-shade-title">Not connected</p>
                 <p>
-                  {reachability?.status === 'offline'
-                    ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
-                    : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
+                  {cluster.azureTunnel
+                    ? reachability?.status === 'offline'
+                      ? `The Azure tunnel to ${cluster.connection.host} is down - Reconnect now re-opens it (signing in to Azure again if needed).`
+                      : `Couldn't reach the SSH service on ${cluster.connection.host} through the Azure tunnel.`
+                    : reachability?.status === 'offline'
+                      ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
+                      : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
                 </p>
                 <button className="btn btn-sm" onClick={resetAndReconnectNow}>
                   <RefreshCw size={13} strokeWidth={2} />

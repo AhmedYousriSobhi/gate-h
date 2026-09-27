@@ -12,6 +12,7 @@ files:
   - '!docs/**'
   - '!docker/**'
   - '!build-desktop.sh'
+  - '!scripts/**'
 asarUnpack:
   - resources/**
 win:

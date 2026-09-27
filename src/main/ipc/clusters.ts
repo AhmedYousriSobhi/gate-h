@@ -9,6 +9,7 @@ import {
   updateCluster
 } from '../clusters'
 import { refreshCluster } from '../monitor/clusterMonitor'
+import { stopTunnel } from '../azure/tunnel'
 import { getActiveProfileId } from '../profiles'
 import type { ClusterInput } from '../../shared/types'
 
@@ -17,19 +18,27 @@ export function registerClusterIpcHandlers(): void {
   ipcMain.handle('clusters:get', (_event, id: string) => getCluster(id))
   ipcMain.handle('clusters:create', (_event, input: ClusterInput) => {
     const created = createCluster(input)
-    refreshCluster(created.id, created.name, created.connection.host, created.connection.port)
+    refreshCluster(created)
     return created
   })
-  ipcMain.handle('clusters:update', (_event, id: string, input: ClusterInput) => {
+  ipcMain.handle('clusters:update', async (_event, id: string, input: ClusterInput) => {
+    // A running tunnel keeps the settings it was started with - drop it so the next connect
+    // opens one matching the edited config.
+    if (getCluster(id)?.azureTunnel) await stopTunnel(id)
     const updated = updateCluster(id, input)
-    refreshCluster(updated.id, updated.name, updated.connection.host, updated.connection.port)
+    refreshCluster(updated)
     return updated
   })
-  ipcMain.handle('clusters:remove', (_event, id: string) => removeCluster(id))
+  ipcMain.handle('clusters:remove', async (_event, id: string) => {
+    if (getCluster(id)?.azureTunnel) await stopTunnel(id)
+    removeCluster(id)
+  })
   ipcMain.handle('clusters:setKeepAlive', (_event, id: string, keepAlive: boolean) =>
     setClusterKeepAlive(id, keepAlive)
   )
-  ipcMain.handle('clusters:setActiveMonitoring', (_event, id: string, active: boolean) =>
-    setClusterActiveMonitoring(id, active)
-  )
+  ipcMain.handle('clusters:setActiveMonitoring', async (_event, id: string, active: boolean) => {
+    // Standby means no connections at all for the cluster, and the tunnel is one.
+    if (!active && getCluster(id)?.azureTunnel) await stopTunnel(id)
+    return setClusterActiveMonitoring(id, active)
+  })
 }

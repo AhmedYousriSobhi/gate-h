@@ -88,3 +88,11 @@
   font-size: 14px;
   font-weight: 560;
 }
+
+/* Selectable so a device-code login's URL and code can be copied. */
+.terminal-shade-detail {
+  max-width: 60ch;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  user-select: text;
+}
