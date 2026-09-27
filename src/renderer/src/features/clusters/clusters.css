@@ -61,6 +61,13 @@
   margin-bottom: var(--space-3);
 }
 
+/* An input with a button beside it. */
+.form-inline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2);
+}
+
 .form-field {
   display: flex;
   flex-direction: column;

@@ -3,6 +3,7 @@ import { getDb } from './db'
 import { decryptSecret, encryptSecret } from './secrets'
 import { getActiveProfileId } from './profiles'
 import type {
+  AzureTunnelConfig,
   Cluster,
   ClusterInput,
   ClusterSummary,
@@ -25,6 +26,7 @@ interface ClusterRow {
   jira_token: string | null
   keep_alive: number
   active_monitoring: number
+  azure_tunnel: string | null
   created_at: string
   updated_at: string
 }
@@ -38,6 +40,7 @@ function rowToSummary(row: ClusterRow): ClusterSummary {
     connection: JSON.parse(row.connection) as ConnectionProfile,
     grafana: row.grafana ? (JSON.parse(row.grafana) as GrafanaProfile) : null,
     jira: row.jira ? (JSON.parse(row.jira) as JiraProfile) : null,
+    azureTunnel: row.azure_tunnel ? (JSON.parse(row.azure_tunnel) as AzureTunnelConfig) : null,
     keepAliveInBackground: Boolean(row.keep_alive),
     activeMonitoring: Boolean(row.active_monitoring),
     createdAt: row.created_at,
@@ -91,8 +94,8 @@ export function createCluster(input: ClusterInput): ClusterSummary {
   getDb()
     .prepare(
       `INSERT INTO clusters
-        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, keep_alive, active_monitoring, created_at, updated_at, profile_id)
-       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @keep_alive, @active_monitoring, @created_at, @updated_at, @profile_id)`
+        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, azure_tunnel, keep_alive, active_monitoring, created_at, updated_at, profile_id)
+       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @azure_tunnel, @keep_alive, @active_monitoring, @created_at, @updated_at, @profile_id)`
     )
     .run({
       id,
@@ -106,6 +109,7 @@ export function createCluster(input: ClusterInput): ClusterSummary {
       grafana_token: input.grafanaApiToken ? encryptSecret(input.grafanaApiToken) : null,
       jira: input.jira ? JSON.stringify(input.jira) : null,
       jira_token: input.jiraApiToken ? encryptSecret(input.jiraApiToken) : null,
+      azure_tunnel: input.azureTunnel ? JSON.stringify(input.azureTunnel) : null,
       keep_alive: 0,
       active_monitoring: 1,
       created_at: now,
@@ -134,6 +138,7 @@ export function updateCluster(id: string, input: ClusterInput): ClusterSummary {
         grafana_token = @grafana_token,
         jira = @jira,
         jira_token = @jira_token,
+        azure_tunnel = @azure_tunnel,
         updated_at = @updated_at
        WHERE id = @id`
     )
@@ -150,6 +155,7 @@ export function updateCluster(id: string, input: ClusterInput): ClusterSummary {
         : null,
       jira: input.jira ? JSON.stringify(input.jira) : null,
       jira_token: input.jira ? resolveSecret(input.jiraApiToken, existing.jira_token) : null,
+      azure_tunnel: input.azureTunnel ? JSON.stringify(input.azureTunnel) : null,
       updated_at: new Date().toISOString()
     })
 

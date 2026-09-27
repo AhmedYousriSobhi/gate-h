@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  AzureTunnelStatusEvent,
   ClusterInput,
   ClusterNotification,
   ClusterReachability,
@@ -71,6 +72,15 @@ const api: GateHApi = {
         callback(payload)
       ipcRenderer.on('ssh:error', listener)
       return () => ipcRenderer.removeListener('ssh:error', listener)
+    }
+  },
+  azure: {
+    listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
+    onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: AzureTunnelStatusEvent): void =>
+        callback(payload)
+      ipcRenderer.on('azure:status', listener)
+      return () => ipcRenderer.removeListener('azure:status', listener)
     }
   },
   reachability: {

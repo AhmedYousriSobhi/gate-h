@@ -130,6 +130,118 @@ Then, inside the app:
    either one - it also previews widgets planned for later (job queue, GPU usage, storage quota,
    and more).
 
+### Clusters reachable only through Azure
+
+Some clusters can only be reached through an Azure tunnel. Gate-H can open that tunnel itself,
+using [resources/azure-tunnel.sh](resources/azure-tunnel.sh), each time it connects. It signs in
+with the Azure CLI, selects the subscription, opens the tunnel, then connects SSH through it.
+[docs/AZURE.md](docs/AZURE.md) covers how the tunnel is kept alive, how to investigate drops, and
+how to test it.
+
+**Prerequisites**
+
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) on your `PATH`.
+  The script installs the `bastion` or `ssh` CLI extension on first use if it's missing.
+- One of these ways to reach the cluster:
+  - `--mode bastion`: an Azure Bastion host on the Standard or Premium SKU, with
+    **Native client support** enabled, plus Reader access to the Bastion host and the target VM.
+  - `--mode az-ssh`: a VM you can log in to with `az ssh vm`. By default that needs Entra ID
+    login, which means the *Virtual Machine User Login* or *Administrator Login* role on the VM.
+    Pass `--local-user` to log in with a local VM account instead. The VM then forwards to the
+    cluster's login node.
+
+**Steps (in the app)**
+
+1. Sign in once in a terminal with `az login`. Gate-H can also sign in for you: if `az` has no
+   valid session, the terminal view shows a device-code prompt (a URL and a code) to finish in
+   your browser.
+2. Click **+ Add** (or edit a cluster). Fill in **SSH connection** with the tunnel's *far end*:
+   - Bastion: the target VM's host name and SSH port.
+   - az ssh vm: the login node's host name and port, as the VM reaches it.
+
+   These are *not* `127.0.0.1`. Leave the jump host unchecked; the tunnel does that job.
+3. Tick **Azure tunnel** and fill in the fields:
+   - **Tunnel through:** Azure Bastion, or VM via az ssh vm.
+   - **Local port:** any free port, e.g. `2222`.
+   - **Subscription:** click **Load from az** to pick one.
+   - **Resource group**, and optionally **Tenant ID**.
+   - Bastion: **Bastion name** and **Target VM resource ID**.
+   - az ssh vm: **VM name**, and optionally **Local VM user**.
+4. Select the cluster. The terminal shows each step (*Checking Azure CLI session*, *Using
+   subscription '…'*, *Tunnel active on port 2222*), then connects.
+
+The tunnel stays open across reconnects. If it drops, the terminal's automatic reconnect reopens it.
+If a connect through it fails, Gate-H replaces it. The tunnel closes when you quit Gate-H, edit or
+remove the cluster, or put the cluster in standby. The cluster's LED shows the tunnel's health.
+
+**Staying connected.** Gate-H sends an SSH keepalive every 15 s, which is well under Azure's
+4-minute idle timeouts. The best protection against drops you can't prevent (Bastion maintenance,
+sleep, Wi-Fi changes) is running your shell inside `tmux new -A -s main` on the login node, so a
+reconnect puts you back where you were. See [docs/AZURE.md](docs/AZURE.md) for why Azure sessions
+drop and what else helps.
+
+**Using the script without the app** (for debugging, or for another SSH client):
+
+1. List your subscriptions. If you're not logged in, this runs `az login` first:
+
+   ```bash
+   ./resources/azure-tunnel.sh subscriptions
+   ```
+
+2. Open the tunnel. `--local-port` is the port on your machine (on `127.0.0.1`), and
+   `--remote-port` is the port on the target (default `22`). If you leave out `--subscription`
+   and you have more than one, the script shows a menu to pick one.
+
+   ```bash
+   # Through Azure Bastion, straight to the target VM's SSH port:
+   ./resources/azure-tunnel.sh up --name mycluster --mode bastion \
+     -g my-rg --bastion my-bastion \
+     --target-id /subscriptions/<sub-id>/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/login01 \
+     -l 2222 -s "<subscription name or id>"
+
+   # Through a VM with `az ssh vm`, forwarding on to a login node the VM can reach:
+   ./resources/azure-tunnel.sh up --name mycluster --mode az-ssh \
+     -g my-rg --vm my-jumpbox --remote-host login01.internal \
+     -l 2222 -s "<subscription name or id>"
+   ```
+
+   Once it prints `STATUS active Tunnel active on port 2222`, the tunnel is running in the
+   background. You can run `up` again safely: if the tunnel is already up, it just reports that.
+
+3. Connect any SSH client to it: `ssh -p 2222 <user>@127.0.0.1`.
+
+4. Check on the tunnel, or close it when you're done:
+
+   ```bash
+   ./resources/azure-tunnel.sh status --name mycluster
+   ./resources/azure-tunnel.sh down   --name mycluster
+   ```
+
+To keep the tunnel tied to your terminal instead, add `--foreground` to `up`. Ctrl-C then closes
+it.
+
+**Saving the settings.** Every option can also come from an `AZT_*` environment variable or a
+`--config` file. Command-line flags win over both. For example:
+
+```bash
+# ~/.config/gate-h/mycluster.azure
+AZT_NAME=mycluster
+AZT_MODE=bastion
+AZT_RESOURCE_GROUP=my-rg
+AZT_BASTION=my-bastion
+AZT_TARGET_ID=/subscriptions/<sub-id>/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/login01
+AZT_SUBSCRIPTION=<subscription id>
+AZT_LOCAL_PORT=2222
+```
+
+```bash
+./resources/azure-tunnel.sh up --config ~/.config/gate-h/mycluster.azure
+```
+
+`./resources/azure-tunnel.sh help` lists every option and exit code. If `up` fails, the last lines
+of the tunnel's log are printed, and the full log is kept at
+`$XDG_RUNTIME_DIR/gate-h-azure-tunnel/<name>.log`.
+
 ## Development
 
 For active development (with hot reload), run Gate-H directly with Node instead — Docker doesn't
