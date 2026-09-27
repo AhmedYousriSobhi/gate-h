@@ -109,6 +109,10 @@ export function getDb(): Database.Database {
     db.exec('ALTER TABLE clusters ADD COLUMN active_monitoring INTEGER NOT NULL DEFAULT 1')
   }
 
+  if (!columnExists(db, 'clusters', 'azure_tunnel')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN azure_tunnel TEXT')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,

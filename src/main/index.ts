@@ -12,6 +12,8 @@ import { registerNotificationIpcHandlers } from './ipc/notifications'
 import { registerWindowIpcHandlers } from './ipc/window'
 import { registerProfileIpcHandlers } from './ipc/profiles'
 import { registerLayoutIpcHandlers } from './ipc/layout'
+import { registerAzureIpcHandlers } from './ipc/azure'
+import { setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
 import { closeAllSessions } from './ssh/manager'
 import {
   startClusterMonitor,
@@ -21,7 +23,11 @@ import {
 import { startJiraMonitor, stopJiraMonitor } from './monitor/jiraMonitor'
 import { setNotificationBroadcaster } from './notifications/store'
 import { initUserDataDir } from './userData'
-import type { ClusterNotification, ClusterReachability } from '../shared/types'
+import type {
+  AzureTunnelStatusEvent,
+  ClusterNotification,
+  ClusterReachability
+} from '../shared/types'
 
 // Must run before anything (including app.whenReady()) touches the userData path.
 initUserDataDir()
@@ -118,6 +124,7 @@ app.whenReady().then(() => {
   registerWindowIpcHandlers(() => mainWindow)
   registerProfileIpcHandlers()
   registerLayoutIpcHandlers()
+  registerAzureIpcHandlers()
 
   createWindow()
 
@@ -130,6 +137,11 @@ app.whenReady().then(() => {
   setNotificationBroadcaster((notification: ClusterNotification) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('notifications:created', notification)
+    }
+  })
+  setAzureStatusBroadcaster((event: AzureTunnelStatusEvent) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('azure:status', event)
     }
   })
   startJiraMonitor()
@@ -146,6 +158,7 @@ app.whenReady().then(() => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   closeAllSessions()
+  stopAllTunnels()
   stopClusterMonitor()
   stopJiraMonitor()
   if (process.platform !== 'darwin') {

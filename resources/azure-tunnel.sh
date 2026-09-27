@@ -266,7 +266,8 @@ select_subscription() {
 # ---------------------------------------------------------------------------
 
 # Checks for a LISTEN socket rather than connecting: a probe connection
-# through a Bastion tunnel opens (and bills) a real Bastion session.
+# through a Bastion tunnel opens a real Bastion session, and the tunnel only
+# handles one connection at a time reliably (azure-cli#24600).
 port_listening() {
   local port=$1
   if command -v ss >/dev/null 2>&1; then

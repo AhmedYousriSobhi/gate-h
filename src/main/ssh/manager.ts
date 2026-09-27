@@ -7,6 +7,7 @@ import type { WebContents } from 'electron'
 import { getCluster, getClusterSecrets } from '../clusters'
 import { addNotification } from '../notifications/store'
 import { checkKnownHost } from './knownHosts'
+import { ensureTunnel, stopTunnel } from '../azure/tunnel'
 import type { ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
@@ -46,11 +47,14 @@ interface HostContext {
 function buildConnectConfig(
   profile: ConnectionProfile,
   secret: string | null,
-  hostContext: HostContext
+  hostContext: HostContext,
+  /** Where to actually dial, when that's a local tunnel end rather than `profile.host` - the host
+   *  key stays pinned under `profile`'s host:port, the machine it really belongs to. */
+  dial?: { host: string; port: number }
 ): ConnectConfig {
   const config: ConnectConfig = {
-    host: profile.host,
-    port: profile.port,
+    host: dial?.host ?? profile.host,
+    port: dial?.port ?? profile.port,
     username: profile.username,
     readyTimeout: 20000,
     keepaliveInterval: 15000,
@@ -144,13 +148,22 @@ export async function openSshSession(
   const cluster = getCluster(clusterId)
   if (!cluster) throw new Error('Cluster not found')
   const secrets = getClusterSecrets(clusterId)
+  const tunnel = cluster.azureTunnel
+
+  if (tunnel) {
+    if (cluster.connection.jumpHost) {
+      throw new Error('A cluster can connect through a jump host or an Azure tunnel, not both.')
+    }
+    await ensureTunnel(cluster)
+  }
 
   let jumpClient: Client | null = null
-  let targetConfig = buildConnectConfig(cluster.connection, secrets.connectionSecret, {
-    clusterId,
-    clusterName: cluster.name,
-    role: 'login node'
-  })
+  let targetConfig = buildConnectConfig(
+    cluster.connection,
+    secrets.connectionSecret,
+    { clusterId, clusterName: cluster.name, role: 'login node' },
+    tunnel ? { host: '127.0.0.1', port: tunnel.localPort } : undefined
+  )
 
   if (cluster.connection.jumpHost) {
     const jump = cluster.connection.jumpHost
@@ -188,7 +201,15 @@ export async function openSshSession(
     targetConfig = { ...targetConfig, sock: forwardStream }
   }
 
-  const client = await connectClient(targetConfig)
+  let client: Client
+  try {
+    client = await connectClient(targetConfig)
+  } catch (err) {
+    // A Bastion tunnel can hang with its local port still listening (azure-cli#28367), so `up`
+    // would keep reusing it; tearing it down makes the Terminal's next retry open a fresh one.
+    if (tunnel) await stopTunnel(clusterId)
+    throw err
+  }
   const stream = await openShell(client)
 
   const sessionId = randomUUID()

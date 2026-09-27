@@ -1,0 +1,196 @@
+import { execFile, spawn } from 'child_process'
+import { createInterface } from 'readline'
+import scriptPath from '../../../resources/azure-tunnel.sh?asset&asarUnpack'
+import type {
+  AzureSubscription,
+  AzureTunnelPhase,
+  AzureTunnelStatusEvent,
+  ClusterSummary
+} from '../../shared/types'
+
+// Drives resources/azure-tunnel.sh for clusters with an Azure tunnel configured. The script owns
+// the actual tunnel process (detached, in its own process group, tracked by a state file), so a
+// tunnel outlives any one SSH session: once opened it stays up until the app quits, the cluster
+// is edited/removed/put in standby, or an SSH connect through it fails (see stopTunnel callers).
+// That keeps a flaky shell from also paying a full Azure re-auth + tunnel setup on every
+// reconnect, and keeps the tunnel's health a meaningful reachability signal.
+
+const PHASES = new Set<string>([
+  'auth',
+  'subscription',
+  'tunnel',
+  'active',
+  'degraded',
+  'down',
+  'error'
+] satisfies AzureTunnelPhase[])
+
+let broadcast: ((event: AzureTunnelStatusEvent) => void) | null = null
+// One in-flight `up` per cluster: a Terminal reconnect and a background (pinned) session can ask
+// at the same moment, and two concurrent `up`s would race for the same local port.
+const pendingUps = new Map<string, Promise<void>>()
+const openedTunnels = new Set<string>()
+
+export function setAzureStatusBroadcaster(fn: (event: AzureTunnelStatusEvent) => void): void {
+  broadcast = fn
+}
+
+function tunnelName(clusterId: string): string {
+  return `gateh-${clusterId}`
+}
+
+function upArgs(cluster: ClusterSummary): string[] {
+  const tunnel = cluster.azureTunnel
+  if (!tunnel) throw new Error(`${cluster.name} has no Azure tunnel configured`)
+  const args = [
+    'up',
+    '--non-interactive',
+    '--name',
+    tunnelName(cluster.id),
+    '--mode',
+    tunnel.mode,
+    '--resource-group',
+    tunnel.resourceGroup,
+    '--subscription',
+    tunnel.subscription,
+    '--local-port',
+    String(tunnel.localPort),
+    '--remote-port',
+    String(cluster.connection.port)
+  ]
+  if (tunnel.tenant) args.push('--tenant', tunnel.tenant)
+  // Missing mode-specific values are left out rather than passed empty, so the script reports
+  // which one is required instead of a generic "needs a value".
+  if (tunnel.mode === 'bastion') {
+    if (tunnel.bastionName) args.push('--bastion', tunnel.bastionName)
+    if (tunnel.targetResourceId) args.push('--target-id', tunnel.targetResourceId)
+  } else {
+    if (tunnel.vmName) args.push('--vm', tunnel.vmName)
+    args.push('--remote-host', cluster.connection.host)
+    if (tunnel.localUser) args.push('--local-user', tunnel.localUser)
+  }
+  return args
+}
+
+function runUp(cluster: ClusterSummary): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('bash', [scriptPath, ...upArgs(cluster)], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let lastError = ''
+    const stderrTail: string[] = []
+
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      const match = /^STATUS (\S+) (.*)$/.exec(line)
+      if (!match || !PHASES.has(match[1])) return
+      const phase = match[1] as AzureTunnelPhase
+      if (phase === 'error') lastError = match[2]
+      broadcast?.({ clusterId: cluster.id, phase, message: match[2] })
+    })
+    createInterface({ input: child.stderr }).on('line', (line) => {
+      // With no terminal attached, the script falls back to device-code login, and az prints the
+      // "open https://microsoft.com/devicelogin and enter the code ..." instruction on stderr -
+      // the user can't finish logging in unless it's surfaced.
+      if (/devicelogin|enter the code/i.test(line)) {
+        broadcast?.({ clusterId: cluster.id, phase: 'auth', message: line.trim() })
+      }
+      stderrTail.push(line)
+      if (stderrTail.length > 20) stderrTail.shift()
+    })
+
+    child.on('error', (err) => {
+      reject(
+        new Error(`Could not run the Azure tunnel script (is bash installed?): ${err.message}`)
+      )
+    })
+    child.on('close', (code) => {
+      if (code === 0) {
+        openedTunnels.add(cluster.id)
+        resolve()
+        return
+      }
+      console.error(`[gate-h] azure tunnel for ${cluster.name} failed:\n${stderrTail.join('\n')}`)
+      reject(new Error(lastError || `Azure tunnel failed to start (exit code ${code})`))
+    })
+  })
+}
+
+/** Resolves once the cluster's tunnel is listening - reusing it if it's already up (the script's
+ *  `up` is idempotent), otherwise authenticating and opening it. */
+export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
+  const pending = pendingUps.get(cluster.id)
+  if (pending) return pending
+  const run = runUp(cluster).finally(() => pendingUps.delete(cluster.id))
+  pendingUps.set(cluster.id, run)
+  return run
+}
+
+/** Tears the tunnel down. Spawned detached so it still completes when called on app quit. */
+export function stopTunnel(clusterId: string): Promise<void> {
+  openedTunnels.delete(clusterId)
+  return new Promise((resolve) => {
+    const child = spawn('bash', [scriptPath, 'down', '--name', tunnelName(clusterId)], {
+      detached: true,
+      stdio: 'ignore'
+    })
+    child.on('error', () => resolve())
+    child.on('close', () => resolve())
+  })
+}
+
+export function stopAllTunnels(): void {
+  for (const clusterId of Array.from(openedTunnels)) void stopTunnel(clusterId)
+}
+
+/** True if the tunnel process is alive and its local port is listening. */
+export function isTunnelUp(clusterId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile('bash', [scriptPath, 'status', '--name', tunnelName(clusterId)], (err) =>
+      resolve(!err)
+    )
+  })
+}
+
+/** Reads the Azure CLI's cached subscription list directly rather than via the script, whose
+ *  `subscriptions` command would start an (invisible, blocking) device-code login if the CLI
+ *  isn't logged in yet. */
+export function listSubscriptions(): Promise<AzureSubscription[]> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'az',
+      [
+        'account',
+        'list',
+        '--only-show-errors',
+        '--output',
+        'json',
+        '--query',
+        "[?state=='Enabled'].{id:id, name:name, isDefault:isDefault}"
+      ],
+      (err, stdout) => {
+        if (err) {
+          reject(
+            new Error(
+              (err as NodeJS.ErrnoException).code === 'ENOENT'
+                ? 'Azure CLI (az) is not installed or not on PATH.'
+                : 'Could not list subscriptions - run `az login` in a terminal first.'
+            )
+          )
+          return
+        }
+        let subscriptions: AzureSubscription[]
+        try {
+          subscriptions = JSON.parse(stdout) as AzureSubscription[]
+        } catch {
+          reject(new Error('Unexpected output from `az account list`.'))
+          return
+        }
+        if (subscriptions.length === 0) {
+          reject(new Error('No subscriptions found - run `az login` in a terminal first.'))
+          return
+        }
+        resolve(subscriptions)
+      }
+    )
+  })
+}
