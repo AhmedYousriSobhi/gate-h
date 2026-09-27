@@ -1,0 +1,55 @@
+<svg width="1280" height="320" viewBox="0 0 1280 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">Gate-H: one window for every HPC cluster</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#141c30"/>
+      <stop offset="100%" stop-color="#0a0f1c"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7db2ff"/>
+      <stop offset="100%" stop-color="#2f6fed"/>
+    </linearGradient>
+    <radialGradient id="node" cx="0.35" cy="0.3" r="0.75">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#bfe0ff"/>
+      <stop offset="100%" stop-color="#7ec8ff"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0.30  0 0 0 0 0.55  0 0 0 0 1  0 0 0 0.9 0" result="tint"/>
+      <feMerge>
+        <feMergeNode in="tint"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="320" rx="24" fill="url(#bg)"/>
+
+  <!-- Cluster nodes fanning out from the gate, drawn faintly so the wordmark stays dominant -->
+  <g stroke="#2f6fed" stroke-opacity="0.35" stroke-width="2" fill="none">
+    <path d="M1000 160 L1120 80 M1000 160 L1150 160 M1000 160 L1120 240"/>
+  </g>
+  <g fill="#7ec8ff">
+    <circle cx="1000" cy="160" r="9" fill-opacity="0.9"/>
+    <circle cx="1120" cy="80" r="7" fill-opacity="0.6"/>
+    <circle cx="1150" cy="160" r="7" fill-opacity="0.6"/>
+    <circle cx="1120" cy="240" r="7" fill-opacity="0.6"/>
+  </g>
+
+  <!-- The app icon's H mark, scaled from its 1024px source (resources/icon.svg) -->
+  <g transform="translate(64 48) scale(0.22)">
+    <g filter="url(#glow)">
+      <rect x="298" y="256" width="120" height="530" rx="60" fill="url(#bar)"/>
+      <rect x="606" y="256" width="120" height="530" rx="60" fill="url(#bar)"/>
+      <rect x="298" y="466" width="428" height="110" rx="55" fill="url(#bar)"/>
+    </g>
+    <circle cx="512" cy="521" r="46" fill="url(#node)"/>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="272" y="165" font-size="88" font-weight="700" fill="#ffffff" letter-spacing="-2">Gate-H</text>
+    <text x="276" y="215" font-size="28" fill="#9fb4d8">One window for every HPC cluster</text>
+  </g>
+</svg>

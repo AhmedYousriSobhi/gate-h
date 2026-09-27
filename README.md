@@ -1,42 +1,72 @@
 <p align="center">
-  <img src="resources/icon.png" alt="Gate-H icon" width="96" height="96">
+  <img src="docs/assets/banner.svg" alt="Gate-H: one window for every HPC cluster" width="100%">
 </p>
-
-<h1 align="center">Gate-H</h1>
 
 <p align="center">
-  A standalone desktop app (not a browser app) for managing HPC workloads across multiple
-  clusters, from a single Linux desktop.
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f6fed" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/version-0.1.0-7db2ff" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/platform-Linux-0a0f1c?logo=linux&logoColor=white" alt="Platform: Linux">
+  <br/>
+  <img src="https://img.shields.io/badge/Electron-39-47848F?logo=electron&logoColor=white" alt="Electron 39">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5">
+  <img src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white" alt="SQLite via better-sqlite3">
 </p>
 
-## What it does
+<p align="center">
+  <b>A desktop app for running several HPC clusters from one window: SSH, Grafana status, and Jira.</b><br/>
+  No server to deploy, no browser tabs, no telemetry.
+</p>
 
-- **Multi-cluster management** — register any number of HPC clusters, each with its own SSH
-  connection profile (host, port, user, auth method, optional jump/bastion host), always visible
-  in a sidebar so switching between clusters never means losing your place.
-- **Live reachability monitoring** — every registered cluster is continuously checked in the
-  background; a colored LED next to its name shows at a glance whether it's currently reachable.
-- **Connect & operate** — open an SSH session (embedded terminal) to any registered cluster
-  without leaving the app.
-- **Live status via Grafana** — pull cluster health and dashboard snapshots from each cluster's
-  Grafana instance using the Grafana REST API.
-- **Jira integration** — view matching issues and file new tickets against a cluster's Jira
-  project, for both Jira Cloud and Jira Data Center/Server.
-- **Side-by-side widgets, not tabs** — a cluster's Terminal and Status live in the same view at
-  once instead of switching back and forth; toggle either one on/off, swap their positions, or
-  flip between a side-by-side and stacked layout, all from the panel's toolbar. The widget picker
-  also previews what's planned next (job queue, GPU usage, storage quota, node health, job
-  history) - see [docs/STATUS.md](docs/STATUS.md) for the roadmap.
-- **Cross-cluster notifications** — a bell icon collects reachability changes, new/updated Jira
-  tickets, and unexpected SSH disconnects from every cluster in one place, so you don't have to
-  click into each one to notice something changed. Clicking a notification jumps straight to the
-  relevant cluster and brings the right widget into view.
-- **Overview dashboard** — the default view is a grid of every cluster in the current profile,
-  with its reachability, tags, configured integrations, and unread notification count at a
-  glance - not just a blank "pick something" screen.
-- **Profiles** — group clusters under separate named profiles (e.g. "Work" vs "Research"), each
-  with its own cluster list and dashboard; switch between them from the sidebar without one
-  profile's clusters cluttering another's view.
+---
+
+## Why Gate-H exists
+
+If you look after more than one HPC cluster, you know the routine. There's a terminal for each
+login node, a Grafana tab for each cluster's dashboards, and a Jira board somewhere else. Then the
+VPN drops, and you have to work out which of those things are still alive.
+
+Most of the existing tools don't fit this job. Open OnDemand is a portal for many users that you
+have to host on a server. Bright/Base Command Manager provisions clusters but doesn't help you
+work across them. General SSH managers know nothing about Grafana or Jira.
+
+Gate-H is a single-user desktop app built for this one job. You register each cluster once, with
+its SSH identity, its Grafana dashboards, and its Jira project. After that:
+
+- Every cluster sits in a sidebar with a live LED showing whether it's reachable.
+- Clicking a cluster opens its terminal and its status side by side.
+- One notification feed tells you when anything changes on any cluster.
+
+The clusters on the other end are shared infrastructure, so Gate-H is careful with them. Every
+reconnect and re-poll is bounded and backed off, so a cluster that's down never gets flooded with
+connection attempts. Secrets are encrypted at rest and never leave the main process.
+
+## Key features
+
+- 🖥️ **Multi-cluster sidebar.** Register any number of clusters. Each has its own SSH profile:
+  host, port, user, password/key/agent auth, and an optional jump host. Switching clusters never
+  loses your place.
+- 🟢 **Live reachability.** Every cluster's SSH port is probed in the background. The probe checks
+  for a real SSH banner, not just an open TCP port. An LED shows the result, and it re-checks as
+  soon as the window regains focus.
+- ⌨️ **Embedded SSH terminal.** Host keys are pinned on first use, SSH keepalives catch silently
+  dropped connections, and reconnects are bounded with backoff. The terminal clearly shows when a
+  session isn't live.
+- ☁️ **Azure tunnels built in.** For clusters behind Azure Bastion or `az ssh vm`, Gate-H signs in
+  with the Azure CLI, opens the tunnel, and connects SSH through it.
+- 📊 **Live Grafana status.** Health checks, plus live panels you pick yourself. Lay them out
+  stacked or side by side and resize each one.
+- 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
+  Gate-H picks the right auth scheme for you.
+- 🧩 **Widgets side by side, not tabs.** Show, hide, swap, stack, and drag-resize the terminal and
+  status widgets. The layout survives restarts.
+- 🔔 **One notification feed.** Reachability changes, Jira activity, and unexpected SSH
+  disconnects from every cluster in one place. Click a notification to jump to the cluster and
+  widget it's about.
+- 🗂️ **Profiles and an overview dashboard.** Group clusters into profiles such as "Work" and
+  "Research". The default view is a grid of every cluster in the active profile.
+- ⏸️ **Pinning and standby.** Pin a cluster to keep its session alive in the background, or put it
+  in standby to stop all its connections until you need it again.
 
 ## Preview
 
@@ -98,37 +128,42 @@
 > environment can't open an actual Electron window) — see [docs/STATUS.md](docs/STATUS.md) for
 > exactly how, and what's still unverified against real infrastructure.
 
-## Get the app
+## Quick start
 
-The reproducible way to get a runnable Gate-H, no local Node/toolchain setup required — just
-[Docker](https://docs.docker.com/engine/install/):
+### 1. Get the app
+
+The reproducible way to get a runnable Gate-H needs only
+[Docker](https://docs.docker.com/engine/install/), with no local Node toolchain:
 
 ```bash
+git clone git@github.com:AhmedYousriSobhi/gate-h.git
+cd gate-h
 ./build-desktop.sh
 ./dist/Gate-H-*.AppImage
 ```
 
-`build-desktop.sh` builds a pinned Node + native-module toolchain image, then builds and packages
-Gate-H inside a container from it — the same result on any machine, regardless of what's installed
-locally. See [docker/build.Dockerfile](docker/build.Dockerfile) for exactly what's in that image.
+`build-desktop.sh` builds a pinned Node and native-module toolchain image, then builds and packages
+Gate-H inside a container from it. You get the same result on any machine, whatever is installed
+locally. [docker/build.Dockerfile](docker/build.Dockerfile) shows exactly what's in that image.
 
-Then, inside the app:
+### 2. Your first cluster
 
-1. You start in a single default profile ("Personal") - click the profile name at the top of the
-   sidebar if you want separate profiles for separate contexts (e.g. "Work" vs "Research"), each
-   with its own clusters and dashboard.
-2. Click **+ Add** in the sidebar and fill in a name plus its SSH connection details (host, user,
-   auth method). Grafana and Jira are optional per cluster.
-3. The **Overview** dashboard (the default view) shows every cluster in the current profile at a
-   glance - reachability, tags, configured integrations, unread notifications.
-4. Click a cluster in the sidebar (or its card on Overview) to open it - its embedded SSH
-   **Terminal** and **Status** (Grafana health/dashboards + Jira issues) widgets show side by
-   side by default, not as tabs; the sidebar (and its live reachability LEDs) stays visible the
-   whole time, so switching clusters is just a click.
-5. Use the toolbar above the widgets to swap their left/right (or top/bottom) order, switch
-   between side-by-side and stacked, or open the widget picker (puzzle-piece icon) to hide/show
-   either one - it also previews widgets planned for later (job queue, GPU usage, storage quota,
-   and more).
+1. You start in a default profile called "Personal". To keep separate contexts apart (e.g. "Work"
+   and "Research"), click the profile name at the top of the sidebar. Each profile has its own
+   clusters and dashboard.
+2. Click **+ Add** in the sidebar. Enter a name and the SSH connection details (host, user, auth
+   method). Grafana and Jira are optional for each cluster.
+3. The **Overview** dashboard, the default view, shows every cluster in the current profile:
+   reachability, tags, configured integrations, and unread notifications.
+4. Click a cluster in the sidebar, or its card on Overview, to open it. Its **Terminal** and
+   **Status** (Grafana health and dashboards, plus Jira issues) widgets open side by side. The
+   sidebar and its LEDs stay visible, so switching clusters takes one click.
+5. Use the toolbar above the widgets to swap their order, switch between side by side and
+   stacked, or open the widget picker (puzzle-piece icon) to show or hide each one. The picker
+   also lists widgets planned for later, such as job queue, GPU usage, and storage quota.
+
+For Jira setup, including how to keep several clusters' tickets apart in one shared Jira project,
+see [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md).
 
 ### Clusters reachable only through Azure
 
@@ -254,46 +289,53 @@ npm run dev       # launch Gate-H in development mode
 
 Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.
 
-## Tech stack
+## Architecture
 
-- **Shell**: Electron (Linux-first; cross-platform later if needed)
-- **UI**: React + TypeScript, bundled with Vite (`electron-vite`); Inter (UI text) and JetBrains
-  Mono (hostnames/code), both self-hosted via `@fontsource*` so the app never depends on network
-  access just to render its own typography; icons from `lucide-react`
-- **SSH / terminal**: `ssh2` (SSH client, password/key/agent auth, jump-host chaining) +
-  `@xterm/xterm` for the embedded terminal (no local PTY needed - every session is a remote SSH
-  channel)
-- **Secrets**: `electron.safeStorage` (OS keychain-backed, e.g. libsecret on Linux) - SSH
-  passphrases and Grafana/Jira API tokens are encrypted at rest and never sent back to the
-  renderer once saved
-- **Local persistence**: `better-sqlite3` for cluster/profile configuration and app preferences
-  (e.g. the panel layout)
-- **Integrations**: Grafana HTTP API (service-account token), Jira REST API (Cloud: email + API
-  token; Data Center: Personal Access Token)
-
-Project layout:
+Gate-H is an Electron app with three processes. They are strictly separated, and only a narrow,
+explicit bridge connects them.
 
 ```
 src/
-  shared/     # types shared between main and renderer (over the preload bridge)
-  main/       # Electron main process — SSH sessions, SQLite store, Grafana/Jira HTTP calls
-  preload/    # contextBridge API exposed to the renderer
-  renderer/   # React UI (sidebar + panel shell, terminal, Grafana/Jira status)
+  shared/     # types shared by all three processes, incl. the GateHApi contract for window.api
+  main/       # Electron main process: SQLite store, SSH sessions, Grafana/Jira clients,
+              # background monitors, one IPC handler file per namespace
+  preload/    # the only bridge: a contextBridge API exposed as window.api
+  renderer/   # React UI, grouped by feature: shell, terminal, status, clusters
 ```
 
-## Learn more / project status
+- **The renderer has no Node or Electron access.** Everything goes through `window.api`, which is
+  defined once in [src/shared/types.ts](src/shared/types.ts).
+- **Secrets are write-only.** SSH passphrases and Grafana/Jira tokens are encrypted with
+  `electron.safeStorage` (backed by the OS keychain, e.g. libsecret on Linux). The renderer only
+  ever gets `has*Secret` booleans back.
+- **Local state lives in SQLite** (`better-sqlite3`): clusters, profiles, notifications, and the
+  panel layout. Migrations only ever add columns and run on every launch.
+- **No local PTY.** Every terminal is a remote channel from `ssh2`, rendered with `@xterm/xterm`.
+- **Integrations** use the Grafana HTTP API (service-account token) and the Jira REST API (Cloud:
+  email + API token; Data Center: Personal Access Token).
+- **Typography and icons ship with the app.** Inter and JetBrains Mono are self-hosted via
+  `@fontsource`, and icons come from `lucide-react`. The UI never needs network access just to
+  render.
 
-This README stays focused on what Gate-H is and how to run it. For anything deeper:
+## Documentation
 
-- **[docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md)** — step-by-step Jira setup, and how to keep multiple
-  clusters' tickets from bleeding into each other when they share one Jira project (plus where
-  Confluence currently stands: not integrated yet).
-- **[docs/STATUS.md](docs/STATUS.md)** — current feature completeness, how each feature has been
-  verified so far, and known limitations/roadmap.
-- **[CHANGELOG.md](CHANGELOG.md)** — the chronological build log: every change, in the order it
-  happened, and why.
-- **[docs/ANALYSIS.md](docs/ANALYSIS.md)** — prior-art research (Open OnDemand, ColdFront/XDMoD,
-  Slurm-web, etc.) and the architecture decisions behind Gate-H.
+| Document | What's in it |
+|---|---|
+| [SPEC.md](SPEC.md) | The functional spec: what Gate-H should do, written as requirements. |
+| [docs/STATUS.md](docs/STATUS.md) | What's shipped today, how each feature was verified, known limitations, and the roadmap. |
+| [docs/ANALYSIS.md](docs/ANALYSIS.md) | Prior art (Open OnDemand, ColdFront/XDMoD, Slurm-web, …) and the reasons behind the architecture. |
+| [docs/AZURE.md](docs/AZURE.md) | Azure tunnels: how they stay alive, investigating drops, and testing. |
+| [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) | Jira setup step by step, and keeping clusters' tickets apart. |
+| [CHANGELOG.md](CHANGELOG.md) | The build log: every change, in order, and why. |
+| [CLAUDE.md](CLAUDE.md) | A short guide for contributors and coding agents: commands, code map, conventions, and gotchas. |
 
-Each feature is developed on its own `feature/*` branch and merged into `main` once it builds,
-lints, and typechecks cleanly.
+## Contributing
+
+Each change starts as a GitHub issue and gets its own branch and pull request. A PR is merged into
+`main` once `npm run typecheck`, `npm run lint`, and `npm run build` all pass. There's no
+automated test suite yet. [docs/STATUS.md](docs/STATUS.md) explains how each feature has been
+verified so far.
+
+## License
+
+[MIT](LICENSE) © 2026 Ahmed Yousri Sobhi
