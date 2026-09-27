@@ -183,8 +183,12 @@ export default function AppShell(): React.JSX.Element {
                   onLayoutChange={setPanelLayout}
                   reachability={reachability[id]}
                   hidden={id !== selectedClusterId}
+                  // Returning `prev` unchanged is what stops a render loop: this callback is a new
+                  // function every render, so TerminalPanel's effect re-fires on each one.
                   onTerminalStatusChange={(status) =>
-                    setTerminalStatuses((prev) => ({ ...prev, [id]: status }))
+                    setTerminalStatuses((prev) =>
+                      prev[id] === status ? prev : { ...prev, [id]: status }
+                    )
                   }
                   onResumeMonitoring={() => handleToggleActiveMonitoring(cluster)}
                 />
