@@ -346,7 +346,11 @@ export default function GrafanaStatusSection({
                 )}
                 {embedReady && dashboard.selectedPanelIds.length > 0 && (
                   <>
-                    <div className={`panel-embed-list panel-embed-list-${dashboard.orientation}`}>
+                    <div
+                      className={`panel-embed-list panel-embed-list-${dashboard.orientation}${
+                        dragWidths?.uid === dashboard.uid ? ' panel-embed-list-dragging-width' : ''
+                      }`}
+                    >
                       {dashboard.selectedPanelIds.flatMap((panelId, index) => {
                         const panelTitle =
                           dashboard.panels.find((p) => p.id === panelId)?.title ?? String(panelId)

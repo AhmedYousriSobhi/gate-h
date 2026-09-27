@@ -166,6 +166,15 @@
   background: var(--color-accent);
 }
 
+/* A width drag's pointer moves directly over the neighboring <webview>s (unlike the height
+   resizer, which only ever moves below the whole row) - Electron's embedded guest view can
+   swallow pointer events before they reach the resizer despite its pointer capture (same
+   webview-steals-input quirk as hidePanelMenu above), so block it from receiving any input for
+   the duration of the drag. */
+.panel-embed-list-dragging-width webview {
+  pointer-events: none;
+}
+
 .panel-picker {
   display: flex;
   flex-direction: column;
