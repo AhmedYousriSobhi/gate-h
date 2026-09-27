@@ -1,0 +1,151 @@
+# Gate-H — Functional Specification
+
+This is the functional spec: what Gate-H is supposed to do, stated as requirements. It complements
+two other docs rather than duplicating them:
+
+- [docs/ANALYSIS.md](docs/ANALYSIS.md) — *why* it's built this way (prior art, architecture
+  decisions).
+- [docs/STATUS.md](docs/STATUS.md) — the *current, point-in-time* state of each requirement below
+  (done / partial / not started) plus known limitations. When this file and STATUS.md disagree on
+  what's shipped, STATUS.md is correct — this file describes the target, not a completion log.
+
+## 1. Purpose
+
+A standalone desktop application (not a browser tab, no server to stand up) that lets one person
+or small team operate several independent HPC clusters — SSH access, Grafana-based status, and
+Jira ticketing — from a single window, without juggling a terminal, several browser tabs, and a
+ticket tracker separately.
+
+## 2. Core entities
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| `Profile` | `id`, `name` | Groups a set of clusters (e.g. "Work" vs "Research"); exactly one profile is active at a time. |
+| `Cluster` | `id`, `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `keepAliveInBackground`, `activeMonitoring` | Belongs to exactly one `Profile`. `grafana`/`jira` are optional — a cluster may be SSH-only. |
+| `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | One SSH identity per cluster; a jump host chains a second SSH hop via `forwardOut`. |
+| `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
+| `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
+| `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
+| `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
+
+Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
+`electron.safeStorage` and are write-only from the renderer's perspective: a cluster read back
+from the store only ever reports `hasConnectionSecret`/`hasGrafanaToken`/`hasJiraToken` booleans,
+never the plaintext or ciphertext.
+
+## 3. Functional requirements
+
+### 3.1 Cluster & profile management
+- Create, edit, and remove a cluster; each belongs to the profile active at creation time.
+- Register any number of clusters, each fully self-contained (its own SSH/Grafana/Jira config) —
+  nothing about one cluster's setup constrains another's.
+- Create, rename, delete, and switch between profiles; switching profiles clears the current
+  selection (a cluster from the old profile can't stay "selected" under the new one).
+- Background monitors (reachability, Jira polling) watch every cluster in every profile
+  regardless of which is active — only the sidebar/dashboard *view* is scoped to the active
+  profile.
+
+### 3.2 Reachability monitoring
+- Every registered cluster's SSH port is probed on a fixed interval (not just a bare TCP connect —
+  the probe confirms an actual SSH banner), independent of whether the cluster is selected,
+  pinned, or in standby (§3.6).
+- A per-cluster LED (online/offline/checking) is shown in the sidebar and the overview dashboard,
+  updated in real time as probes complete.
+- Regaining window focus triggers an immediate re-check (throttled to avoid extra probing if
+  focus events fire in quick succession), so the LED catches up quickly after e.g. a VPN
+  reconnect without waiting for the next scheduled sweep.
+- An online→offline or offline→online transition raises a notification (§3.7).
+
+### 3.3 SSH terminal
+- Open an interactive shell to a cluster's login node (or through a configured jump host) from
+  inside the app — no external terminal required.
+- Auth methods: password, private key (with optional passphrase), or the local SSH agent.
+- Host keys are pinned trust-on-first-use (the same model as OpenSSH's `known_hosts`); a key that
+  changes after being trusted blocks the connection and raises a notification rather than
+  silently proceeding.
+- SSH-level keepalive detects a silently-dropped connection (e.g. through a NAT/firewall that
+  drops idle connections without a clean close) instead of leaving the session sitting in a
+  falsely "connected" state.
+- A dropped or failed session retries automatically with bounded, backed-off attempts (a small
+  fixed number of tries within a rolling time window, exponential backoff with jitter between
+  them), then pauses rather than retrying indefinitely — a persistently unreachable cluster must
+  never be hammered with repeated connection attempts. A paused session re-checks the cluster's
+  reachability reading on every update and retries as soon as it reads online, in addition to
+  offering a manual "Reconnect" action.
+- While a session isn't connected (initial connect, a retry in progress, or paused), the terminal
+  view makes that state unmistakable — a stale output buffer must never be mistakable for a live,
+  responsive prompt.
+
+### 3.4 Grafana status
+- Per cluster, list configured dashboards and show a health check (reachable + version, or the
+  failure reason).
+- Per dashboard, let the user pick which panels to embed live (not just a static snapshot), lay
+  them out stacked or side by side, resize the embedded height, and — when side by side — resize
+  each panel's width relative to its neighbors independently.
+- Status refreshes automatically on a fixed interval and whenever the cluster's reachability
+  reading changes, with backoff on repeated failures, rather than only ever fetching once per
+  view.
+
+### 3.5 Jira integration
+- Per cluster with a Jira profile configured: list issues matching a saved JQL/project filter, and
+  file a new issue against that project directly from the cluster's view.
+- Works against both Jira Cloud and Jira Data Center/Server, without the user needing to know
+  which auth scheme that entails.
+
+### 3.6 Connection lifecycle: pinning and standby
+- **Default**: a cluster's Terminal session and Grafana polling exist only while it's the
+  currently selected cluster; switching away tears them down cleanly.
+- **Pinned** (`keepAliveInBackground`): the user can mark specific clusters to keep their Terminal
+  session and Grafana polling alive continuously in the background, regardless of which cluster
+  is currently selected/viewed, so switching between clusters doesn't mean re-establishing a
+  session each time. Reconnect-on-failure (§3.3) applies identically whether pinned or selected.
+- **Standby** (`activeMonitoring: false`): a master per-cluster switch that overrides pinning — no
+  SSH session, no Grafana polling, and no reconnect/backoff loop exist for that cluster at all,
+  even if it's pinned or currently selected. Selecting a standby cluster shows a placeholder
+  (with a one-click way to resume) instead of silently connecting. Turning monitoring back on
+  behaves exactly like a fresh selection — same connect flow, same backoff policy, no fast path
+  that bypasses rate-limiting. The lightweight reachability probe (§3.2) is unaffected by standby;
+  it is cheap enough to always run for every cluster.
+
+### 3.7 Cross-cluster notifications
+- A single feed collects reachability transitions, Jira ticket activity, and unexpected SSH
+  disconnects from every cluster, so the user doesn't have to check each cluster individually to
+  notice something changed.
+- Unread count is visible at a glance; clicking a notification jumps straight to the relevant
+  cluster and the specific widget (Terminal or Status) it concerns.
+- Notifications persist across restarts until marked read.
+
+### 3.8 Panel layout
+- A cluster's Terminal and Status widgets render side by side (or stacked) rather than behind
+  tabs, so both are visible at once.
+- The user can toggle either widget on/off, swap their pane order, switch orientation, and
+  drag-resize the split between them; the layout choice persists across restarts.
+
+### 3.9 Overview dashboard
+- The default view (nothing selected) is a grid of every cluster in the active profile, showing
+  reachability, tags, which integrations (Grafana/Jira) are configured, and unread notification
+  count — never a blank "pick something" screen.
+
+## 4. Non-functional requirements
+
+- **Secrets never leave the main process in plaintext or ciphertext** — see §2; enforced by
+  `ClusterSummary` never carrying the underlying token/password fields.
+- **No connection-attempt storms** — every reconnect/re-poll path (Terminal, Grafana) is bounded
+  and backed off (§3.3, §3.4); a target that's genuinely down must degrade to a slow, capped retry
+  cadence, not sustained pressure. This matters specifically because the "clusters" on the other
+  end are real HPC login nodes and shared infrastructure, not disposable test endpoints.
+- **Linux-first** — actively developed and verified on Linux; Windows/macOS packaging targets
+  exist in `electron-builder` config but are unverified (see `docs/STATUS.md`).
+- **No telemetry** — Gate-H does not phone home; the only network calls it makes are to the
+  Grafana/Jira/SSH endpoints the user explicitly configured per cluster.
+
+## 5. Out of scope
+
+- Cluster **provisioning** or lifecycle management (that's Bright/Base Command Manager's job, not
+  Gate-H's) — Gate-H only connects to clusters that already exist.
+- A **multi-tenant, server-hosted** portal (that's Open OnDemand's niche) — Gate-H is a
+  single-user desktop app; there is no server component and no concept of other users.
+- **Scheduler-level job management** (submit/cancel/monitor Slurm/PBS/LSF jobs) beyond what's
+  reachable through the plain SSH terminal — see `docs/STATUS.md`'s roadmap for the planned,
+  not-yet-built job-queue/GPU/storage/node-health widgets, which would run *read-only* scheduler
+  commands over the existing SSH session rather than becoming a scheduler client.
