@@ -4,6 +4,7 @@ import ClusterForm from '../clusters/ClusterForm'
 import Sidebar from './Sidebar'
 import MainPanel from './MainPanel'
 import TitleBar from './TitleBar'
+import Toaster from '../toast/Toaster'
 import OverviewDashboard from './OverviewDashboard'
 import { useReachability } from '../../hooks/useReachability'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -205,6 +206,7 @@ export default function AppShell(): React.JSX.Element {
           />
         )}
       </div>
+      <Toaster />
     </div>
   )
 }
