@@ -211,6 +211,17 @@ export function setGrafanaPanelEmbedHeight(
   }))
 }
 
+export function setGrafanaPanelWidths(
+  id: string,
+  dashboardUid: string,
+  widths: Record<number, number>
+): ClusterSummary {
+  return patchGrafanaProfile(id, (grafana) => ({
+    ...grafana,
+    panelWidths: { ...grafana.panelWidths, [dashboardUid]: widths }
+  }))
+}
+
 /** Patches only the keep-alive flag, bypassing the full edit-cluster form - toggled from a pin
  *  button in the sidebar, same lightweight-patch pattern as the Grafana picker settings above. */
 export function setClusterKeepAlive(id: string, keepAlive: boolean): ClusterSummary {

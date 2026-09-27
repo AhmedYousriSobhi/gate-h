@@ -4,7 +4,8 @@ import {
   getClusterSecrets,
   setGrafanaDashboardOrientation,
   setGrafanaPanelEmbedHeight,
-  setGrafanaPanelSelection
+  setGrafanaPanelSelection,
+  setGrafanaPanelWidths
 } from '../clusters'
 import { getGrafanaStatus } from '../grafana/client'
 import { registerEmbedOrigin } from '../grafana/embed'
@@ -59,6 +60,18 @@ export function registerGrafanaIpcHandlers(): void {
       height: number
     ): Promise<ClusterSummary> => {
       return setGrafanaPanelEmbedHeight(clusterId, dashboardUid, height)
+    }
+  )
+
+  ipcMain.handle(
+    'grafana:setPanelWidths',
+    async (
+      _event,
+      clusterId: string,
+      dashboardUid: string,
+      widths: Record<number, number>
+    ): Promise<ClusterSummary> => {
+      return setGrafanaPanelWidths(clusterId, dashboardUid, widths)
     }
   )
 
