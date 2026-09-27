@@ -37,11 +37,19 @@ export interface GrafanaProfile {
   /** Height in px of a dashboard's embedded panels - keyed by uid, defaults to 240 when unset.
    *  Applies to every selected panel in that dashboard uniformly, in either orientation. */
   panelEmbedHeight?: Record<string, number>
+  /** Relative width share of a dashboard's selected panels when shown side by side - keyed by
+   *  uid, then by panel ID, fractions summing to 1 across the current selection. Ignored in
+   *  'vertical' orientation. Missing or stale entries (a panel added/removed since last saved)
+   *  fall back to an equal split - see normalizePanelWidths in src/main/grafana/client.ts. */
+  panelWidths?: Record<string, Record<number, number>>
 }
 
 export const DEFAULT_PANEL_EMBED_HEIGHT = 240
 export const MIN_PANEL_EMBED_HEIGHT = 120
 export const MAX_PANEL_EMBED_HEIGHT = 640
+/** Floor on a side-by-side panel's width share (of 1) so dragging its neighbor never squeezes it
+ *  into illegibility. */
+export const MIN_PANEL_WIDTH_FRACTION = 0.12
 
 export type JiraAuthMode = 'cloud' | 'datacenter'
 
@@ -138,6 +146,10 @@ export interface GrafanaDashboardStatus {
   orientation: PanelOrientation
   /** Height in px applied to every selected panel's embed - see GrafanaProfile.panelEmbedHeight. */
   embedHeight: number
+  /** Normalized width share (0-1, sums to 1) of each selected panel when shown side by side -
+   *  always present and covers exactly `selectedPanelIds`, even if nothing was saved yet or the
+   *  selection changed since - see GrafanaProfile.panelWidths. */
+  panelWidths: Record<number, number>
   error?: string
 }
 
@@ -244,6 +256,11 @@ export interface GateHApi {
       clusterId: string,
       dashboardUid: string,
       height: number
+    ): Promise<ClusterSummary>
+    setPanelWidths(
+      clusterId: string,
+      dashboardUid: string,
+      widths: Record<number, number>
     ): Promise<ClusterSummary>
     /** Arms the embed session (Authorization header + frame-blocking header stripping) for this
      *  cluster's Grafana origin - call and await before pointing a <webview> at it. */

@@ -102,9 +102,12 @@
   flex-direction: row;
 }
 
-/* flex-basis 0 (not a px value) so panels always share the row equally by shrinking, rather than
-   wrapping back into a vertical stack once their combined natural width exceeds the (often narrow)
-   status panel - a fixed basis made "side by side" indistinguishable from "stacked" in practice. */
+/* Equal-split fallback for a dashboard with no saved panelWidths yet - overridden per panel by an
+   inline `flex` style once GrafanaDashboardStatus.panelWidths is available (always is, in
+   practice; see normalizePanelWidths). flex-basis 0 (not a px value) so panels always share the
+   row by shrinking, rather than wrapping back into a vertical stack once their combined natural
+   width exceeds the (often narrow) status panel - a fixed basis made "side by side"
+   indistinguishable from "stacked" in practice. */
 .panel-embed-list-horizontal .panel-embed {
   flex: 1 1 0;
   min-width: 0;
@@ -133,6 +136,33 @@
 
 .panel-embed-resizer:hover::after,
 .panel-embed-resizer:active::after {
+  background: var(--color-accent);
+}
+
+/* Vertical counterpart, between horizontally-arranged sibling panels - same full-height hit
+   target / thin pseudo-element pattern as .panel-embed-resizer above, rotated 90deg. Doesn't
+   participate in the row's flex-grow split (flex: 0 0 auto). */
+.panel-embed-width-resizer {
+  position: relative;
+  flex: 0 0 auto;
+  width: 10px;
+  cursor: col-resize;
+}
+
+.panel-embed-width-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+}
+
+.panel-embed-width-resizer:hover::after,
+.panel-embed-width-resizer:active::after {
   background: var(--color-accent);
 }
 
