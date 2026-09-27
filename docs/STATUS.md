@@ -37,6 +37,7 @@ this repo or its history.)
 | Automated tests | ❌ Not started | verification so far is `typecheck` + `lint` + `build` on every change, no unit/e2e suite yet |
 | Multi-session terminal (tabs) | ❌ Not started | only one SSH session open at a time currently; switching clusters in the sidebar disconnects the previous session |
 | Jump host with its own password | ⚠️ Partial | only supported when the jump host uses the *same* auth method as the target cluster (see the note in `src/main/ssh/manager.ts`) — a jump host needing an independent password isn't wired up yet |
+| Azure tunnel pre-flight | ⚠️ Untested live | Per-cluster option: before SSH connects, `resources/azure-tunnel.sh` signs in with `az`, selects the subscription, and opens an Azure Bastion or `az ssh vm` tunnel. SSH then dials its local end (`src/main/azure/tunnel.ts`). Progress shows in the terminal. The tunnel is reopened on reconnect, replaced if a connect through it fails, and stopped on quit, edit, remove, or standby. The script is covered by `scripts/test-azure-tunnel.sh` against a fake `az`, but hasn't been run against real Azure. Linux/macOS only (needs bash). See `docs/AZURE.md` |
 | Windows / macOS packaging | ⚠️ Untested | `electron-builder` config exists for both, but the project is being developed and verified on Linux only |
 
 ## How each feature was verified
