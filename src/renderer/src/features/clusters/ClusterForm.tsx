@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { BarChart3, KeyRound, Ticket } from 'lucide-react'
+import { BarChart3, Cloud, KeyRound, Ticket } from 'lucide-react'
 import type {
+  AzureSubscription,
+  AzureTunnelMode,
   ClusterInput,
   ClusterSummary,
   JiraAuthMode,
@@ -42,6 +44,16 @@ interface FormState {
   jiraProjectKey: string
   jiraJql: string
   jiraApiToken: string
+  useAzureTunnel: boolean
+  azureMode: AzureTunnelMode
+  azureSubscription: string
+  azureTenant: string
+  azureResourceGroup: string
+  azureLocalPort: string
+  azureBastionName: string
+  azureTargetResourceId: string
+  azureVmName: string
+  azureLocalUser: string
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -71,8 +83,41 @@ function toFormState(c?: ClusterSummary): FormState {
     jiraEmail: c?.jira?.email ?? '',
     jiraProjectKey: c?.jira?.projectKey ?? '',
     jiraJql: c?.jira?.jql ?? '',
-    jiraApiToken: ''
+    jiraApiToken: '',
+    useAzureTunnel: Boolean(c?.azureTunnel),
+    azureMode: c?.azureTunnel?.mode ?? 'bastion',
+    azureSubscription: c?.azureTunnel?.subscription ?? '',
+    azureTenant: c?.azureTunnel?.tenant ?? '',
+    azureResourceGroup: c?.azureTunnel?.resourceGroup ?? '',
+    azureLocalPort: c?.azureTunnel ? String(c.azureTunnel.localPort) : '',
+    azureBastionName: c?.azureTunnel?.bastionName ?? '',
+    azureTargetResourceId: c?.azureTunnel?.targetResourceId ?? '',
+    azureVmName: c?.azureTunnel?.vmName ?? '',
+    azureLocalUser: c?.azureTunnel?.localUser ?? ''
   }
+}
+
+/** Returns why the Azure tunnel settings can't be saved, or null if they can. */
+function azureTunnelError(form: FormState): string | null {
+  if (!form.useAzureTunnel) return null
+  if (form.useJumpHost) return 'Use either a jump host or an Azure tunnel, not both.'
+  if (!form.azureSubscription.trim() || !form.azureResourceGroup.trim()) {
+    return 'Azure tunnel needs a subscription and a resource group.'
+  }
+  const port = Number(form.azureLocalPort)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return 'Azure tunnel local port must be a number between 1 and 65535.'
+  }
+  if (
+    form.azureMode === 'bastion' &&
+    (!form.azureBastionName.trim() || !form.azureTargetResourceId.trim())
+  ) {
+    return 'Azure Bastion needs the bastion name and the target VM resource ID.'
+  }
+  if (form.azureMode === 'az-ssh' && !form.azureVmName.trim()) {
+    return 'az ssh vm needs the VM name.'
+  }
+  return null
 }
 
 function splitList(value: string): string[] {
@@ -90,9 +135,29 @@ export default function ClusterForm({
   const [form, setForm] = useState<FormState>(() => toFormState(initial))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([])
+  const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null)
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(false)
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function loadSubscriptions(): Promise<void> {
+    setSubscriptionsError(null)
+    setLoadingSubscriptions(true)
+    try {
+      const list = await window.api.azure.listSubscriptions()
+      setSubscriptions(list)
+      if (!form.azureSubscription) {
+        const preferred = list.find((s) => s.isDefault) ?? list[0]
+        set('azureSubscription', preferred.id)
+      }
+    } catch (err) {
+      setSubscriptionsError(err instanceof Error ? err.message : 'Failed to list subscriptions.')
+    } finally {
+      setLoadingSubscriptions(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
@@ -101,6 +166,11 @@ export default function ClusterForm({
 
     if (!form.name.trim() || !form.host.trim() || !form.username.trim()) {
       setError('Name, host, and username are required.')
+      return
+    }
+    const tunnelError = azureTunnelError(form)
+    if (tunnelError) {
+      setError(tunnelError)
       return
     }
 
@@ -142,7 +212,22 @@ export default function ClusterForm({
             jql: form.jiraJql.trim() || undefined
           }
         : null,
-      jiraApiToken: form.jiraApiToken.trim() || undefined
+      jiraApiToken: form.jiraApiToken.trim() || undefined,
+      azureTunnel: form.useAzureTunnel
+        ? {
+            mode: form.azureMode,
+            subscription: form.azureSubscription.trim(),
+            tenant: form.azureTenant.trim() || undefined,
+            resourceGroup: form.azureResourceGroup.trim(),
+            localPort: Number(form.azureLocalPort),
+            bastionName: form.azureMode === 'bastion' ? form.azureBastionName.trim() : undefined,
+            targetResourceId:
+              form.azureMode === 'bastion' ? form.azureTargetResourceId.trim() : undefined,
+            vmName: form.azureMode === 'az-ssh' ? form.azureVmName.trim() : undefined,
+            localUser:
+              form.azureMode === 'az-ssh' ? form.azureLocalUser.trim() || undefined : undefined
+          }
+        : null
     }
 
     setSaving(true)
@@ -301,6 +386,139 @@ export default function ClusterForm({
                       value={form.jumpPrivateKeyPath}
                       onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
                     />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="form-section">
+            <label className="form-field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.useAzureTunnel}
+                onChange={(e) => set('useAzureTunnel', e.target.checked)}
+              />
+              <h4 style={{ margin: 0 }}>
+                <Cloud size={13} strokeWidth={2} />
+                Azure tunnel
+              </h4>
+            </label>
+            {form.useAzureTunnel && (
+              <>
+                <p className="hint">
+                  Before connecting, Gate-H signs in with the Azure CLI (az), selects this
+                  subscription, and opens a tunnel. SSH then connects to 127.0.0.1 on the local
+                  port, and Host/Port above are the tunnel&apos;s far end: the target VM (Bastion),
+                  or the login node as the VM reaches it (az ssh vm). Needs az on PATH. See the
+                  README section on clusters reachable only through Azure.
+                </p>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="azureMode">Tunnel through</label>
+                    <select
+                      id="azureMode"
+                      value={form.azureMode}
+                      onChange={(e) => set('azureMode', e.target.value as AzureTunnelMode)}
+                    >
+                      <option value="bastion">Azure Bastion</option>
+                      <option value="az-ssh">VM via az ssh vm</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="azureLocalPort">Local port</label>
+                    <input
+                      id="azureLocalPort"
+                      placeholder="2222"
+                      value={form.azureLocalPort}
+                      onChange={(e) => set('azureLocalPort', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-field">
+                  <label htmlFor="azureSubscription">Subscription (ID or name)</label>
+                  <div className="form-inline">
+                    <input
+                      id="azureSubscription"
+                      list="azureSubscriptionOptions"
+                      value={form.azureSubscription}
+                      onChange={(e) => set('azureSubscription', e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={loadSubscriptions}
+                      disabled={loadingSubscriptions}
+                    >
+                      {loadingSubscriptions ? 'Loading...' : 'Load from az'}
+                    </button>
+                  </div>
+                  <datalist id="azureSubscriptionOptions">
+                    {subscriptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </datalist>
+                  {subscriptionsError && <p className="hint">{subscriptionsError}</p>}
+                </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="azureResourceGroup">Resource group</label>
+                    <input
+                      id="azureResourceGroup"
+                      value={form.azureResourceGroup}
+                      onChange={(e) => set('azureResourceGroup', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="azureTenant">Tenant ID (optional)</label>
+                    <input
+                      id="azureTenant"
+                      value={form.azureTenant}
+                      onChange={(e) => set('azureTenant', e.target.value)}
+                    />
+                  </div>
+                </div>
+                {form.azureMode === 'bastion' ? (
+                  <>
+                    <div className="form-field">
+                      <label htmlFor="azureBastionName">Bastion name</label>
+                      <input
+                        id="azureBastionName"
+                        value={form.azureBastionName}
+                        onChange={(e) => set('azureBastionName', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="azureTargetResourceId">Target VM resource ID</label>
+                      <input
+                        id="azureTargetResourceId"
+                        placeholder="/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/virtualMachines/..."
+                        value={form.azureTargetResourceId}
+                        onChange={(e) => set('azureTargetResourceId', e.target.value)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label htmlFor="azureVmName">VM name</label>
+                      <input
+                        id="azureVmName"
+                        value={form.azureVmName}
+                        onChange={(e) => set('azureVmName', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="azureLocalUser">Local VM user (optional)</label>
+                      <input
+                        id="azureLocalUser"
+                        placeholder="Blank = Entra ID login"
+                        value={form.azureLocalUser}
+                        onChange={(e) => set('azureLocalUser', e.target.value)}
+                      />
+                    </div>
                   </div>
                 )}
               </>

@@ -62,6 +62,43 @@ export interface JiraProfile {
   jql?: string
 }
 
+export type AzureTunnelMode = 'bastion' | 'az-ssh'
+
+/** An Azure tunnel opened (via resources/azure-tunnel.sh) before this cluster's SSH session
+ *  connects. SSH then dials 127.0.0.1:`localPort` instead of `connection.host`, while
+ *  `connection.host`/`port` stay the tunnel's far end - the Bastion target VM, or (az-ssh) the
+ *  login node as seen from the VM - and the identity its host key is pinned under. No secrets:
+ *  the Azure CLI keeps its own token cache. */
+export interface AzureTunnelConfig {
+  mode: AzureTunnelMode
+  /** Required - the app runs the script non-interactively, so it can't show the picker. */
+  subscription: string
+  tenant?: string
+  resourceGroup: string
+  localPort: number
+  /** mode "bastion" */
+  bastionName?: string
+  targetResourceId?: string
+  /** mode "az-ssh" */
+  vmName?: string
+  localUser?: string
+}
+
+export type AzureTunnelPhase =
+  'auth' | 'subscription' | 'tunnel' | 'active' | 'degraded' | 'down' | 'error'
+
+export interface AzureTunnelStatusEvent {
+  clusterId: string
+  phase: AzureTunnelPhase
+  message: string
+}
+
+export interface AzureSubscription {
+  id: string
+  name: string
+  isDefault: boolean
+}
+
 export interface Cluster {
   id: string
   name: string
@@ -70,6 +107,7 @@ export interface Cluster {
   connection: ConnectionProfile
   grafana: GrafanaProfile | null
   jira: JiraProfile | null
+  azureTunnel: AzureTunnelConfig | null
   /** When true, this cluster's Terminal/Grafana connections stay live in the background - kept
    *  mounted (hidden) and auto-reconnecting even while a different cluster is selected - instead
    *  of only existing while the cluster is the one currently selected in the sidebar. Has no
@@ -96,6 +134,7 @@ export interface ClusterInput {
   grafanaApiToken?: string
   jira: JiraProfile | null
   jiraApiToken?: string
+  azureTunnel: AzureTunnelConfig | null
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
@@ -278,6 +317,12 @@ export interface GateHApi {
     onData(callback: (event: SshDataEvent) => void): () => void
     onClosed(callback: (event: SshClosedEvent) => void): () => void
     onError(callback: (event: SshErrorEvent) => void): () => void
+  }
+  azure: {
+    /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
+    listSubscriptions(): Promise<AzureSubscription[]>
+    /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
+    onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
   }
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>

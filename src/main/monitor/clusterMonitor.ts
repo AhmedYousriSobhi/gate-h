@@ -1,7 +1,8 @@
 import { listClusters } from '../clusters'
 import { checkTcpReachable } from './reachability'
 import { addNotification } from '../notifications/store'
-import type { ClusterReachability } from '../../shared/types'
+import { isTunnelUp } from '../azure/tunnel'
+import type { ClusterReachability, ClusterSummary } from '../../shared/types'
 
 // 60s matches the default check interval of standard SSH-aware monitoring tools (e.g.
 // Nagios/Icinga's check_ssh) - frequent enough for a "live" LED, conservative enough not to look
@@ -48,15 +49,21 @@ function setStatus(
   lastSettledStatus.set(clusterId, status)
 }
 
-async function checkOne(
-  clusterId: string,
-  clusterName: string,
-  host: string,
-  port: number
-): Promise<void> {
-  setStatus(clusterId, clusterName, 'checking')
-  const reachable = await checkTcpReachable(host, port)
-  setStatus(clusterId, clusterName, reachable ? 'online' : 'offline')
+/** An Azure-tunneled cluster's login node is only reachable through its tunnel, so it counts as
+ *  online only while the tunnel is up. Through an az-ssh tunnel the SSH banner check still runs
+ *  end to end; a Bastion tunnel isn't probed beyond its own health, since it only handles one
+ *  connection at a time reliably (azure-cli#24600) and a probe could collide with the session. */
+async function isReachable(cluster: ClusterSummary): Promise<boolean> {
+  const tunnel = cluster.azureTunnel
+  if (!tunnel) return checkTcpReachable(cluster.connection.host, cluster.connection.port)
+  if (!(await isTunnelUp(cluster.id))) return false
+  return tunnel.mode === 'bastion' || checkTcpReachable('127.0.0.1', tunnel.localPort)
+}
+
+async function checkOne(cluster: ClusterSummary): Promise<void> {
+  setStatus(cluster.id, cluster.name, 'checking')
+  const reachable = await isReachable(cluster)
+  setStatus(cluster.id, cluster.name, reachable ? 'online' : 'offline')
 }
 
 async function sweep(): Promise<void> {
@@ -69,9 +76,7 @@ async function sweep(): Promise<void> {
       lastSettledStatus.delete(id)
     }
   }
-  await Promise.all(
-    clusters.map((c) => checkOne(c.id, c.name, c.connection.host, c.connection.port))
-  )
+  await Promise.all(clusters.map((c) => checkOne(c)))
 }
 
 export function getAllReachability(): Record<string, ClusterReachability> {
@@ -80,13 +85,8 @@ export function getAllReachability(): Record<string, ClusterReachability> {
 
 /** Checks a single cluster immediately - used right after it's added/edited so its LED doesn't
  *  wait for the next sweep. */
-export function refreshCluster(
-  clusterId: string,
-  clusterName: string,
-  host: string,
-  port: number
-): void {
-  void checkOne(clusterId, clusterName, host, port)
+export function refreshCluster(cluster: ClusterSummary): void {
+  void checkOne(cluster)
 }
 
 /** Runs a sweep right away instead of waiting for the next scheduled tick, but only if it's been
