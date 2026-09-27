@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ClusterNotification } from '../../../shared/types'
+import { showToast } from '../lib/toast'
 
 // Mirrors the cap in src/main/notifications/store.ts - the main process's own list is bounded to
 // this many, but it broadcasts every new one regardless of that cap, so without a matching bound
@@ -25,6 +26,7 @@ export function useNotifications(): {
 
     const off = window.api.notifications.onCreated((notification) => {
       setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS))
+      showToast({ message: notification.message, type: notification.severity })
     })
 
     return () => {
