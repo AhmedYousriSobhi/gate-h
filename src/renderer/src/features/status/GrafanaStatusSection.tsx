@@ -11,6 +11,7 @@ import {
   GRAFANA_EMBED_PARTITION,
   MAX_PANEL_EMBED_HEIGHT,
   MIN_PANEL_EMBED_HEIGHT,
+  MIN_PANEL_WIDTH_FRACTION,
   type ClusterReachability,
   type ClusterSummary,
   type GrafanaStatusResult,
@@ -119,6 +120,84 @@ export default function GrafanaStatusSection({
       .then(setStatus)
       .catch((err: Error) => setError(err.message))
     setDragHeight(null)
+  }
+
+  // Drag-resize for a pair of side-by-side sibling panels' relative widths - same two-phase
+  // pattern as the height resizer above, but a drag only ever shifts weight between its two
+  // immediate neighbors (their combined share is conserved) rather than touching every panel.
+  const [dragWidths, setDragWidths] = useState<{
+    uid: string
+    widths: Record<number, number>
+  } | null>(null)
+  const dragWidthStartRef = useRef<{
+    uid: string
+    leftId: number
+    rightId: number
+    startX: number
+    rowWidth: number
+    startLeft: number
+    startRight: number
+    widths: Record<number, number>
+  } | null>(null)
+
+  function handleWidthResizeStart(
+    e: React.PointerEvent<HTMLDivElement>,
+    uid: string,
+    leftId: number,
+    rightId: number,
+    widths: Record<number, number>
+  ): void {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const rowWidth = e.currentTarget.parentElement?.getBoundingClientRect().width ?? 0
+    dragWidthStartRef.current = {
+      uid,
+      leftId,
+      rightId,
+      startX: e.clientX,
+      rowWidth,
+      startLeft: widths[leftId] ?? 0,
+      startRight: widths[rightId] ?? 0,
+      widths
+    }
+  }
+
+  function handleWidthResizeMove(e: React.PointerEvent<HTMLDivElement>): void {
+    const start = dragWidthStartRef.current
+    if (!start || e.buttons !== 1 || start.rowWidth <= 0) return
+    const deltaFraction = (e.clientX - start.startX) / start.rowWidth
+    const combined = start.startLeft + start.startRight
+    // Clamped against MIN_PANEL_WIDTH_FRACTION on both sides, but never inverted - if the pair's
+    // combined share is itself under 2x the floor (many panels sharing a narrow row), split it
+    // down the middle instead of letting the bounds cross.
+    const lowerBound = Math.min(MIN_PANEL_WIDTH_FRACTION, combined / 2)
+    const upperBound = Math.max(combined - MIN_PANEL_WIDTH_FRACTION, combined / 2)
+    const newLeft = Math.min(upperBound, Math.max(lowerBound, start.startLeft + deltaFraction))
+    setDragWidths({
+      uid: start.uid,
+      widths: { ...start.widths, [start.leftId]: newLeft, [start.rightId]: combined - newLeft }
+    })
+  }
+
+  function handleWidthResizeEnd(): void {
+    const start = dragWidthStartRef.current
+    dragWidthStartRef.current = null
+    if (!start || dragWidths?.uid !== start.uid) return
+    window.api.grafana
+      .setPanelWidths(cluster.id, start.uid, dragWidths.widths)
+      .then(() => window.api.grafana.getStatus(cluster.id))
+      .then(setStatus)
+      .catch((err: Error) => setError(err.message))
+    setDragWidths(null)
+  }
+
+  function resetPanelWidths(dashboardUid: string, panelIds: number[]): void {
+    const equalShare = 1 / panelIds.length
+    const widths = Object.fromEntries(panelIds.map((id) => [id, equalShare]))
+    window.api.grafana
+      .setPanelWidths(cluster.id, dashboardUid, widths)
+      .then(() => window.api.grafana.getStatus(cluster.id))
+      .then(setStatus)
+      .catch((err: Error) => setError(err.message))
   }
 
   useEffect(() => {
@@ -268,7 +347,7 @@ export default function GrafanaStatusSection({
                 {embedReady && dashboard.selectedPanelIds.length > 0 && (
                   <>
                     <div className={`panel-embed-list panel-embed-list-${dashboard.orientation}`}>
-                      {dashboard.selectedPanelIds.map((panelId) => {
+                      {dashboard.selectedPanelIds.flatMap((panelId, index) => {
                         const panelTitle =
                           dashboard.panels.find((p) => p.id === panelId)?.title ?? String(panelId)
                         const embedUrl = `${grafanaBaseUrl}/d-solo/${dashboard.uid}?orgId=1&panelId=${panelId}&theme=dark&kiosk`
@@ -276,8 +355,38 @@ export default function GrafanaStatusSection({
                           dragHeight?.uid === dashboard.uid
                             ? dragHeight.height
                             : dashboard.embedHeight
-                        return (
-                          <figure className="panel-embed" key={panelId}>
+                        const widths =
+                          dragWidths?.uid === dashboard.uid
+                            ? dragWidths.widths
+                            : dashboard.panelWidths
+                        const nodes: React.JSX.Element[] = []
+                        if (dashboard.orientation === 'horizontal' && index > 0) {
+                          const leftId = dashboard.selectedPanelIds[index - 1]
+                          nodes.push(
+                            <div
+                              key={`width-resizer-${leftId}-${panelId}`}
+                              className="panel-embed-width-resizer"
+                              onPointerDown={(e) =>
+                                handleWidthResizeStart(e, dashboard.uid, leftId, panelId, widths)
+                              }
+                              onPointerMove={handleWidthResizeMove}
+                              onPointerUp={handleWidthResizeEnd}
+                              onDoubleClick={() =>
+                                resetPanelWidths(dashboard.uid, dashboard.selectedPanelIds)
+                              }
+                            />
+                          )
+                        }
+                        nodes.push(
+                          <figure
+                            className="panel-embed"
+                            key={panelId}
+                            style={
+                              dashboard.orientation === 'horizontal'
+                                ? { flex: `${widths[panelId] ?? 1} 1 0%` }
+                                : undefined
+                            }
+                          >
                             <webview
                               ref={hidePanelMenu}
                               src={embedUrl}
@@ -288,6 +397,7 @@ export default function GrafanaStatusSection({
                             <figcaption>{panelTitle}</figcaption>
                           </figure>
                         )
+                        return nodes
                       })}
                     </div>
                     <div

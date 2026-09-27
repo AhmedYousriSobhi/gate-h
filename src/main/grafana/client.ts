@@ -43,6 +43,29 @@ interface DashboardLayoutPrefs {
   selectedPanelIds: number[] | undefined
   orientation: PanelOrientation | undefined
   embedHeight: number | undefined
+  panelWidths: Record<number, number> | undefined
+}
+
+/** Normalizes a dashboard's saved per-panel width shares against its *current* selection: only
+ *  used when every currently-selected panel has a saved (positive) share, in which case those
+ *  shares are rescaled to sum to 1. Otherwise (nothing saved yet, or a panel was added/removed
+ *  since the last save and the saved keys no longer line up) falls back to an equal split rather
+ *  than guessing at a share for a panel that was never dragged - self-heals instead of carrying
+ *  stale/partial data forward. */
+export function normalizePanelWidths(
+  selectedIds: number[],
+  saved: Record<number, number> | undefined
+): Record<number, number> {
+  if (selectedIds.length === 0) return {}
+
+  const allKnown = selectedIds.every((id) => (saved?.[id] ?? 0) > 0)
+  if (allKnown) {
+    const total = selectedIds.reduce((sum, id) => sum + saved![id], 0)
+    return Object.fromEntries(selectedIds.map((id) => [id, saved![id] / total]))
+  }
+
+  const equalShare = 1 / selectedIds.length
+  return Object.fromEntries(selectedIds.map((id) => [id, equalShare]))
 }
 
 async function getDashboardStatus(
@@ -73,7 +96,8 @@ async function getDashboardStatus(
       panels: panels.map((p) => ({ id: p.id, title: p.title ?? String(p.id) })),
       selectedPanelIds: effectiveIds,
       orientation,
-      embedHeight
+      embedHeight,
+      panelWidths: normalizePanelWidths(effectiveIds, prefs.panelWidths)
     }
   } catch (err) {
     return {
@@ -84,6 +108,7 @@ async function getDashboardStatus(
       selectedPanelIds: [],
       orientation,
       embedHeight,
+      panelWidths: {},
       error: err instanceof Error ? err.message : 'Unknown error'
     }
   }
@@ -99,7 +124,8 @@ export async function getGrafanaStatus(
       getDashboardStatus(profile.baseUrl, token, uid, {
         selectedPanelIds: profile.panelSelections?.[uid],
         orientation: profile.panelOrientation?.[uid],
-        embedHeight: profile.panelEmbedHeight?.[uid]
+        embedHeight: profile.panelEmbedHeight?.[uid],
+        panelWidths: profile.panelWidths?.[uid]
       })
     )
   )
