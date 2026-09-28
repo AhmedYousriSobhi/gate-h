@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
+import TerminalTabBar from '../terminal/TerminalTabBar'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
 import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
@@ -48,8 +49,30 @@ export default function MainPanel({
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
+  // Tab 0 is this cluster's primary session - the one keepAliveInBackground/standby apply to
+  // (see AppShell's `hidden` prop) - and lives as long as this MainPanel instance does. Extra
+  // tabs are foreground-only: unmounted (disconnecting their session) whenever this cluster isn't
+  // the one currently selected, not just when explicitly closed - see the `hidden` check below.
+  const [tabs, setTabs] = useState<string[]>(() => [crypto.randomUUID()])
+  const [activeTabId, setActiveTabId] = useState<string>(tabs[0])
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
+
+  const handleAddTab = useCallback((): void => {
+    const id = crypto.randomUUID()
+    setTabs((prev) => [...prev, id])
+    setActiveTabId(id)
+  }, [])
+
+  const handleCloseTab = useCallback(
+    (id: string): void => {
+      if (tabs.length <= 1 || tabs[0] === id) return
+      const next = tabs.filter((t) => t !== id)
+      setTabs(next)
+      if (activeTabId === id) setActiveTabId(next[next.length - 1])
+    },
+    [tabs, activeTabId]
+  )
 
   function handleResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -128,11 +151,32 @@ export default function MainPanel({
             </div>
           )}
           <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
-            <TerminalPanel
-              cluster={cluster}
-              reachability={reachability}
-              onStatusChange={onTerminalStatusChange}
+            <TerminalTabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelect={setActiveTabId}
+              onAdd={handleAddTab}
+              onClose={handleCloseTab}
             />
+            <div className="terminal-tab-panes">
+              {tabs.map((tabId, index) => {
+                const isPrimary = index === 0
+                if (!isPrimary && hidden) return null
+                return (
+                  <div
+                    key={tabId}
+                    className="terminal-tab-pane"
+                    style={{ display: tabId === activeTabId ? 'flex' : 'none' }}
+                  >
+                    <TerminalPanel
+                      cluster={cluster}
+                      reachability={reachability}
+                      onStatusChange={isPrimary ? onTerminalStatusChange : undefined}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           </div>
           {visible.length === 2 && (
             <div
