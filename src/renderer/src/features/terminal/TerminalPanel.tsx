@@ -26,6 +26,8 @@ interface TerminalPanelProps {
   /** Ctrl/Cmd+Tab (+Shift to reverse) cycles the enclosing tab strip - forwarded up rather than
    *  handled here since this component has no notion of sibling tabs. */
   onCycleTab?: (direction: 1 | -1) => void
+  /** Ctrl/Cmd+Shift+5 - splits this session, forwarded up for the same reason as onCycleTab. */
+  onSplit?: () => void
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -59,7 +61,8 @@ export default function TerminalPanel({
   cluster,
   reachability,
   onStatusChange,
-  onCycleTab
+  onCycleTab,
+  onSplit
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
@@ -69,6 +72,10 @@ export default function TerminalPanel({
   useEffect(() => {
     onCycleTabRef.current = onCycleTab
   }, [onCycleTab])
+  const onSplitRef = useRef(onSplit)
+  useEffect(() => {
+    onSplitRef.current = onSplit
+  }, [onSplit])
   const [connectError, setConnectError] = useState<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [retryAttempt, setRetryAttempt] = useState(0)
@@ -225,6 +232,13 @@ export default function TerminalPanel({
       if (mod && event.key === 'Tab') {
         event.preventDefault()
         onCycleTabRef.current?.(event.shiftKey ? -1 : 1)
+        return false
+      }
+      // VS Code's split-terminal chord. `code`, not `key` - with Shift held, `key` is '%' on a
+      // US layout and something else elsewhere.
+      if (mod && event.shiftKey && event.code === 'Digit5') {
+        event.preventDefault()
+        onSplitRef.current?.()
         return false
       }
       if (mod && !event.shiftKey && event.key.toLowerCase() === 'f') {

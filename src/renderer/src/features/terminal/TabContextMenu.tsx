@@ -6,6 +6,7 @@ interface TabContextMenuProps {
   y: number
   onDismiss: () => void
   onRename: () => void
+  onSplit: () => void
   onDuplicate: () => void
   /** null hides the item - see MainPanel's callers for when each action doesn't apply. */
   onUnstack: (() => void) | null
@@ -23,6 +24,7 @@ export default function TabContextMenu({
   y,
   onDismiss,
   onRename,
+  onSplit,
   onDuplicate,
   onUnstack,
   onCloseTab,
@@ -55,6 +57,10 @@ export default function TabContextMenu({
     <div className="tab-context-menu" style={{ left: x, top: y }} ref={ref}>
       <button className="tab-context-menu-item" onClick={() => run(onRename)}>
         Rename
+      </button>
+      <button className="tab-context-menu-item" onClick={() => run(onSplit)}>
+        Split
+        <kbd className="tab-context-menu-shortcut">Ctrl+Shift+5</kbd>
       </button>
       <button className="tab-context-menu-item" onClick={() => run(onDuplicate)}>
         Duplicate
