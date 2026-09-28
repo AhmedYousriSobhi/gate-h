@@ -29,7 +29,9 @@ interface TerminalTabBarProps {
    *  (zone is meaningless in that case) - see MainPanel's handleDropTab for the reorder/
    *  merge/pop-out semantics this drives. `zone` is which third of dropId's tab the pointer was
    *  over: the edge thirds reorder (dragId ends up in its own standalone group, positioned next
-   *  to dropId's), the middle third merges dragId into dropId's group instead. */
+   *  to dropId's), the middle third merges dragId into dropId's group instead. Dropping directly
+   *  onto a visible session panel (not just its tab) also calls this, always with zone 'merge'
+   *  and dropId set to that panel's tab id. */
   onDrop: (dragId: string, dropId: string | null, zone: DropZone) => void
   onRename: (id: string, title: string) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
@@ -68,6 +70,11 @@ export default function TerminalTabBar({
   const hoverRef = useRef<{ id: string; zone: DropZone } | null>(null)
   const startPosRef = useRef<{ x: number; y: number } | null>(null)
   const movedRef = useRef(false)
+  // The terminal-tab-pane element (rendered by MainPanel, well outside this component's own DOM)
+  // currently highlighted as a drop target, tracked and toggled imperatively rather than through
+  // React state - it's a transient visual during a drag, not app data, and elementFromPoint finds
+  // it either way regardless of component boundaries.
+  const paneHoverElRef = useRef<Element | null>(null)
 
   return (
     <div className={`terminal-tabbar terminal-tabbar-${orientation}`}>
@@ -121,23 +128,41 @@ export default function TerminalTabBar({
                       movedRef.current = true
                       setDraggingId(dragId)
                     }
-                    const over = document
-                      .elementFromPoint(e.clientX, e.clientY)
-                      ?.closest('.terminal-tab')
-                    const overId = over?.getAttribute('data-tab-id')
+                    const hit = document.elementFromPoint(e.clientX, e.clientY)
+                    const overTab = hit?.closest('.terminal-tab')
+                    // Dragging past the tab strip entirely and onto the terminal content itself
+                    // (a session panel, not just its tab) always merges - dropping directly onto
+                    // a session is unambiguous, there's no "just reorder" reading of it - and
+                    // lands dragId right after that pane's tab within its group, i.e. stacked
+                    // below it (or to its right, in horizontal orientation).
+                    const overPane = !overTab ? hit?.closest('.terminal-tab-pane') : null
+                    if (paneHoverElRef.current && paneHoverElRef.current !== overPane) {
+                      paneHoverElRef.current.classList.remove('terminal-tab-pane-drop-target')
+                      paneHoverElRef.current = null
+                    }
                     let next: { id: string; zone: DropZone } | null = null
-                    if (over && overId && overId !== dragId) {
-                      const rect = over.getBoundingClientRect()
-                      // The middle third of the target tab merges dragId into its group; the
-                      // outer thirds (along the strip's own axis) just reorder instead - without
-                      // this split, dropping anywhere on a tab always merged, so two standalone
-                      // tabs could never swap places without also getting stacked together.
-                      const rel =
-                        orientation === 'vertical'
-                          ? (e.clientY - rect.top) / rect.height
-                          : (e.clientX - rect.left) / rect.width
-                      const zone: DropZone = rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'merge'
-                      next = { id: overId, zone }
+                    if (overPane) {
+                      const paneId = overPane.getAttribute('data-tab-id')
+                      if (paneId && paneId !== dragId) {
+                        overPane.classList.add('terminal-tab-pane-drop-target')
+                        paneHoverElRef.current = overPane
+                        next = { id: paneId, zone: 'merge' }
+                      }
+                    } else {
+                      const overId = overTab?.getAttribute('data-tab-id')
+                      if (overTab && overId && overId !== dragId) {
+                        const rect = overTab.getBoundingClientRect()
+                        // The middle third of the target tab merges dragId into its group; the
+                        // outer thirds (along the strip's own axis) just reorder instead -
+                        // without this split, dropping anywhere on a tab always merged, so two
+                        // standalone tabs could never swap places without also getting stacked.
+                        const rel =
+                          orientation === 'vertical'
+                            ? (e.clientY - rect.top) / rect.height
+                            : (e.clientX - rect.left) / rect.width
+                        const zone: DropZone = rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'merge'
+                        next = { id: overId, zone }
+                      }
                     }
                     hoverRef.current = next
                     setHover(next)
@@ -147,6 +172,10 @@ export default function TerminalTabBar({
                     if (draggingIdRef.current && movedRef.current) {
                       const drop = hoverRef.current
                       onDrop(draggingIdRef.current, drop?.id ?? null, drop?.zone ?? 'merge')
+                    }
+                    if (paneHoverElRef.current) {
+                      paneHoverElRef.current.classList.remove('terminal-tab-pane-drop-target')
+                      paneHoverElRef.current = null
                     }
                     draggingIdRef.current = null
                     hoverRef.current = null

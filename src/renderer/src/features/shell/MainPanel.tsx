@@ -298,6 +298,7 @@ export default function MainPanel({
                   return (
                     <div
                       key={tabId}
+                      data-tab-id={tabId}
                       className={`terminal-tab-pane${
                         activeGroup.length > 1 && tabId === activeTabId
                           ? ' terminal-tab-pane-focused'
