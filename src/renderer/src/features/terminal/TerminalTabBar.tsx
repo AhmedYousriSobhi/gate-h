@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 
 interface TerminalTabBarProps {
@@ -6,24 +7,42 @@ interface TerminalTabBarProps {
   onSelect: (id: string) => void
   onAdd: () => void
   onClose: (id: string) => void
+  onReorder: (dragId: string, dropId: string) => void
 }
 
 // Tab 0 is the cluster's primary session (the one keepAliveInBackground/standby apply to - see
-// MainPanel) and can't be closed; every other tab is an ordinary foreground-only session.
+// MainPanel) and can't be closed or reordered; every other tab is an ordinary foreground-only
+// session, freely draggable among themselves.
 export default function TerminalTabBar({
   tabs,
   activeTabId,
   onSelect,
   onAdd,
-  onClose
+  onClose,
+  onReorder
 }: TerminalTabBarProps): React.JSX.Element {
+  const [dragId, setDragId] = useState<string | null>(null)
+
   return (
     <div className="terminal-tabbar">
       {tabs.map((id, index) => (
         <div
           key={id}
-          className={`terminal-tab${id === activeTabId ? ' terminal-tab-active' : ''}`}
+          className={`terminal-tab${id === activeTabId ? ' terminal-tab-active' : ''}${
+            id === dragId ? ' terminal-tab-dragging' : ''
+          }`}
+          draggable={index > 0}
           onClick={() => onSelect(id)}
+          onDragStart={() => setDragId(id)}
+          onDragEnd={() => setDragId(null)}
+          onDragOver={(e) => {
+            if (index > 0) e.preventDefault()
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            if (dragId && index > 0 && dragId !== id) onReorder(dragId, id)
+            setDragId(null)
+          }}
         >
           <span>Tab {index + 1}</span>
           {index > 0 && (

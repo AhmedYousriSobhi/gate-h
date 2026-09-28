@@ -74,6 +74,22 @@ export default function MainPanel({
     [tabs, activeTabId]
   )
 
+  // Tab 0 stays first - it's the cluster's primary/pinned session (see the `tabs` comment above),
+  // so neither end of a reorder is allowed to touch it.
+  const handleReorderTab = useCallback(
+    (dragId: string, dropId: string): void => {
+      if (tabs[0] === dragId || tabs[0] === dropId) return
+      const from = tabs.indexOf(dragId)
+      const to = tabs.indexOf(dropId)
+      if (from === -1 || to === -1) return
+      const next = [...tabs]
+      next.splice(from, 1)
+      next.splice(to, 0, dragId)
+      setTabs(next)
+    },
+    [tabs]
+  )
+
   function handleResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
     e.currentTarget.setPointerCapture(e.pointerId)
   }
@@ -157,6 +173,7 @@ export default function MainPanel({
               onSelect={setActiveTabId}
               onAdd={handleAddTab}
               onClose={handleCloseTab}
+              onReorder={handleReorderTab}
             />
             <div className="terminal-tab-panes">
               {tabs.map((tabId, index) => {
