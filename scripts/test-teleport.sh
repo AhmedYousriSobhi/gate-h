@@ -39,6 +39,7 @@ case "$sub" in
         trap 'echo "ERROR: Get \"https://teleport.example.com:443/webapi/ping\": context canceled" >&2; exit 1' TERM
         sleep 30 & wait ;;
     esac ;;
+  logout) rm -f "$MOCK/status.json" ;;
   ssh | scp) echo "tsh-ran $*" ;;
 esac
 EOF
@@ -132,6 +133,12 @@ if command -v timeout >/dev/null; then
   MOCK_LOGIN=hang expect 5 "a login nobody completes times out" login "${P[@]}" --login-timeout 1
   MOCK_LOGIN=blackhole expect 6 "a proxy that never answers is a network error" login "${P[@]}" --login-timeout 1
 fi
+
+session teleport.example.com alice 43200
+expect 0 "login --force renews a still-valid session" login "${P[@]}" --force
+check "...signing out of that proxy first" grep -qx "logout --proxy=teleport.example.com:443" "$WORK/calls"
+check "...then logging in again" grep -q "^login --proxy=teleport.example.com:443" "$WORK/calls"
+reset
 
 echo "-- routing"
 reset
