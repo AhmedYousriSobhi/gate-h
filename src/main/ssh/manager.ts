@@ -9,7 +9,13 @@ import { addNotification } from '../notifications/store'
 import { checkKnownHost } from './knownHosts'
 import { ensureTunnel, stopTunnel } from '../azure/tunnel'
 import { ptyManager } from '../pty/manager'
-import { TeleportPreflight, teleportSshCommand } from '../teleport/session'
+import {
+  EXIT_NO_SESSION,
+  TeleportPreflight,
+  teleportLoginCommand,
+  teleportSshCommand
+} from '../teleport/session'
+import { refreshTeleportSessions } from '../teleport/sessionState'
 import type { ClusterSummary, ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
@@ -264,6 +270,13 @@ function openTeleportSession(cluster: ClusterSummary, sender: WebContents): { se
     },
     onExit: ({ exitCode, signal }) => {
       const intentional = intentionalCloses.delete(sessionId)
+      if (!intentional && exitCode === EXIT_NO_SESSION && !signal) {
+        // Not a failure to report: the terminal needs the user to log in. The session monitor
+        // already announces expiry once per proxy, rather than once per pinned cluster.
+        void refreshTeleportSessions()
+        safeSend(sender, 'ssh:closed', { sessionId, exitCode, authRequired: true })
+        return
+      }
       // Exit 0 is the user typing `exit` (or tsh ending the remote shell normally) - not worth a
       // notification, unlike the wrapper's non-zero codes or tsh dying on a dropped connection.
       if (!intentional && (exitCode !== 0 || signal)) {
@@ -280,7 +293,31 @@ function openTeleportSession(cluster: ClusterSummary, sender: WebContents): { se
             : `SSH session to ${cluster.name} was closed unexpectedly`
         })
       }
-      safeSend(sender, 'ssh:closed', { sessionId })
+      safeSend(sender, 'ssh:closed', { sessionId, exitCode })
+    }
+  })
+  return { sessionId }
+}
+
+/** The user-started Teleport login (see teleportLoginCommand), streamed over the same ssh:*
+ *  events as a terminal so the login dialog can reuse them. */
+export function openTeleportLogin(
+  clusterId: string,
+  renew: boolean,
+  sender: WebContents
+): { sessionId: string } {
+  const cluster = getCluster(clusterId)
+  if (!cluster?.teleport) throw new Error('This cluster is not set up for Teleport')
+  let sessionId = ''
+  sessionId = ptyManager.spawn(teleportLoginCommand(cluster, renew), {
+    onData: (chunk) => safeSend(sender, 'ssh:data', { sessionId, chunk }),
+    onExit: ({ exitCode }) => {
+      intentionalCloses.delete(sessionId)
+      // Refresh before reporting, so every terminal on this proxy hears about the new session
+      // by the time the dialog closes.
+      void refreshTeleportSessions().finally(() =>
+        safeSend(sender, 'ssh:closed', { sessionId, exitCode })
+      )
     }
   })
   return { sessionId }

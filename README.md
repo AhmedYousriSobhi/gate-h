@@ -120,8 +120,11 @@ set a password, and scan the QR code into an authenticator app.
 
 2. Select the cluster:
    - **Already logged in:** your shell opens straight away.
-   - **Not logged in:** your browser opens for single sign-on, or the terminal asks for your
-     password and 6-digit code. Then your shell opens.
+   - **Not logged in:** the terminal shows **Teleport login needed**. Click **Log in**, then
+     finish single sign-on in your browser, or enter your password and 6-digit code. Every
+     cluster behind the same proxy reconnects.
+3. About 15 minutes before your login expires, you get a notification and a **Renew** button in
+   the terminal's status bar, so you can renew it whenever suits you.
 
 💡 Proxy uses your organisation's own CA? Start Gate-H with `SSL_CERT_FILE=/path/to/ca.pem`.
 More: [docs/TELEPORT.md](docs/TELEPORT.md).
@@ -251,6 +254,7 @@ connection attempts. Secrets are encrypted on disk.
 | Azure: a sign-in code appears | Your Azure login expired. Open the link and enter the code. |
 | Teleport: *unreachable* or *no route to host* | Your machine can't reach the proxy. Check the VPN and the proxy address. |
 | Teleport: *certificate signed by unknown authority* | Start Gate-H with `SSL_CERT_FILE` pointing at your organisation's CA file. |
+| Teleport: *login needed* on a cluster you didn't open | Pinned clusters never log in on their own. Log in from any cluster on that proxy; the rest reconnect. |
 | Teleport: *access denied* | Your Teleport role doesn't allow that login or node. Run `tsh status` to see your logins. |
 
 ## For developers
