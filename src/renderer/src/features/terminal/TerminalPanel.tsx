@@ -28,6 +28,11 @@ const MAX_RECONNECT_ATTEMPTS = 2
 const RECONNECT_WINDOW_MS = 2 * 60_000
 const BASE_RECONNECT_DELAY_MS = 5_000
 const RECONNECT_JITTER_MS = 1_000
+// How long a session must stay up before it counts as a real connection and restores the retry
+// budget. Resetting the moment connect() resolves isn't enough: a Teleport session "connects" as
+// soon as its local PTY starts, and tsh can still fail to reach the proxy a moment later - so a
+// down proxy would reset the budget on every attempt and retry forever.
+const STABLE_SESSION_MS = 30_000
 
 export default function TerminalPanel({
   cluster,
@@ -120,6 +125,7 @@ export default function TerminalPanel({
 
     let disposed = false
     let sessionId: string | null = null
+    let stableTimer: ReturnType<typeof setTimeout> | null = null
     setStatus('connecting')
     setConnectError(null)
 
@@ -145,7 +151,9 @@ export default function TerminalPanel({
       if (event.sessionId === sessionId) term.write(event.chunk)
     })
     const offClosed = window.api.ssh.onClosed((event) => {
-      if (event.sessionId === sessionId && !disposed) scheduleReconnectOrPause()
+      if (event.sessionId !== sessionId || disposed) return
+      if (stableTimer) clearTimeout(stableTimer)
+      scheduleReconnectOrPause()
     })
     const offError = window.api.ssh.onError((event) => {
       if (event.sessionId === sessionId) setConnectError(event.message)
@@ -163,9 +171,11 @@ export default function TerminalPanel({
           return
         }
         sessionId = result.sessionId
-        windowStartRef.current = Date.now()
-        attemptsRef.current = 0
-        setRetryAttempt(0)
+        stableTimer = setTimeout(() => {
+          windowStartRef.current = Date.now()
+          attemptsRef.current = 0
+          setRetryAttempt(0)
+        }, STABLE_SESSION_MS)
         setStatus('connected')
         window.api.ssh.resize(sessionId, term.cols, term.rows)
         term.focus()
@@ -178,6 +188,7 @@ export default function TerminalPanel({
     return () => {
       disposed = true
       clearRetryTimer()
+      if (stableTimer) clearTimeout(stableTimer)
       resizeObserver.disconnect()
       offData()
       offClosed()
