@@ -4,6 +4,18 @@ import type { ClusterReachability, ClusterSummary } from '../../../../shared/typ
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import TerminalTabBar, { type PaneEdge } from '../terminal/TerminalTabBar'
 import TabContextMenu from '../terminal/TabContextMenu'
+import {
+  insertBeside,
+  layoutRects,
+  leaf,
+  leaves,
+  removeLeaf,
+  setRootDir,
+  swapLeaves,
+  type Edge,
+  type LayoutNode,
+  type SplitDir
+} from '../terminal/splitLayout'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
 import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
@@ -51,19 +63,17 @@ export default function MainPanel({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
   // The primary tab is this cluster's pinned session - the one keepAliveInBackground/standby
-  // apply to (see AppShell's `hidden` prop) - identified by a stable id rather than array
-  // position, since dragging can now move any other tab into or out of its group. It can't be
-  // closed or dragged itself, but other tabs can be dropped onto it to join its group. Every tab
-  // (in every group, not just the active one) stays mounted for as long as this MainPanel instance
-  // does - only the `hidden` check below (this cluster isn't selected) tears a non-primary tab's
-  // session down, not merely being in an inactive group.
+  // apply to (see AppShell's `hidden` prop) - identified by a stable id rather than position, so
+  // it can be dragged anywhere like any other tab; it just can't be closed. Every tab (in every
+  // stack, not just the visible one) stays mounted for as long as this MainPanel instance does -
+  // only the `hidden` check below tears a non-primary tab's session down.
   const [primaryTabId] = useState(() => crypto.randomUUID())
-  // Tabs the user has dragged onto each other are "stacked" - shown split, simultaneously, per
-  // tabOrientation - while separate groups are reached by clicking/cycling between them, one at a
-  // time. A fresh tab always starts in its own standalone group.
-  const [groups, setGroups] = useState<string[][]>(() => [[primaryTabId]])
+  // One split tree per stack (see splitLayout.ts): sessions dragged together are shown at once,
+  // arranged by the tree - which can mix directions, e.g. two side by side above a third - while
+  // separate stacks are reached by clicking/cycling between them. A new tab starts as its own stack.
+  const [groups, setGroups] = useState<LayoutNode[]>(() => [leaf(primaryTabId)])
   const [activeTabId, setActiveTabId] = useState<string>(primaryTabId)
-  // Creation order, not display order - a tab's "Tab N" label comes from here so it stays put
+  // Creation order, not display order - a tab's "Session N" label comes from here so it stays put
   // across reorders/regroups instead of relabeling every tab whenever positions shift.
   const [tabOrder, setTabOrder] = useState<string[]>(() => [primaryTabId])
   const tabNumbers = useMemo(
@@ -84,15 +94,27 @@ export default function MainPanel({
     null
   )
   // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
-  // above the terminal, like typical editor tabs) is the alternative, toggled in TerminalTabBar.
+  // above the terminal, like typical editor tabs) is the alternative, chosen in the layout menu.
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
-  // Independent of tabOrientation - a stacked group's panes can be shown side by side
-  // ('horizontal') or stacked top/bottom ('vertical') regardless of which way the tab strip
-  // itself is laid out, so a vertical tab sidebar isn't forced into a top/bottom split.
-  const [splitOrientation, setSplitOrientation] = useState<'horizontal' | 'vertical'>('vertical')
+  // Direction for splits that don't come with one of their own (the split button/shortcut, a
+  // tab-strip merge). Dropping on a panel's edge picks its own direction instead.
+  const [defaultSplit, setDefaultSplit] = useState<SplitDir>('column')
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
-  const activeGroup = groups.find((g) => g.includes(activeTabId)) ?? groups[0]
+  const groupLeaves = useMemo(() => groups.map(leaves), [groups])
+  const allTabs = useMemo(() => groupLeaves.flat(), [groupLeaves])
+  const activeGroupIndex = Math.max(
+    0,
+    groupLeaves.findIndex((ids) => ids.includes(activeTabId))
+  )
+  const activeGroup = groups[activeGroupIndex]
+  const activeRects = useMemo(() => layoutRects(activeGroup), [activeGroup])
+  const activeIsSplit = activeGroup.kind === 'split'
+  // What the layout menu shows as selected: the visible stack's own outer direction if it's
+  // split, otherwise the default a new split would use.
+  const splitOrientation =
+    (activeIsSplit ? activeGroup.dir : defaultSplit) === 'row' ? 'horizontal' : 'vertical'
+  const defaultEdge: Edge = defaultSplit === 'row' ? 'right' : 'bottom'
 
   const tabTitle = useCallback(
     (id: string): string => tabTitles.get(id) ?? `Session ${tabNumbers.get(id)}`,
@@ -101,7 +123,7 @@ export default function MainPanel({
 
   const handleAddTab = useCallback((): void => {
     const id = crypto.randomUUID()
-    setGroups((prev) => [...prev, [id]])
+    setGroups((prev) => [...prev, leaf(id)])
     setTabOrder((prev) => [...prev, id])
     setActiveTabId(id)
   }, [])
@@ -119,81 +141,81 @@ export default function MainPanel({
     })
   }, [])
 
+  const removeEverywhere = (prev: LayoutNode[], ids: Set<string>): LayoutNode[] =>
+    prev
+      .map((g) => [...ids].reduce<LayoutNode | null>((n, id) => (n ? removeLeaf(n, id) : n), g))
+      .filter((g): g is LayoutNode => g !== null)
+
   const handleCloseTab = useCallback(
     (id: string): void => {
       if (id === primaryTabId) return
-      setGroups((prev) => prev.map((g) => g.filter((t) => t !== id)).filter((g) => g.length > 0))
+      setGroups((prev) => removeEverywhere(prev, new Set([id])))
       dropFromMaps(new Set([id]))
       if (activeTabId === id) {
-        const siblings = groups.find((g) => g.includes(id))?.filter((t) => t !== id) ?? []
+        const siblings = groupLeaves.find((g) => g.includes(id))?.filter((t) => t !== id) ?? []
         setActiveTabId(siblings[0] ?? primaryTabId)
       }
     },
-    [activeTabId, groups, primaryTabId, dropFromMaps]
+    [activeTabId, groupLeaves, primaryTabId, dropFromMaps]
   )
 
   // Keeps `keepId` and the primary tab, closes everything else.
   const handleCloseOtherTabs = useCallback(
     (keepId: string): void => {
-      const closed = new Set(groups.flat().filter((id) => id !== keepId && id !== primaryTabId))
+      const closed = new Set(allTabs.filter((id) => id !== keepId && id !== primaryTabId))
       if (closed.size === 0) return
-      setGroups((prev) =>
-        prev.map((g) => g.filter((t) => !closed.has(t))).filter((g) => g.length > 0)
-      )
+      setGroups((prev) => removeEverywhere(prev, closed))
       dropFromMaps(closed)
       setActiveTabId(keepId)
     },
-    [groups, primaryTabId, dropFromMaps]
+    [allTabs, primaryTabId, dropFromMaps]
   )
 
   const handleCloseAllTabs = useCallback((): void => {
-    const closed = new Set(groups.flat().filter((id) => id !== primaryTabId))
+    const closed = new Set(allTabs.filter((id) => id !== primaryTabId))
     if (closed.size === 0) return
-    setGroups([[primaryTabId]])
+    setGroups([leaf(primaryTabId)])
     dropFromMaps(closed)
     setActiveTabId(primaryTabId)
-  }, [groups, primaryTabId, dropFromMaps])
+  }, [allTabs, primaryTabId, dropFromMaps])
 
-  // Opens a brand-new session positioned right next to `sourceId` (its own standalone group, not
-  // merged into sourceId's) - same session semantics as the "+" button, just placed by the tab
-  // that was duplicated rather than always appended at the end.
+  // Opens a brand-new session as its own stack right after `sourceId`'s - same session semantics
+  // as the "+" button, just placed by the tab that was duplicated instead of at the end.
   const handleDuplicateTab = useCallback((sourceId: string): void => {
     const newId = crypto.randomUUID()
     setGroups((prev) => {
-      const groupIndex = prev.findIndex((g) => g.includes(sourceId))
+      const groupIndex = prev.findIndex((g) => leaves(g).includes(sourceId))
       if (groupIndex === -1) return prev
       const next = prev.slice()
-      next.splice(groupIndex + 1, 0, [newId])
+      next.splice(groupIndex + 1, 0, leaf(newId))
       return next
     })
     setTabOrder((prev) => [...prev, newId])
     setActiveTabId(newId)
   }, [])
 
-  // VS Code's "Split Terminal": a new session stacked right after `sourceId` in its own group.
-  const handleSplitTab = useCallback((sourceId: string): void => {
-    const newId = crypto.randomUUID()
-    setGroups((prev) =>
-      prev.map((g) => {
-        if (!g.includes(sourceId)) return g
-        const next = [...g]
-        next.splice(g.indexOf(sourceId) + 1, 0, newId)
-        return next
-      })
-    )
-    setTabOrder((prev) => [...prev, newId])
-    setActiveTabId(newId)
-  }, [])
+  // VS Code's "Split Terminal": a new session beside `sourceId`, in the default direction.
+  const handleSplitTab = useCallback(
+    (sourceId: string): void => {
+      const newId = crypto.randomUUID()
+      setGroups((prev) =>
+        prev.map((g) =>
+          leaves(g).includes(sourceId) ? insertBeside(g, sourceId, newId, defaultEdge) : g
+        )
+      )
+      setTabOrder((prev) => [...prev, newId])
+      setActiveTabId(newId)
+    },
+    [defaultEdge]
+  )
 
-  // Pulls `id` out of its current group into its own standalone one - the same outcome as
-  // dropping it on empty tab-strip space, also reachable from the context menu's "Unstack".
+  // Pulls `id` out of its current stack into its own - the same outcome as dropping it on empty
+  // tab-strip space, also reachable from the context menu's "Unstack".
   const extractToStandaloneGroup = useCallback((id: string): void => {
     setGroups((prev) => {
-      const fromIndex = prev.findIndex((g) => g.includes(id))
-      if (fromIndex === -1 || prev[fromIndex].length === 1) return prev
-      const next = prev.map((g, i) => (i === fromIndex ? g.filter((t) => t !== id) : g))
-      next.push([id])
-      return next
+      const from = prev.find((g) => leaves(g).includes(id))
+      if (!from || from.kind === 'leaf') return prev
+      return [...removeEverywhere(prev, new Set([id])), leaf(id)]
     })
   }, [])
 
@@ -220,93 +242,88 @@ export default function MainPanel({
     setRenamingId(null)
   }, [renamingId, renameValue])
 
+  // Moves dragId out of wherever it is and beside targetId on `edge` - shared by tab-strip merges
+  // and panel-edge drops, which differ only in how the edge is chosen.
+  const moveBeside = useCallback((dragId: string, targetId: string, edge: Edge): void => {
+    setGroups((prev) =>
+      removeEverywhere(prev, new Set([dragId])).map((g) =>
+        leaves(g).includes(targetId) ? insertBeside(g, targetId, dragId, edge) : g
+      )
+    )
+    setActiveTabId(dragId)
+  }, [])
+
   // The single drop handler behind every drag gesture in the tab strip. `zone` (see
-  // TerminalTabBar) is which third of dropId's tab was hovered: dropping within the same group
-  // always just reorders that group's pane order regardless of zone; across groups, the middle
-  // third ('merge') stacks dragId into dropId's group (shown split together), while the outer
-  // thirds ('before'/'after') instead reposition dragId as its own standalone group next to
-  // dropId's - without that split, dropping one standalone tab onto another would always merge
-  // them, leaving no way to just swap two ungrouped tabs' positions. Dropping on empty strip
-  // space (dropId null) pops dragId back out into its own standalone group. The primary tab can
-  // never be the one dragged, though it's a valid drop target - other tabs can still join its
-  // group.
+  // TerminalTabBar) is which part of dropId's tab was hovered: within the same stack, any drop
+  // swaps the two sessions' places; across stacks, the middle ('merge') adds dragId beside dropId
+  // in the default direction, while the outer strips ('before'/'after') instead reposition dragId
+  // as its own stack next to dropId's - without that, dropping one standalone tab onto another
+  // would always merge them, leaving no way to just reorder. Dropping on empty strip space
+  // (dropId null) pops dragId out into its own stack.
   const handleDropTab = useCallback(
     (dragId: string, dropId: string | null, zone: 'before' | 'after' | 'merge'): void => {
-      if (dragId === primaryTabId || dragId === dropId) return
+      if (dragId === dropId) return
       if (dropId === null) {
         extractToStandaloneGroup(dragId)
         setActiveTabId(dragId)
         return
       }
+      const from = groupLeaves.findIndex((g) => g.includes(dragId))
+      const to = groupLeaves.findIndex((g) => g.includes(dropId))
+      if (from === -1 || to === -1) return
+      if (from === to) {
+        setGroups((prev) => prev.map((g, i) => (i === from ? swapLeaves(g, dragId, dropId) : g)))
+        setActiveTabId(dragId)
+        return
+      }
+      if (zone === 'merge') {
+        moveBeside(dragId, dropId, defaultEdge)
+        return
+      }
       setGroups((prev) => {
-        const fromIndex = prev.findIndex((g) => g.includes(dragId))
-        if (fromIndex === -1) return prev
-
-        const toIndex = prev.findIndex((g) => g.includes(dropId))
-        if (toIndex === -1) return prev
-
-        if (fromIndex === toIndex) {
-          const group = [...prev[fromIndex]]
-          group.splice(group.indexOf(dragId), 1)
-          group.splice(group.indexOf(dropId), 0, dragId)
-          return prev.map((g, i) => (i === fromIndex ? group : g))
-        }
-
-        if (zone === 'merge') {
-          const withoutDrag = prev.map((g) => g.filter((t) => t !== dragId))
-          const toGroup = [...withoutDrag[toIndex]]
-          toGroup.splice(toGroup.indexOf(dropId) + 1, 0, dragId)
-          return withoutDrag
-            .map((g, i) => (i === toIndex ? toGroup : g))
-            .filter((g) => g.length > 0)
-        }
-
-        const withoutDrag = prev
-          .map((g) => g.filter((t) => t !== dragId))
-          .filter((g) => g.length > 0)
-        const targetGroupIndex = withoutDrag.findIndex((g) => g.includes(dropId))
-        withoutDrag.splice(zone === 'before' ? targetGroupIndex : targetGroupIndex + 1, 0, [dragId])
-        return withoutDrag
+        const without = removeEverywhere(prev, new Set([dragId]))
+        const target = without.findIndex((g) => leaves(g).includes(dropId))
+        without.splice(zone === 'before' ? target : target + 1, 0, leaf(dragId))
+        return without
       })
       setActiveTabId(dragId)
     },
-    [primaryTabId, extractToStandaloneGroup]
+    [groupLeaves, extractToStandaloneGroup, moveBeside, defaultEdge]
   )
 
-  // A tab dropped onto a session panel's edge (VS Code's drag-to-split): it joins that panel's
-  // group on the dropped side, and the edge also sets the split direction - left/right means side
-  // by side, top/bottom means stacked - so the layout follows the gesture without the menu.
+  // A tab dropped onto a session panel's edge (VS Code's drag-to-split): it goes on that side of
+  // that one panel only, nesting a new split when needed - so a stack can become a grid, e.g.
+  // two side by side above a third, without re-laying out anything else.
   const handlePaneDrop = useCallback(
     (dragId: string, paneId: string, edge: PaneEdge): void => {
-      if (dragId === primaryTabId || dragId === paneId) return
-      setGroups((prev) => {
-        const without = prev.map((g) => g.filter((t) => t !== dragId)).filter((g) => g.length > 0)
-        return without.map((g) => {
-          if (!g.includes(paneId)) return g
-          const next = [...g]
-          const at = g.indexOf(paneId) + (edge === 'left' || edge === 'top' ? 0 : 1)
-          next.splice(at, 0, dragId)
-          return next
-        })
-      })
-      setSplitOrientation(edge === 'left' || edge === 'right' ? 'horizontal' : 'vertical')
-      setActiveTabId(dragId)
+      if (dragId === paneId) return
+      moveBeside(dragId, paneId, edge)
     },
-    [primaryTabId]
+    [moveBeside]
+  )
+
+  // The layout menu's "Split sessions" choice: flips the visible stack's outer split and becomes
+  // the default for future splits.
+  const handleSplitOrientationChange = useCallback(
+    (next: 'horizontal' | 'vertical'): void => {
+      const dir: SplitDir = next === 'horizontal' ? 'row' : 'column'
+      setDefaultSplit(dir)
+      setGroups((prev) => prev.map((g, i) => (i === activeGroupIndex ? setRootDir(g, dir) : g)))
+    },
+    [activeGroupIndex]
   )
 
   // Ctrl/Cmd+Tab (+Shift to reverse), forwarded up from whichever tab's terminal currently has
-  // focus - see TerminalPanel's onCycleTab prop. Cycles every tab across every group (flattened),
-  // wrapping around in both directions - which group becomes visible follows from activeGroup.
+  // focus - see TerminalPanel's onCycleTab prop. Cycles every tab across every stack, wrapping
+  // around in both directions - which stack becomes visible follows from activeGroup.
   const handleCycleTab = useCallback(
     (direction: 1 | -1): void => {
-      const flat = groups.flat()
       setActiveTabId((current) => {
-        const idx = flat.indexOf(current)
-        return flat[(idx + direction + flat.length) % flat.length]
+        const idx = allTabs.indexOf(current)
+        return allTabs[(idx + direction + allTabs.length) % allTabs.length]
       })
     },
-    [groups]
+    [allTabs]
   )
 
   function handleResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
@@ -388,7 +405,7 @@ export default function MainPanel({
           <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
             <div className={`terminal-tabs-layout terminal-tabs-layout-${tabOrientation}`}>
               <TerminalTabBar
-                groups={groups}
+                groups={groupLeaves}
                 tabNumbers={tabNumbers}
                 statuses={tabStatuses}
                 titles={tabTitles}
@@ -410,48 +427,58 @@ export default function MainPanel({
                 onRenameCancel={() => setRenamingId(null)}
                 onContextMenu={(id, x, y) => setContextMenu({ tabId: id, x, y })}
                 onOrientationChange={setTabOrientation}
-                onSplitOrientationChange={setSplitOrientation}
+                onSplitOrientationChange={handleSplitOrientationChange}
               />
-              <div
-                className={`terminal-tab-panes${
-                  activeGroup.length > 1 ? ` terminal-tab-panes-split-${splitOrientation}` : ''
-                }`}
-              >
-                {groups.flat().map((tabId) => {
-                  const isPrimary = tabId === primaryTabId
-                  if (!isPrimary && hidden) return null
-                  const isVisible = activeGroup.includes(tabId)
-                  return (
-                    <div
-                      key={tabId}
-                      data-tab-id={tabId}
-                      className={`terminal-tab-pane${
-                        activeGroup.length > 1 && tabId === activeTabId
-                          ? ' terminal-tab-pane-focused'
-                          : ''
-                      }`}
-                      style={{ display: isVisible ? 'flex' : 'none' }}
-                      onPointerDown={() => setActiveTabId(tabId)}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        setContextMenu({ tabId, x: e.clientX, y: e.clientY })
-                      }}
-                    >
-                      <TerminalPanel
-                        cluster={cluster}
-                        reachability={reachability}
-                        onStatusChange={(status) => {
-                          setTabStatuses((prev) =>
-                            prev.get(tabId) === status ? prev : new Map(prev).set(tabId, status)
-                          )
-                          if (isPrimary) onTerminalStatusChange?.(status)
+              <div className="terminal-tab-panes">
+                {/* Creation order and one shared parent, never the tree's own nesting: panes are
+                    absolutely positioned from layoutRects instead, so regrouping or re-splitting
+                    never re-parents (and so never remounts/reconnects) a session. */}
+                {tabOrder
+                  .filter((id) => allTabs.includes(id))
+                  .map((tabId) => {
+                    const isPrimary = tabId === primaryTabId
+                    if (!isPrimary && hidden) return null
+                    const rect = activeRects.get(tabId)
+                    return (
+                      <div
+                        key={tabId}
+                        data-tab-id={tabId}
+                        className={`terminal-tab-pane${
+                          activeIsSplit && tabId === activeTabId ? ' terminal-tab-pane-focused' : ''
+                        }${rect && rect.x + rect.w < 0.999 ? ' terminal-tab-pane-border-right' : ''}${
+                          rect && rect.y + rect.h < 0.999 ? ' terminal-tab-pane-border-bottom' : ''
+                        }`}
+                        style={
+                          rect
+                            ? {
+                                left: `${rect.x * 100}%`,
+                                top: `${rect.y * 100}%`,
+                                width: `${rect.w * 100}%`,
+                                height: `${rect.h * 100}%`
+                              }
+                            : { display: 'none' }
+                        }
+                        onPointerDown={() => setActiveTabId(tabId)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          setContextMenu({ tabId, x: e.clientX, y: e.clientY })
                         }}
-                        onCycleTab={handleCycleTab}
-                        onSplit={() => handleSplitTab(tabId)}
-                      />
-                    </div>
-                  )
-                })}
+                      >
+                        <TerminalPanel
+                          cluster={cluster}
+                          reachability={reachability}
+                          onStatusChange={(status) => {
+                            setTabStatuses((prev) =>
+                              prev.get(tabId) === status ? prev : new Map(prev).set(tabId, status)
+                            )
+                            if (isPrimary) onTerminalStatusChange?.(status)
+                          }}
+                          onCycleTab={handleCycleTab}
+                          onSplit={() => handleSplitTab(tabId)}
+                        />
+                      </div>
+                    )
+                  })}
               </div>
             </div>
           </div>
@@ -487,8 +514,8 @@ export default function MainPanel({
         (() => {
           const { tabId } = contextMenu
           const isPrimary = tabId === primaryTabId
-          const group = groups.find((g) => g.includes(tabId))
-          const others = groups.flat().filter((id) => id !== tabId && id !== primaryTabId)
+          const group = groupLeaves.find((g) => g.includes(tabId))
+          const others = allTabs.filter((id) => id !== tabId && id !== primaryTabId)
           return (
             <TabContextMenu
               x={contextMenu.x}
