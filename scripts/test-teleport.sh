@@ -34,6 +34,10 @@ case "$sub" in
       network) echo "ERROR: dial tcp: lookup teleport.example.com: no such host" >&2; exit 1 ;;
       tty) echo "ERROR: underlying reader is not a terminal" >&2; exit 1 ;;
       hang) sleep 30 ;;
+      # What tsh prints when killed while its first request to a silent proxy is still pending.
+      blackhole)
+        trap 'echo "ERROR: Get \"https://teleport.example.com:443/webapi/ping\": context canceled" >&2; exit 1' TERM
+        sleep 30 & wait ;;
     esac ;;
   ssh | scp) echo "tsh-ran $*" ;;
 esac
@@ -126,6 +130,7 @@ MOCK_LOGIN=tty expect 5 "a password prompt with no terminal fails login" login "
 check "...and says to log in from a terminal" grep -q "needs a terminal prompt" "$WORK/out"
 if command -v timeout >/dev/null; then
   MOCK_LOGIN=hang expect 5 "a login nobody completes times out" login "${P[@]}" --login-timeout 1
+  MOCK_LOGIN=blackhole expect 6 "a proxy that never answers is a network error" login "${P[@]}" --login-timeout 1
 fi
 
 echo "-- routing"

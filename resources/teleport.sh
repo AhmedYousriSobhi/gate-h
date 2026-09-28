@@ -199,7 +199,7 @@ check_session() {
         status valid "Logged in to $PROXY as $user (cluster $cluster, $(fmt_duration "$left") left)"
         return 0
       fi
-      status expired "Teleport session for $PROXY expires in $(fmt_duration "$left") - logging in again"
+      status expired "Teleport session for $PROXY expires in $(fmt_duration "$left"), under the ${MIN_TTL}s minimum (--min-ttl)"
       ;;
     expired) status expired "Teleport session for $PROXY has expired" ;;
     *) status expired "Not logged in to $PROXY" ;;
@@ -256,7 +256,15 @@ do_login() {
   "${runner[@]}" tsh "${args[@]}" <"$stdin" > >(tee "$errlog" >&2) 2>&1 || rc=$?
   wait $! 2>/dev/null || true
   if ((rc == 124)); then
+    local output
+    output=$(cat "$errlog")
     rm -f "$errlog"
+    # A proxy behind a firewall that drops packets never answers tsh's first
+    # request (webapi/ping), so tsh hangs until the timeout rather than
+    # failing fast like it does on a refused connection.
+    if grep -q 'webapi/ping' <<<"$output"; then
+      die "$EXIT_NETWORK" "Teleport proxy $PROXY did not respond within ${LOGIN_TIMEOUT}s (VPN down or blocked by a firewall?)"
+    fi
     die "$EXIT_LOGIN" "Login to $PROXY was not completed within ${LOGIN_TIMEOUT}s"
   fi
   if ((rc != 0)); then
