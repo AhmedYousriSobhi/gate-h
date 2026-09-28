@@ -48,6 +48,14 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+/* Toggled imperatively (not via React) by TerminalTabBar while dragging a tab over this pane -
+   dropping here stacks the dragged tab into this pane's group. A thick inset outline reads
+   clearly regardless of what the terminal itself is currently rendering underneath. */
+.terminal-tab-pane-drop-target {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .terminal-tabbar {
   display: flex;
   align-items: center;
