@@ -8,11 +8,16 @@ import { getCluster, getClusterSecrets } from '../clusters'
 import { addNotification } from '../notifications/store'
 import { checkKnownHost } from './knownHosts'
 import { ensureTunnel, stopTunnel } from '../azure/tunnel'
-import type { ConnectionProfile } from '../../shared/types'
+import { ptyManager } from '../pty/manager'
+import { TeleportPreflight, teleportSshCommand } from '../teleport/session'
+import type { ClusterSummary, ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
 // forwardOut, per the standard ssh2 jump-host pattern), opens an interactive shell channel, and
 // streams its output to the renderer over IPC. Sessions live only in memory for this process.
+// Teleport clusters are the exception: their session is `tsh ssh` on a local PTY (see
+// openTeleportSession), behind the same session ids and ssh:* events, so the renderer drives
+// both kinds identically.
 
 interface Session {
   clusterId: string
@@ -147,6 +152,7 @@ export async function openSshSession(
 ): Promise<{ sessionId: string }> {
   const cluster = getCluster(clusterId)
   if (!cluster) throw new Error('Cluster not found')
+  if (cluster.teleport) return openTeleportSession(cluster, sender)
   const secrets = getClusterSecrets(clusterId)
   const tunnel = cluster.azureTunnel
 
@@ -242,15 +248,60 @@ export async function openSshSession(
   return { sessionId }
 }
 
+function openTeleportSession(cluster: ClusterSummary, sender: WebContents): { sessionId: string } {
+  if (cluster.azureTunnel || cluster.connection.jumpHost) {
+    throw new Error(
+      'A Teleport cluster connects through its proxy only - remove the jump host or Azure tunnel.'
+    )
+  }
+  const preflight = new TeleportPreflight()
+  // The PTY only emits data/exit asynchronously, so this is assigned before either can fire.
+  let sessionId = ''
+  sessionId = ptyManager.spawn(teleportSshCommand(cluster), {
+    onData: (chunk) => {
+      preflight.feed(chunk)
+      safeSend(sender, 'ssh:data', { sessionId, chunk })
+    },
+    onExit: ({ exitCode, signal }) => {
+      const intentional = intentionalCloses.delete(sessionId)
+      // Exit 0 is the user typing `exit` (or tsh ending the remote shell normally) - not worth a
+      // notification, unlike the wrapper's non-zero codes or tsh dying on a dropped connection.
+      if (!intentional && (exitCode !== 0 || signal)) {
+        if (preflight.error) {
+          safeSend(sender, 'ssh:error', { sessionId, message: preflight.error })
+        }
+        addNotification({
+          clusterId: cluster.id,
+          clusterName: cluster.name,
+          kind: 'ssh',
+          severity: 'warning',
+          message: preflight.error
+            ? `Teleport session to ${cluster.name} failed: ${preflight.error}`
+            : `SSH session to ${cluster.name} was closed unexpectedly`
+        })
+      }
+      safeSend(sender, 'ssh:closed', { sessionId })
+    }
+  })
+  return { sessionId }
+}
+
 export function writeToSession(sessionId: string, data: string): void {
-  sessions.get(sessionId)?.stream.write(data)
+  if (ptyManager.has(sessionId)) ptyManager.write(sessionId, data)
+  else sessions.get(sessionId)?.stream.write(data)
 }
 
 export function resizeSession(sessionId: string, cols: number, rows: number): void {
-  sessions.get(sessionId)?.stream.setWindow(rows, cols, 0, 0)
+  if (ptyManager.has(sessionId)) ptyManager.resize(sessionId, cols, rows)
+  else sessions.get(sessionId)?.stream.setWindow(rows, cols, 0, 0)
 }
 
 export function closeSession(sessionId: string): void {
+  if (ptyManager.has(sessionId)) {
+    intentionalCloses.add(sessionId)
+    ptyManager.kill(sessionId)
+    return
+  }
   const session = sessions.get(sessionId)
   if (!session) return
   intentionalCloses.add(sessionId)
@@ -261,5 +312,5 @@ export function closeSession(sessionId: string): void {
 }
 
 export function closeAllSessions(): void {
-  for (const id of Array.from(sessions.keys())) closeSession(id)
+  for (const id of [...sessions.keys(), ...ptyManager.ids()]) closeSession(id)
 }
