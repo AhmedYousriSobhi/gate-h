@@ -14,6 +14,8 @@ import { registerProfileIpcHandlers } from './ipc/profiles'
 import { registerLayoutIpcHandlers } from './ipc/layout'
 import { registerAzureIpcHandlers } from './ipc/azure'
 import { setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
+import { registerTeleportIpcHandlers } from './ipc/teleport'
+import { startTeleportSessionMonitor, stopTeleportSessionMonitor } from './teleport/sessionState'
 import { closeAllSessions } from './ssh/manager'
 import {
   startClusterMonitor,
@@ -26,7 +28,8 @@ import { initUserDataDir } from './userData'
 import type {
   AzureTunnelStatusEvent,
   ClusterNotification,
-  ClusterReachability
+  ClusterReachability,
+  TeleportSessionInfo
 } from '../shared/types'
 
 // Must run before anything (including app.whenReady()) touches the userData path.
@@ -125,6 +128,7 @@ app.whenReady().then(() => {
   registerProfileIpcHandlers()
   registerLayoutIpcHandlers()
   registerAzureIpcHandlers()
+  registerTeleportIpcHandlers()
 
   createWindow()
 
@@ -145,6 +149,11 @@ app.whenReady().then(() => {
     }
   })
   startJiraMonitor()
+  startTeleportSessionMonitor((sessions: Record<string, TeleportSessionInfo>) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('teleport:sessions', sessions)
+    }
+  })
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
@@ -161,6 +170,7 @@ app.on('window-all-closed', () => {
   stopAllTunnels()
   stopClusterMonitor()
   stopJiraMonitor()
+  stopTeleportSessionMonitor()
   if (process.platform !== 'darwin') {
     app.quit()
   }

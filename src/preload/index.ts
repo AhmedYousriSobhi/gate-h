@@ -11,7 +11,8 @@ import type {
   PanelOrientation,
   SshClosedEvent,
   SshDataEvent,
-  SshErrorEvent
+  SshErrorEvent,
+  TeleportSessionInfo
 } from '../shared/types'
 
 // Custom APIs for renderer - a narrow, explicit surface over IPC. The renderer never gets
@@ -73,6 +74,19 @@ const api: GateHApi = {
       ipcRenderer.on('ssh:error', listener)
       return () => ipcRenderer.removeListener('ssh:error', listener)
     }
+  },
+  teleport: {
+    sessions: () => ipcRenderer.invoke('teleport:sessions'),
+    onSessions: (callback: (sessions: Record<string, TeleportSessionInfo>) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        payload: Record<string, TeleportSessionInfo>
+      ): void => callback(payload)
+      ipcRenderer.on('teleport:sessions', listener)
+      return () => ipcRenderer.removeListener('teleport:sessions', listener)
+    },
+    login: (clusterId: string, options: { renew: boolean }) =>
+      ipcRenderer.invoke('teleport:login', clusterId, options)
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),

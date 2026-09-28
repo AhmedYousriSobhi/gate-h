@@ -3,19 +3,44 @@ import type { ClusterSummary } from '../../shared/types'
 import type { PtySpawnOptions } from '../pty/manager'
 
 // A Teleport cluster's terminal is resources/teleport.sh running on a PTY: the script checks for
-// a usable tsh session, logs in if there isn't one (the password/OTP prompts or SSO link show up
-// in the terminal itself, where the user can answer them), then execs `tsh ssh`, which carries
-// the shell for the rest of the session. Nothing is ever answered on the user's behalf, so no
-// prompt can hang out of sight.
+// a usable tsh session, then execs `tsh ssh`, which carries the shell for the rest of the
+// session. The terminal never logs in by itself (`--no-login`): with no usable session it exits
+// with EXIT_NO_SESSION, and the renderer shows a "Log in" action instead. Logging in is its own,
+// user-started PTY (teleportLoginCommand), so a pinned cluster in the background, or a reconnect
+// nobody is watching, can't open SSO browser tabs or sit on a password prompt out of sight.
 
-export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
+/** teleport.sh's exit code for "no usable session and --no-login was given". */
+export const EXIT_NO_SESSION = 4
+
+function scopeArgs(cluster: ClusterSummary): string[] {
   const teleport = cluster.teleport
   if (!teleport) throw new Error(`${cluster.name} has no Teleport proxy configured`)
-  const args = [scriptPath, 'ssh', '--proxy', teleport.proxy]
+  const args = ['--proxy', teleport.proxy]
   if (teleport.cluster) args.push('--cluster', teleport.cluster)
   if (teleport.user) args.push('--user', teleport.user)
   if (teleport.authConnector) args.push('--auth', teleport.authConnector)
-  args.push('--', `${cluster.connection.username}@${cluster.connection.host}`)
+  return args
+}
+
+export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
+  return {
+    file: 'bash',
+    args: [
+      scriptPath,
+      'ssh',
+      ...scopeArgs(cluster),
+      '--no-login',
+      '--',
+      `${cluster.connection.username}@${cluster.connection.host}`
+    ]
+  }
+}
+
+/** The interactive login: password/OTP prompts in the PTY, or tsh opening the browser for SSO.
+ *  `renew` replaces a still-valid session (see teleport.sh's `login --force`). */
+export function teleportLoginCommand(cluster: ClusterSummary, renew: boolean): PtySpawnOptions {
+  const args = [scriptPath, 'login', ...scopeArgs(cluster)]
+  if (renew) args.push('--force')
   return { file: 'bash', args }
 }
 
