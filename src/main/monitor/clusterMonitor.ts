@@ -1,5 +1,5 @@
 import { listClusters } from '../clusters'
-import { checkTcpReachable } from './reachability'
+import { checkTcpReachable, checkTeleportProxyReachable } from './reachability'
 import { addNotification } from '../notifications/store'
 import { isTunnelUp } from '../azure/tunnel'
 import type { ClusterReachability, ClusterSummary } from '../../shared/types'
@@ -54,6 +54,8 @@ function setStatus(
  *  end to end; a Bastion tunnel isn't probed beyond its own health, since it only handles one
  *  connection at a time reliably (azure-cli#24600) and a probe could collide with the session. */
 async function isReachable(cluster: ClusterSummary): Promise<boolean> {
+  // A Teleport node's name only resolves inside the Teleport cluster, so its proxy stands in.
+  if (cluster.teleport) return checkTeleportProxyReachable(cluster.teleport.proxy)
   const tunnel = cluster.azureTunnel
   if (!tunnel) return checkTcpReachable(cluster.connection.host, cluster.connection.port)
   if (!(await isTunnelUp(cluster.id))) return false

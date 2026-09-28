@@ -197,6 +197,7 @@
   color: var(--color-checking);
 }
 
+.keep-alive-badge-auth-required,
 .keep-alive-badge-paused {
   color: var(--color-offline);
   background-color: rgba(240, 85, 95, 0.12);
