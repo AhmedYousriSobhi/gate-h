@@ -55,6 +55,7 @@ After a successful pre-flight, `ssh`/`scp` exit with the remote command's own ex
 ```bash
 ./resources/teleport.sh status --proxy teleport.example.com:443
 ./resources/teleport.sh login  --proxy teleport.example.com:443 --auth okta
+./resources/teleport.sh login  --proxy teleport.example.com:443 --force   # renew a still-valid session
 ./resources/teleport.sh ssh    --proxy teleport.example.com:443 --cluster hpc-leaf -- alice@slogin1
 ./resources/teleport.sh scp    --proxy teleport.example.com:443 -- ./job.sh alice@slogin1:~/
 ./resources/teleport.sh ssh    -- alice@login.direct.example.com     # not behind Teleport
@@ -112,12 +113,30 @@ xterm ──ssh:write/resize──▶ main: ptyManager (src/main/pty/manager.ts)
 - **Same session interface.** `openSshSession` in `src/main/ssh/manager.ts` sends Teleport
   clusters to the PTY and SSH/Azure clusters to `ssh2`. Both sit behind the same session IDs and
   `ssh:*` IPC channels, so the renderer drives both the same way.
-- **Prompts stay with the user.** The wrapper runs interactively in the PTY, so a login
-  happens in the terminal itself: password and OTP prompts appear there, or `tsh` opens the
-  browser for SSO. Gate-H never answers a prompt, so nothing can hang out of sight. A pinned
-  background session left at a prompt gives up after `--login-timeout` (180s) and falls into
-  the normal reconnect and pause logic.
-- **Errors.** Until the wrapper reports `STATUS valid`, `TeleportPreflight` follows its
+- **A terminal never logs in by itself.** It runs `teleport.sh ssh --no-login`. With no usable
+  session, the wrapper exits 4 at once and the terminal shows **Teleport login needed** with a
+  **Log in** button. That state is never resumed automatically: reachability going green
+  doesn't make a login happen. A pinned cluster in the background, or a reconnect nobody is
+  watching, therefore can't open SSO browser tabs or sit on a hidden password prompt.
+- **Logging in is its own dialog.** **Log in** (and **Renew**, below) opens a small terminal
+  running `teleport.sh login` on its own PTY. The password and OTP prompts are answered there,
+  or `tsh` opens the browser for SSO. The cluster's shell is never touched. Gate-H never
+  answers a prompt.
+- **One login covers the proxy.** `src/main/teleport/sessionState.ts` tracks each cluster's
+  session: clusters with the same proxy and Teleport user share one. After any login (in the
+  dialog, or `tsh login` in any terminal), every terminal on that proxy that shows **Login
+  needed** reconnects by itself.
+- **Expiry warning.** 15 minutes before a session expires, one notification goes out per shared
+  session, and the terminal's status bar shows *Teleport login expires at HH:MM* with **Renew**.
+  Renew runs `teleport.sh login --force`, which signs out of that proxy first, because `tsh
+  login` returns straight away while a session is still valid. A session that expires while
+  Gate-H is running gets one more notification. One that expired while it was closed doesn't:
+  its terminals already say **Log in**.
+- **Nothing polls.** `tsh status` (local only) runs at startup, when clusters change, after a
+  login, and when `~/.tsh` changes (an `fs.watch`/inotify watch, debounced to 500 ms). Each
+  session has one timer for the warning and one for expiry, re-armed on every refresh. Timers are
+  unref'd and all are released on quit. With no Teleport clusters, `tsh` never runs.
+- **Other errors.** Until the wrapper reports `STATUS valid`, `TeleportPreflight` follows its
   `STATUS` lines. If the session fails its check (proxy unreachable, login failed, `tsh`
   missing), the reason becomes the terminal's error banner and the notification. Exit code 0
   (the user typed `exit`) raises no notification.
@@ -148,5 +167,12 @@ SIGHUP and the SIGKILL fallback, UTF-8 decoding, and a failed Teleport check. Wi
 `TELEPORT_LAB_*` variables set, it also runs a real `tsh ssh` session: the check passes, the
 shell hands over, and it checks the remote size before and after a resize, a clean exit, and a
 kill. That run needs an existing `tsh` session, because nobody is there to answer a login prompt.
-It has been run against a one-VM Teleport v18 lab. The UI (form section, status bar) is only
+It has been run against a one-VM Teleport v18 lab.
+
+The same command also runs `scripts/teleport-sessions.checks.ts` against a fake `tsh` and a
+scratch `HOME`. It checks session matching, the 15-minute warning and expiry notifications (each
+sent once), that a burst of `~/.tsh` writes triggers a single `tsh status`, and that a login in any
+terminal is picked up. It also checks that when idle, nothing runs and exactly two timers and one
+watcher are live, and that stopping the monitor releases all of them. A probe counts the timers
+and watchers directly, because `process.getActiveResourcesInfo()` leaves out unref'd ones. The UI (form section, status bar) is only
 checked by typecheck, lint and review, since this environment can't open an Electron window.

@@ -46,6 +46,7 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.session-dot-auth-required,
 .session-dot-paused {
   background-color: var(--color-offline);
 }
@@ -95,4 +96,21 @@
   font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px;
   user-select: text;
+}
+
+.terminal-statusbar-teleport {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-checking);
+  font-size: 12px;
+}
+
+.teleport-login .teleport-login-terminal {
+  height: 320px;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: #0a0a0c;
 }

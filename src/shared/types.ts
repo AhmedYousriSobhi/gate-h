@@ -169,6 +169,20 @@ export interface SshDataEvent {
 
 export interface SshClosedEvent {
   sessionId: string
+  /** Set for PTY sessions (Teleport terminals and login dialogs): the process's exit code. */
+  exitCode?: number
+  /** A Teleport terminal ended because there's no usable tsh session for its proxy. Terminal
+   *  sessions never log in by themselves (see TeleportConfig), so this needs the user to log
+   *  in, and retrying automatically would only fail again. */
+  authRequired?: boolean
+}
+
+/** What Gate-H knows about the tsh session a Teleport cluster would use, read from `tsh status`
+ *  (local only - no network). Clusters sharing a proxy and Teleport user share one session. */
+export interface TeleportSessionInfo {
+  clusterId: string
+  /** ISO time the certificate expires, or null when there's no session for this proxy/user. */
+  validUntil: string | null
 }
 
 export interface SshErrorEvent {
@@ -335,6 +349,17 @@ export interface GateHApi {
     onData(callback: (event: SshDataEvent) => void): () => void
     onClosed(callback: (event: SshClosedEvent) => void): () => void
     onError(callback: (event: SshErrorEvent) => void): () => void
+  }
+  teleport: {
+    /** Current session state for every Teleport cluster, keyed by cluster id. */
+    sessions(): Promise<Record<string, TeleportSessionInfo>>
+    /** Pushed whenever a cluster's session changes: a login or logout (in Gate-H or in any
+     *  terminal), the 15-minute warning, and expiry. */
+    onSessions(callback: (sessions: Record<string, TeleportSessionInfo>) => void): () => void
+    /** Runs the interactive login for this cluster's proxy on a PTY. Its output, input, resize
+     *  and close use the ssh.* session calls and events. `renew` signs out first, so a still-valid
+     *  session is replaced instead of reused. */
+    login(clusterId: string, options: { renew: boolean }): Promise<{ sessionId: string }>
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
