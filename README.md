@@ -20,53 +20,51 @@
 
 ---
 
-## Why Gate-H exists
+**Contents:** [Why Gate-H](#why-gate-h) · [Features](#features) · [Preview](#preview) ·
+[Quick start](#quick-start) · [Connecting to your clusters](#connecting-to-your-clusters) ·
+[Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) ·
+[For developers](#for-developers) · [Documentation](#documentation)
 
-If you look after more than one HPC cluster, you know the routine. There's a terminal for each
-login node, a Grafana tab for each cluster's dashboards, and a Jira board somewhere else. Then the
-VPN drops, and you have to work out which of those things are still alive.
+## Why Gate-H
 
-Most of the existing tools don't fit this job. Open OnDemand is a portal for many users that you
-have to host on a server. Bright/Base Command Manager provisions clusters but doesn't help you
-work across them. General SSH managers know nothing about Grafana or Jira.
+If you look after more than one HPC cluster, you know the routine: a terminal for each login
+node, a Grafana tab for each cluster's dashboards, a Jira board somewhere else. Then the VPN
+drops, and you have to work out which of those things are still alive.
 
-Gate-H is a single-user desktop app built for this one job. You register each cluster once, with
-its SSH identity, its Grafana dashboards, and its Jira project. After that:
+Gate-H puts all of that in one desktop window. You register each cluster once, with its SSH
+access, its Grafana dashboards and its Jira project. After that:
 
-- Every cluster sits in a sidebar with a live LED showing whether it's reachable.
-- Clicking a cluster opens its terminal and its status side by side.
-- One notification feed tells you when anything changes on any cluster.
+- every cluster sits in a sidebar, with a light showing whether it's reachable,
+- clicking a cluster opens its terminal and its status side by side,
+- one notification feed tells you when anything changes on any cluster.
 
-The clusters on the other end are shared infrastructure, so Gate-H is careful with them. Every
-reconnect and re-poll is bounded and backed off, so a cluster that's down never gets flooded with
-connection attempts. Secrets are encrypted at rest and never leave the main process.
+It's a single-user app with no server to set up. It's also careful with shared infrastructure:
+reconnects are limited and spaced out, so a cluster that's down never gets flooded with
+connection attempts. Secrets are encrypted on disk.
 
-## Key features
+## Features
 
-- 🖥️ **Multi-cluster sidebar.** Register any number of clusters. Each has its own SSH profile:
-  host, port, user, password/key/agent auth, and an optional jump host. Switching clusters never
-  loses your place.
-- 🟢 **Live reachability.** Every cluster's SSH port is probed in the background. The probe checks
-  for a real SSH banner, not just an open TCP port. An LED shows the result, and it re-checks as
-  soon as the window regains focus.
-- ⌨️ **Embedded SSH terminal.** Host keys are pinned on first use, SSH keepalives catch silently
-  dropped connections, and reconnects are bounded with backoff. The terminal clearly shows when a
+- 🖥️ **All your clusters in one sidebar.** Each has its own SSH settings: password, key or
+  agent, with an optional jump host.
+- 🟢 **Live reachability.** A light per cluster, checked in the background and re-checked as soon
+  as the window regains focus.
+- ⌨️ **Built-in terminal.** Host keys are remembered on first use. Dead connections are
+  detected, reconnects are limited and spaced out, and the terminal makes it obvious when a
   session isn't live.
-- ☁️ **Azure tunnels built in.** For clusters behind Azure Bastion or `az ssh vm`, Gate-H signs in
-  with the Azure CLI, opens the tunnel, and connects SSH through it.
-- 📊 **Live Grafana status.** Health checks, plus live panels you pick yourself. Lay them out
-  stacked or side by side and resize each one.
+- ☁️ **Azure clusters.** For clusters behind Azure Bastion or `az ssh vm`, Gate-H signs in with
+  the Azure CLI and opens the tunnel for you.
+- 🛡️ **Teleport clusters.** For clusters behind a Teleport proxy, Gate-H checks your `tsh`
+  session and connects with `tsh ssh`. If you need to log in, you do it right in the terminal.
+- 📊 **Grafana status.** Health checks plus live panels you choose, stacked or side by side.
 - 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
-  Gate-H picks the right auth scheme for you.
-- 🧩 **Widgets side by side, not tabs.** Show, hide, swap, stack, and drag-resize the terminal and
-  status widgets. The layout survives restarts.
-- 🔔 **One notification feed.** Reachability changes, Jira activity, and unexpected SSH
-  disconnects from every cluster in one place. Click a notification to jump to the cluster and
-  widget it's about.
-- 🗂️ **Profiles and an overview dashboard.** Group clusters into profiles such as "Work" and
-  "Research". The default view is a grid of every cluster in the active profile.
-- ⏸️ **Pinning and standby.** Pin a cluster to keep its session alive in the background, or put it
-  in standby to stop all its connections until you need it again.
+- 🧩 **Widgets side by side.** Show, hide, swap, stack and resize the terminal and status views.
+  Your layout is remembered.
+- 🔔 **One notification feed.** Reachability changes, Jira activity and dropped sessions from
+  every cluster. Click one to jump to it.
+- 🗂️ **Profiles and an overview.** Group clusters into profiles such as "Work" and "Research".
+  The home screen shows every cluster in the current profile.
+- ⏸️ **Pin or pause a cluster.** Keep a session alive in the background, or put a cluster in
+  standby so it makes no connections at all.
 
 ## Preview
 
@@ -128,234 +126,229 @@ connection attempts. Secrets are encrypted at rest and never leave the main proc
 > environment can't open an actual Electron window) — see [docs/STATUS.md](docs/STATUS.md) for
 > exactly how, and what's still unverified against real infrastructure.
 
+
 ## Quick start
 
-### 1. Get the app
+### 1. Install
 
-The reproducible way to get a runnable Gate-H needs only
-[Docker](https://docs.docker.com/engine/install/), with no local Node toolchain:
+Gate-H runs on Linux. The simplest way to build it needs only
+[Docker](https://docs.docker.com/engine/install/):
 
 ```bash
 git clone git@github.com:AhmedYousriSobhi/gate-h.git
 cd gate-h
-./build-desktop.sh
-./dist/Gate-H-*.AppImage
+./build-desktop.sh            # builds and packages Gate-H inside a container
+./dist/Gate-H-*.AppImage      # run it
 ```
 
-`build-desktop.sh` builds a pinned Node and native-module toolchain image, then builds and packages
-Gate-H inside a container from it. You get the same result on any machine, whatever is installed
-locally. [docker/build.Dockerfile](docker/build.Dockerfile) shows exactly what's in that image.
+The build runs in a pinned toolchain image ([docker/build.Dockerfile](docker/build.Dockerfile)),
+so you get the same result on any machine.
 
-### 2. Your first cluster
+### 2. Add your first cluster
 
-1. You start in a default profile called "Personal". To keep separate contexts apart (e.g. "Work"
-   and "Research"), click the profile name at the top of the sidebar. Each profile has its own
-   clusters and dashboard.
-2. Click **+ Add** in the sidebar. Enter a name and the SSH connection details (host, user, auth
-   method). Grafana and Jira are optional for each cluster.
-3. The **Overview** dashboard, the default view, shows every cluster in the current profile:
-   reachability, tags, configured integrations, and unread notifications.
-4. Click a cluster in the sidebar, or its card on Overview, to open it. Its **Terminal** and
-   **Status** (Grafana health and dashboards, plus Jira issues) widgets open side by side. The
-   sidebar and its LEDs stay visible, so switching clusters takes one click.
-5. Use the toolbar above the widgets to swap their order, switch between side by side and
-   stacked, or open the widget picker (puzzle-piece icon) to show or hide each one. The picker
-   also lists widgets planned for later, such as job queue, GPU usage, and storage quota.
+1. Click **+ Add** in the sidebar.
+2. Enter a **name**, then the **host**, **username** and **auth method** under *SSH connection*.
+   If your cluster needs a jump host, Azure or Teleport, see
+   [Connecting to your clusters](#connecting-to-your-clusters).
+3. Optionally fill in **Grafana** and **Jira**. You can add them later.
+4. Click **Save cluster**. The cluster appears in the sidebar with its reachability light.
 
-For Jira setup, including how to keep several clusters' tickets apart in one shared Jira project,
-see [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md).
+### 3. Open it
 
-### Clusters reachable only through Azure
+Click the cluster. Its **Terminal** and **Status** (Grafana and Jira) open side by side, and the
+sidebar stays visible, so switching clusters is one click.
 
-Some clusters can only be reached through an Azure tunnel. Gate-H can open that tunnel itself,
-using [resources/azure-tunnel.sh](resources/azure-tunnel.sh), each time it connects. It signs in
-with the Azure CLI, selects the subscription, opens the tunnel, then connects SSH through it.
-[docs/AZURE.md](docs/AZURE.md) covers how the tunnel is kept alive, how to investigate drops, and
-how to test it.
+## Connecting to your clusters
 
-**Prerequisites**
+How do you normally reach the cluster's login node?
 
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) on your `PATH`.
-  The script installs the `bastion` or `ssh` CLI extension on first use if it's missing.
-- One of these ways to reach the cluster:
-  - `--mode bastion`: an Azure Bastion host on the Standard or Premium SKU, with
-    **Native client support** enabled, plus Reader access to the Bastion host and the target VM.
-  - `--mode az-ssh`: a VM you can log in to with `az ssh vm`. By default that needs Entra ID
-    login, which means the *Virtual Machine User Login* or *Administrator Login* role on the VM.
-    Pass `--local-user` to log in with a local VM account instead. The VM then forwards to the
-    cluster's login node.
+| If you reach it… | Fill in | Section |
+|---|---|---|
+| directly with `ssh user@host` | *SSH connection* only | [Direct SSH](#direct-ssh) |
+| through a jump/bastion host (`ssh -J`) | *SSH connection* + **Connect through a jump/bastion host** | [Through a jump host](#through-a-jump-host) |
+| through Azure Bastion or `az ssh vm` | *SSH connection* + **Azure tunnel** | [Through Azure](#through-azure) |
+| with `tsh login` / `tsh ssh` | *SSH connection* + **Behind Teleport** | [Behind Teleport](#behind-teleport) |
 
-**Steps (in the app)**
+### Direct SSH
 
-1. Sign in once in a terminal with `az login`. Gate-H can also sign in for you: if `az` has no
-   valid session, the terminal view shows a device-code prompt (a URL and a code) to finish in
-   your browser.
-2. Click **+ Add** (or edit a cluster). Fill in **SSH connection** with the tunnel's *far end*:
-   - Bastion: the target VM's host name and SSH port.
-   - az ssh vm: the login node's host name and port, as the VM reaches it.
+Fill in **Host**, **Port** (usually `22`), **Username** and one **Auth method**:
 
-   These are *not* `127.0.0.1`. Leave the jump host unchecked; the tunnel does that job.
-3. Tick **Azure tunnel** and fill in the fields:
-   - **Tunnel through:** Azure Bastion, or VM via az ssh vm.
+- **Private key:** the key's path, e.g. `~/.ssh/id_ed25519`, plus its passphrase if it has one.
+- **Password:** your password.
+- **SSH agent:** nothing else; Gate-H uses your running `ssh-agent`.
+
+Passwords and passphrases are encrypted with your OS keychain and never shown again. The first
+time you connect, Gate-H remembers the server's host key. If that key ever changes, it refuses to
+connect and tells you why.
+
+### Through a jump host
+
+Fill in the login node as usual, then tick **Connect through a jump/bastion host** and enter the
+jump host's address, port, username and auth method.
+
+> A jump host can reuse the cluster's password or passphrase only when both use the same auth
+> method.
+
+### Through Azure
+
+For login nodes that are only reachable through **Azure Bastion** or a VM you reach with
+**`az ssh vm`**. Gate-H signs in with the Azure CLI, opens a tunnel, and connects SSH through it.
+
+**You need**
+
+- The [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) installed.
+- One of:
+  - **Azure Bastion** (Standard or Premium SKU) with *Native client support* enabled, plus
+    Reader access to the Bastion host and the target VM.
+  - **A VM you can reach with `az ssh vm`.** That needs the *Virtual Machine User Login* or
+    *Administrator Login* role, or a local VM account. The VM then forwards you on to the login
+    node.
+
+**Steps**
+
+1. Run `az login` once in a terminal. You can also skip this: Gate-H shows a sign-in code in the
+   terminal when it needs one.
+2. Under *SSH connection*, enter the **far end** of the tunnel, not `127.0.0.1`:
+   - **Bastion:** the target VM's host name and SSH port.
+   - **az ssh vm:** the login node's host name and port, as the VM sees it.
+
+   Leave the jump host unticked.
+3. Tick **Azure tunnel** and fill in:
+   - **Tunnel through:** Azure Bastion or `az ssh vm`.
    - **Local port:** any free port, e.g. `2222`.
    - **Subscription:** click **Load from az** to pick one.
    - **Resource group**, and optionally **Tenant ID**.
-   - Bastion: **Bastion name** and **Target VM resource ID**.
-   - az ssh vm: **VM name**, and optionally **Local VM user**.
-4. Select the cluster. The terminal shows each step (*Checking Azure CLI session*, *Using
-   subscription '…'*, *Tunnel active on port 2222*), then connects.
+   - **Bastion:** the **Bastion name** and the **Target VM resource ID**. **az ssh vm:** the
+     **VM name**, and optionally the **Local VM user**.
+4. Select the cluster. The terminal shows each step (*Checking Azure CLI session* → *Using
+   subscription …* → *Tunnel active on port 2222*), then connects.
 
-The tunnel stays open across reconnects. If it drops, the terminal's automatic reconnect reopens it.
-If a connect through it fails, Gate-H replaces it. The tunnel closes when you quit Gate-H, edit or
-remove the cluster, or put the cluster in standby. The cluster's LED shows the tunnel's health.
+The tunnel stays open across reconnects and closes when you quit, edit the cluster, or put it in
+standby. To keep your work across the drops Azure sometimes causes, run your shell in
+`tmux new -A -s main` on the login node.
 
-**Staying connected.** Gate-H sends an SSH keepalive every 15 s, which is well under Azure's
-4-minute idle timeouts. The best protection against drops you can't prevent (Bastion maintenance,
-sleep, Wi-Fi changes) is running your shell inside `tmux new -A -s main` on the login node, so a
-reconnect puts you back where you were. See [docs/AZURE.md](docs/AZURE.md) for why Azure sessions
-drop and what else helps.
+More in [docs/AZURE.md](docs/AZURE.md): why Azure sessions drop, using the tunnel script on its
+own, and testing.
 
-**Using the script without the app** (for debugging, or for another SSH client):
+### Behind Teleport
 
-1. List your subscriptions. If you're not logged in, this runs `az login` first:
+For clusters you normally reach with `tsh login` and then `tsh ssh user@node`. Gate-H checks for a
+valid Teleport session, logs you in if needed, right in the terminal, and then opens your shell
+with `tsh ssh`.
 
-   ```bash
-   ./resources/azure-tunnel.sh subscriptions
-   ```
+**You need**
 
-2. Open the tunnel. `--local-port` is the port on your machine (on `127.0.0.1`), and
-   `--remote-port` is the port on the target (default `22`). If you leave out `--subscription`
-   and you have more than one, the script shows a menu to pick one.
+- The Teleport client (`tsh`) installed. Check with `tsh version`.
+- From your admin: the **proxy address**, your **Teleport user**, the **node name** and your
+  **login** on it, and a **leaf cluster** or **auth connector** name if your setup uses one.
 
-   ```bash
-   # Through Azure Bastion, straight to the target VM's SSH port:
-   ./resources/azure-tunnel.sh up --name mycluster --mode bastion \
-     -g my-rg --bastion my-bastion \
-     --target-id /subscriptions/<sub-id>/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/login01 \
-     -l 2222 -s "<subscription name or id>"
+**First time only.** If you sign in with a password, open the invite link from your admin, choose
+a password, and scan the QR code with an authenticator app. With single sign-on there's nothing
+to set up.
 
-   # Through a VM with `az ssh vm`, forwarding on to a login node the VM can reach:
-   ./resources/azure-tunnel.sh up --name mycluster --mode az-ssh \
-     -g my-rg --vm my-jumpbox --remote-host login01.internal \
-     -l 2222 -s "<subscription name or id>"
-   ```
+**Steps**
 
-   Once it prints `STATUS active Tunnel active on port 2222`, the tunnel is running in the
-   background. You can run `up` again safely: if the tunnel is already up, it just reports that.
-
-3. Connect any SSH client to it: `ssh -p 2222 <user>@127.0.0.1`.
-
-4. Check on the tunnel, or close it when you're done:
-
-   ```bash
-   ./resources/azure-tunnel.sh status --name mycluster
-   ./resources/azure-tunnel.sh down   --name mycluster
-   ```
-
-To keep the tunnel tied to your terminal instead, add `--foreground` to `up`. Ctrl-C then closes
-it.
-
-**Saving the settings.** Every option can also come from an `AZT_*` environment variable or a
-`--config` file. Command-line flags win over both. For example:
-
-```bash
-# ~/.config/gate-h/mycluster.azure
-AZT_NAME=mycluster
-AZT_MODE=bastion
-AZT_RESOURCE_GROUP=my-rg
-AZT_BASTION=my-bastion
-AZT_TARGET_ID=/subscriptions/<sub-id>/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/login01
-AZT_SUBSCRIPTION=<subscription id>
-AZT_LOCAL_PORT=2222
-```
-
-```bash
-./resources/azure-tunnel.sh up --config ~/.config/gate-h/mycluster.azure
-```
-
-`./resources/azure-tunnel.sh help` lists every option and exit code. If `up` fails, the last lines
-of the tunnel's log are printed, and the full log is kept at
-`$XDG_RUNTIME_DIR/gate-h-azure-tunnel/<name>.log`.
-
-### Clusters behind Teleport
-
-For clusters that are only reachable through a [Teleport](https://goteleport.com/) proxy, the
-terminal runs `tsh ssh` for you. It first checks for a valid Teleport session and, if there
-isn't one, logs you in right in the terminal.
-
-1. Install the Teleport client so `tsh` is on your `PATH`.
-2. Add or edit the cluster and tick **Behind Teleport**:
+1. Click **+ Add** (or edit a cluster) and tick **Behind Teleport**. Fill in:
    - **Proxy address:** e.g. `teleport.example.com:443`.
-   - **Leaf cluster**, **Teleport user**, **Auth connector:** optional.
-   - **Teleport node name** (in the SSH section): the node as `tsh ls` lists it, e.g. `slogin1`.
-   - **Login:** the OS account to log in as on the node.
-3. Select the cluster. If you need to log in, the password and OTP prompts appear in the
-   terminal, or your browser opens for SSO. The shell starts once you're logged in.
+   - **Teleport user:** if it isn't the same as your OS username.
+   - **Leaf cluster**, **Auth connector:** only if your admin gave you one.
+2. Under *SSH connection*, which now asks only for what Teleport needs, fill in:
+   - **Teleport node name:** the node as `tsh ls` shows it, e.g. `slogin1`.
+   - **Login:** the Linux account to use on it, e.g. your cluster username.
+3. Click **Save cluster** and select the cluster. What you'll see:
+   - **Already logged in:** the shell opens straight away.
+   - **Not logged in, or the session has expired:** your browser opens for single sign-on, or the
+     terminal asks for your password and then the 6-digit code. Then the shell opens.
 
-The same session check and routing are available from the command line through
-[resources/teleport.sh](resources/teleport.sh). [docs/TELEPORT.md](docs/TELEPORT.md) covers both.
+The cluster's light follows the Teleport proxy. If the proxy can't be reached, Gate-H retries
+twice and then pauses until the proxy is back.
 
-## Development
+**Tip:** if your proxy uses your organisation's own certificate authority, start Gate-H with
+`SSL_CERT_FILE=/path/to/ca.pem`, the same as you would for `tsh`.
 
-For active development (with hot reload), run Gate-H directly with Node instead — Docker doesn't
-give you a GUI window, so it's only used for reproducible packaging above, not for `dev`:
+To do the same from a plain terminal, use the bundled script: `./resources/teleport.sh ssh --proxy
+teleport.example.com:443 -- alice@slogin1`. More in [docs/TELEPORT.md](docs/TELEPORT.md).
+
+## Everyday use
+
+- **Overview.** The home screen shows a card for every cluster in the current profile: its
+  reachability, tags, integrations and unread notifications.
+- **Layout.** Use the toolbar above a cluster's widgets to swap them, stack them, or hide one. The
+  puzzle-piece icon opens the widget picker, which also shows widgets that are coming later.
+- **Notifications.** The bell collects events from every cluster. Click one to jump to the
+  cluster and widget it's about.
+- **Profiles.** Click the profile name at the top of the sidebar to switch, add, rename or delete
+  profiles.
+- **Pin a cluster.** Hover it in the sidebar and click the **pin** icon. Its session and Grafana
+  stay live in the background while you work on other clusters.
+- **Standby.** Click the **power** icon to stop all of a cluster's connections. Select it and
+  click **Resume monitoring** to start again.
+
+## Troubleshooting
+
+| Problem | Try |
+|---|---|
+| The light stays red | Check your VPN, and that you can reach the host (or Teleport proxy) from this machine. |
+| The terminal says *Paused* | Gate-H stopped retrying to spare the cluster. Click **Reconnect now**, or wait: it resumes by itself when the light turns green. |
+| *Host key … changed* notification | The server's key changed since your last connection. Ask your cluster admin before trusting it. |
+| Azure: a sign-in code appears | Your Azure login expired. Open the link and enter the code. |
+| Teleport: *unreachable* or *no route to host* | Your machine can't reach the proxy. Check the VPN and the proxy address. |
+| Teleport: *certificate signed by unknown authority* | Start Gate-H with `SSL_CERT_FILE` pointing at your organisation's CA file. |
+| Teleport: *access denied* | Your Teleport role doesn't allow that login or node. Run `tsh status` to see your logins. |
+
+## For developers
+
+### Run from source
 
 ```bash
-npm install       # install dependencies (Node.js 20+ required)
-npm run dev       # launch Gate-H in development mode
+npm install       # Node.js 20+; also builds the native modules for Electron
+npm run dev       # start Gate-H with hot reload
 ```
 
-Other useful scripts: `npm run lint`, `npm run typecheck`, `npm run build`.
+Before opening a pull request, run `npm run typecheck`, `npm run lint` and `npm run build`. To
+test a single part: `./scripts/test-azure-tunnel.sh`, `./scripts/test-teleport.sh` and
+`node scripts/test-pty-manager.mjs`.
 
-## Architecture
+### How it's built
 
-Gate-H is an Electron app with three processes. They are strictly separated, and only a narrow,
-explicit bridge connects them.
+Gate-H is an Electron app with three strictly separated processes:
 
 ```
 src/
-  shared/     # types shared by all three processes, incl. the GateHApi contract for window.api
-  main/       # Electron main process: SQLite store, SSH sessions, Grafana/Jira clients,
+  shared/     # types shared by all processes, incl. the GateHApi contract for window.api
+  main/       # main process: SQLite store, SSH and PTY sessions, Grafana/Jira clients,
               # background monitors, one IPC handler file per namespace
   preload/    # the only bridge: a contextBridge API exposed as window.api
   renderer/   # React UI, grouped by feature: shell, terminal, status, clusters
 ```
 
-- **The renderer has no Node or Electron access.** Everything goes through `window.api`, which is
-  defined once in [src/shared/types.ts](src/shared/types.ts).
-- **Secrets are write-only.** SSH passphrases and Grafana/Jira tokens are encrypted with
-  `electron.safeStorage` (backed by the OS keychain, e.g. libsecret on Linux). The renderer only
-  ever gets `has*Secret` booleans back.
-- **Local state lives in SQLite** (`better-sqlite3`): clusters, profiles, notifications, and the
-  panel layout. Migrations only ever add columns and run on every launch.
-- **Terminals** are rendered with `@xterm/xterm`. SSH and Azure clusters use a remote `ssh2`
-  channel. Teleport clusters run `tsh ssh` on a local pseudo-terminal (`node-pty`), because
-  `ssh2` can't do Teleport's certificate auth.
-- **Integrations** use the Grafana HTTP API (service-account token) and the Jira REST API (Cloud:
-  email + API token; Data Center: Personal Access Token).
-- **Typography and icons ship with the app.** Inter and JetBrains Mono are self-hosted via
-  `@fontsource`, and icons come from `lucide-react`. The UI never needs network access just to
-  render.
+- **The renderer has no Node or Electron access.** Everything goes through `window.api`, defined
+  in [src/shared/types.ts](src/shared/types.ts).
+- **Secrets are write-only.** They're encrypted with `electron.safeStorage` (your OS keychain),
+  and the renderer only ever learns whether one is set.
+- **State lives in SQLite** (`better-sqlite3`). Migrations only add columns and run at every
+  launch.
+- **Terminals** are rendered with `@xterm/xterm`. SSH and Azure clusters use an `ssh2` channel.
+  Teleport clusters run `tsh ssh` on a local pseudo-terminal (`node-pty`), because `ssh2` can't do
+  Teleport's certificate auth.
+- **Fonts and icons ship with the app,** so the UI never needs the network just to render.
+
+### Contributing
+
+Each change starts as a GitHub issue and gets its own branch and pull request. [CLAUDE.md](CLAUDE.md)
+has the commands, the code map, the conventions and the known gotchas.
 
 ## Documentation
 
 | Document | What's in it |
 |---|---|
-| [SPEC.md](SPEC.md) | The functional spec: what Gate-H should do, written as requirements. |
-| [docs/STATUS.md](docs/STATUS.md) | What's shipped today, how each feature was verified, known limitations, and the roadmap. |
-| [docs/ANALYSIS.md](docs/ANALYSIS.md) | Prior art (Open OnDemand, ColdFront/XDMoD, Slurm-web, …) and the reasons behind the architecture. |
-| [docs/AZURE.md](docs/AZURE.md) | Azure tunnels: how they stay alive, investigating drops, and testing. |
-| [docs/TELEPORT.md](docs/TELEPORT.md) | Teleport clusters: the session check, login, routing, and how it's tested. |
-| [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) | Jira setup step by step, and keeping clusters' tickets apart. |
-| [CHANGELOG.md](CHANGELOG.md) | The build log: every change, in order, and why. |
-| [CLAUDE.md](CLAUDE.md) | A short guide for contributors and coding agents: commands, code map, conventions, and gotchas. |
-
-## Contributing
-
-Each change starts as a GitHub issue and gets its own branch and pull request. A PR is merged into
-`main` once `npm run typecheck`, `npm run lint`, and `npm run build` all pass. There's no
-automated test suite yet. [docs/STATUS.md](docs/STATUS.md) explains how each feature has been
-verified so far.
+| [docs/TELEPORT.md](docs/TELEPORT.md) | Teleport clusters: the session check, login, routing, and testing. |
+| [docs/AZURE.md](docs/AZURE.md) | Azure tunnels: how they stay alive, investigating drops, the script on its own, and testing. |
+| [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) | Jira setup, and keeping several clusters' tickets apart in one project. |
+| [docs/STATUS.md](docs/STATUS.md) | What's shipped, how each feature was verified, known limitations, and the roadmap. |
+| [SPEC.md](SPEC.md) | The functional spec, written as requirements. |
+| [docs/ANALYSIS.md](docs/ANALYSIS.md) | Prior art (Open OnDemand, ColdFront/XDMoD, Slurm-web, …) and the reasons behind the design. |
+| [CHANGELOG.md](CHANGELOG.md) | Every change, in order, and why. |
 
 ## License
 
