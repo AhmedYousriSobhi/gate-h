@@ -74,9 +74,13 @@ session states (none, expired, about to expire, valid, other proxy, other user, 
 profile), login and its failure modes (unreachable proxy, no terminal for a password prompt,
 timeout), and routing through tsh or straight to OpenSSH.
 
-The fake's `tsh status --format=json` output and the error strings the script classifies are
-based on Teleport's documented behavior. They have not been checked against a real proxy. Before
-relying on the exit codes, run `status`/`login` once against your proxy.
+Against real `tsh` v18.11.2 with no proxy, three cases have been checked: no session (exit 4), and
+an unreachable proxy (exit 6), both refused and DNS-failed. A proxy behind a firewall that drops
+packets also gives exit 6. That one shows up as a timeout, while tsh's first request
+(`webapi/ping`) is still pending. The rest is based on Teleport's documented behavior: the
+logged-in `tsh status --format=json` parsing, the no-terminal message for password/OTP login, and
+the ssh/scp handover. To check those, run the script once against a real proxy, or a lab VM
+running `teleport` with auth, proxy and SSH node together.
 
 ## In the app
 
