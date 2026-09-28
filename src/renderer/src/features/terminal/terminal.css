@@ -32,6 +32,14 @@
   background-color: var(--color-surface-hover);
 }
 
+.terminal-tab[draggable='true'] {
+  cursor: grab;
+}
+
+.terminal-tab-dragging {
+  opacity: 0.5;
+}
+
 .terminal-tab-active {
   background-color: var(--color-surface-active);
   color: var(--color-text-1);
