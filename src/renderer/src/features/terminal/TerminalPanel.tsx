@@ -212,15 +212,21 @@ export default function TerminalPanel({
       if (event.type !== 'keydown') return true
       const mod = event.ctrlKey || event.metaKey
       if (mod && !event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
         setSearchOpen(true)
         return false
       }
       if (mod && event.shiftKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault()
         const selection = term.getSelection()
         if (selection) void navigator.clipboard.writeText(selection)
         return false
       }
       if (mod && event.shiftKey && event.key.toLowerCase() === 'v') {
+        // preventDefault matters here: without it, Chromium's own "paste without formatting"
+        // shortcut (Ctrl+Shift+V) also fires on xterm's focused hidden textarea, so the browser
+        // pastes natively into it on top of the clipboard write below - doubling the pasted text.
+        event.preventDefault()
         void navigator.clipboard.readText().then((text) => {
           if (sessionId) window.api.ssh.write(sessionId, text)
         })
