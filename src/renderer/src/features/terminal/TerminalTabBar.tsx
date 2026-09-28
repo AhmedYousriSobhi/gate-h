@@ -33,7 +33,16 @@ interface TerminalTabBarProps {
    *  onto a visible session panel (not just its tab) also calls this, always with zone 'merge'
    *  and dropId set to that panel's tab id. */
   onDrop: (dragId: string, dropId: string | null, zone: DropZone) => void
-  onRename: (id: string, title: string) => void
+  /** Rename editing is controlled from MainPanel (not owned here) so the context menu's
+   *  "Rename" - which can be opened from a session panel, not just the strip - can start the
+   *  same edit as double-clicking a tab. */
+  renamingId: string | null
+  renameValue: string
+  onStartRename: (id: string) => void
+  onRenameValueChange: (value: string) => void
+  onRenameCommit: () => void
+  onRenameCancel: () => void
+  onContextMenu: (id: string, x: number, y: number) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
 
@@ -56,13 +65,17 @@ export default function TerminalTabBar({
   onAdd,
   onClose,
   onDrop,
-  onRename,
+  renamingId,
+  renameValue,
+  onStartRename,
+  onRenameValueChange,
+  onRenameCommit,
+  onRenameCancel,
+  onContextMenu,
   onOrientationChange
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [hover, setHover] = useState<{ id: string; zone: DropZone } | null>(null)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [renameValue, setRenameValue] = useState('')
   // Refs mirror the state above and are what move/up actually read from: a real mouse fires
   // pointermove faster than React re-renders, so a fast drag's first move could still see a
   // stale (pre-drag) value from state - refs are updated synchronously, in the same tick.
@@ -104,8 +117,12 @@ export default function TerminalTabBar({
                   onClick={() => onSelect(id)}
                   onDoubleClick={(e) => {
                     e.stopPropagation()
-                    setRenameValue(title)
-                    setRenamingId(id)
+                    onStartRename(id)
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onContextMenu(id, e.clientX, e.clientY)
                   }}
                   onPointerDown={(e) => {
                     if (isPrimary) return
@@ -152,15 +169,18 @@ export default function TerminalTabBar({
                       const overId = overTab?.getAttribute('data-tab-id')
                       if (overTab && overId && overId !== dragId) {
                         const rect = overTab.getBoundingClientRect()
-                        // The middle third of the target tab merges dragId into its group; the
-                        // outer thirds (along the strip's own axis) just reorder instead -
-                        // without this split, dropping anywhere on a tab always merged, so two
-                        // standalone tabs could never swap places without also getting stacked.
+                        // The middle 60% of the target tab merges dragId into its group; only the
+                        // outer 20% strips (along the strip's own axis) reorder instead - without
+                        // this split, dropping anywhere on a tab always merged, so two standalone
+                        // tabs could never swap places without also getting stacked. The merge
+                        // band is kept wide on purpose: a stacked pill's members are small, and a
+                        // narrower band made it easy to miss and land a reorder by accident when
+                        // trying to add a third tab to an existing pair.
                         const rel =
                           orientation === 'vertical'
                             ? (e.clientY - rect.top) / rect.height
                             : (e.clientX - rect.left) / rect.width
-                        const zone: DropZone = rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'merge'
+                        const zone: DropZone = rel < 0.2 ? 'before' : rel > 0.8 ? 'after' : 'merge'
                         next = { id: overId, zone }
                       }
                     }
@@ -193,14 +213,11 @@ export default function TerminalTabBar({
                       value={renameValue}
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={() => {
-                        onRename(id, renameValue)
-                        setRenamingId(null)
-                      }}
+                      onChange={(e) => onRenameValueChange(e.target.value)}
+                      onBlur={onRenameCommit}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') e.currentTarget.blur()
-                        if (e.key === 'Escape') setRenamingId(null)
+                        if (e.key === 'Escape') onRenameCancel()
                       }}
                     />
                   ) : (

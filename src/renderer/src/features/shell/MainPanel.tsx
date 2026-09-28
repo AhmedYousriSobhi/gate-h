@@ -3,6 +3,7 @@ import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import TerminalTabBar from '../terminal/TerminalTabBar'
+import TabContextMenu from '../terminal/TabContextMenu'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
 import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
@@ -74,12 +75,25 @@ export default function MainPanel({
   // falls back to "Session N" (tabNumbers) in TerminalTabBar.
   const [tabStatuses, setTabStatuses] = useState<Map<string, SessionStatus>>(() => new Map())
   const [tabTitles, setTabTitles] = useState<Map<string, string>>(() => new Map())
+  // Rename editing lives here (not in TerminalTabBar) so both the tab strip's double-click and
+  // the context menu's "Rename" - triggered from either the strip or a session panel - can start
+  // the same edit.
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number } | null>(
+    null
+  )
   // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
   // above the terminal, like typical editor tabs) is the alternative, toggled in TerminalTabBar.
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
   const activeGroup = groups.find((g) => g.includes(activeTabId)) ?? groups[0]
+
+  const tabTitle = useCallback(
+    (id: string): string => tabTitles.get(id) ?? `Session ${tabNumbers.get(id)}`,
+    [tabTitles, tabNumbers]
+  )
 
   const handleAddTab = useCallback((): void => {
     const id = crypto.randomUUID()
@@ -88,41 +102,104 @@ export default function MainPanel({
     setActiveTabId(id)
   }, [])
 
+  // Shared by every "this tab id no longer exists" path (close one, close others, close all) -
+  // tabStatuses/tabTitles would otherwise accumulate entries for tabs that can never come back.
+  const dropFromMaps = useCallback((ids: Set<string>): void => {
+    setTabStatuses((prev) => {
+      if (![...prev.keys()].some((id) => ids.has(id))) return prev
+      return new Map([...prev].filter(([id]) => !ids.has(id)))
+    })
+    setTabTitles((prev) => {
+      if (![...prev.keys()].some((id) => ids.has(id))) return prev
+      return new Map([...prev].filter(([id]) => !ids.has(id)))
+    })
+  }, [])
+
   const handleCloseTab = useCallback(
     (id: string): void => {
       if (id === primaryTabId) return
       setGroups((prev) => prev.map((g) => g.filter((t) => t !== id)).filter((g) => g.length > 0))
-      setTabStatuses((prev) => {
-        if (!prev.has(id)) return prev
-        const next = new Map(prev)
-        next.delete(id)
-        return next
-      })
-      setTabTitles((prev) => {
-        if (!prev.has(id)) return prev
-        const next = new Map(prev)
-        next.delete(id)
-        return next
-      })
+      dropFromMaps(new Set([id]))
       if (activeTabId === id) {
         const siblings = groups.find((g) => g.includes(id))?.filter((t) => t !== id) ?? []
         setActiveTabId(siblings[0] ?? primaryTabId)
       }
     },
-    [activeTabId, groups, primaryTabId]
+    [activeTabId, groups, primaryTabId, dropFromMaps]
+  )
+
+  // Keeps `keepId` and the primary tab, closes everything else.
+  const handleCloseOtherTabs = useCallback(
+    (keepId: string): void => {
+      const closed = new Set(groups.flat().filter((id) => id !== keepId && id !== primaryTabId))
+      if (closed.size === 0) return
+      setGroups((prev) =>
+        prev.map((g) => g.filter((t) => !closed.has(t))).filter((g) => g.length > 0)
+      )
+      dropFromMaps(closed)
+      setActiveTabId(keepId)
+    },
+    [groups, primaryTabId, dropFromMaps]
+  )
+
+  const handleCloseAllTabs = useCallback((): void => {
+    const closed = new Set(groups.flat().filter((id) => id !== primaryTabId))
+    if (closed.size === 0) return
+    setGroups([[primaryTabId]])
+    dropFromMaps(closed)
+    setActiveTabId(primaryTabId)
+  }, [groups, primaryTabId, dropFromMaps])
+
+  // Opens a brand-new session positioned right next to `sourceId` (its own standalone group, not
+  // merged into sourceId's) - same session semantics as the "+" button, just placed by the tab
+  // that was duplicated rather than always appended at the end.
+  const handleDuplicateTab = useCallback((sourceId: string): void => {
+    const newId = crypto.randomUUID()
+    setGroups((prev) => {
+      const groupIndex = prev.findIndex((g) => g.includes(sourceId))
+      if (groupIndex === -1) return prev
+      const next = prev.slice()
+      next.splice(groupIndex + 1, 0, [newId])
+      return next
+    })
+    setTabOrder((prev) => [...prev, newId])
+    setActiveTabId(newId)
+  }, [])
+
+  // Pulls `id` out of its current group into its own standalone one - the same outcome as
+  // dropping it on empty tab-strip space, also reachable from the context menu's "Unstack".
+  const extractToStandaloneGroup = useCallback((id: string): void => {
+    setGroups((prev) => {
+      const fromIndex = prev.findIndex((g) => g.includes(id))
+      if (fromIndex === -1 || prev[fromIndex].length === 1) return prev
+      const next = prev.map((g, i) => (i === fromIndex ? g.filter((t) => t !== id) : g))
+      next.push([id])
+      return next
+    })
+  }, [])
+
+  const startRename = useCallback(
+    (id: string): void => {
+      setRenameValue(tabTitle(id))
+      setRenamingId(id)
+    },
+    [tabTitle]
   )
 
   // An empty/whitespace-only title clears the override, reverting the tab to its default
   // "Session N" label rather than leaving it stuck on a blank string.
-  const handleRenameTab = useCallback((id: string, title: string): void => {
-    const trimmed = title.trim()
+  const commitRename = useCallback((): void => {
+    const id = renamingId
+    if (!id) return
+    const trimmed = renameValue.trim()
     setTabTitles((prev) => {
       const next = new Map(prev)
       if (trimmed) next.set(id, trimmed)
       else next.delete(id)
       return next
     })
-  }, [])
+    setRenamingId(null)
+  }, [renamingId, renameValue])
 
   // The single drop handler behind every drag gesture in the tab strip. `zone` (see
   // TerminalTabBar) is which third of dropId's tab was hovered: dropping within the same group
@@ -137,16 +214,14 @@ export default function MainPanel({
   const handleDropTab = useCallback(
     (dragId: string, dropId: string | null, zone: 'before' | 'after' | 'merge'): void => {
       if (dragId === primaryTabId || dragId === dropId) return
+      if (dropId === null) {
+        extractToStandaloneGroup(dragId)
+        setActiveTabId(dragId)
+        return
+      }
       setGroups((prev) => {
         const fromIndex = prev.findIndex((g) => g.includes(dragId))
         if (fromIndex === -1) return prev
-
-        if (dropId === null) {
-          if (prev[fromIndex].length === 1) return prev
-          const next = prev.map((g, i) => (i === fromIndex ? g.filter((t) => t !== dragId) : g))
-          next.push([dragId])
-          return next
-        }
 
         const toIndex = prev.findIndex((g) => g.includes(dropId))
         if (toIndex === -1) return prev
@@ -176,7 +251,7 @@ export default function MainPanel({
       })
       setActiveTabId(dragId)
     },
-    [primaryTabId]
+    [primaryTabId, extractToStandaloneGroup]
   )
 
   // Ctrl/Cmd+Tab (+Shift to reverse), forwarded up from whichever tab's terminal currently has
@@ -279,11 +354,17 @@ export default function MainPanel({
                 activeTabId={activeTabId}
                 primaryTabId={primaryTabId}
                 orientation={tabOrientation}
+                renamingId={renamingId}
+                renameValue={renameValue}
                 onSelect={setActiveTabId}
                 onAdd={handleAddTab}
                 onClose={handleCloseTab}
                 onDrop={handleDropTab}
-                onRename={handleRenameTab}
+                onStartRename={startRename}
+                onRenameValueChange={setRenameValue}
+                onRenameCommit={commitRename}
+                onRenameCancel={() => setRenamingId(null)}
+                onContextMenu={(id, x, y) => setContextMenu({ tabId: id, x, y })}
                 onOrientationChange={setTabOrientation}
               />
               <div
@@ -306,6 +387,10 @@ export default function MainPanel({
                       }`}
                       style={{ display: isVisible ? 'flex' : 'none' }}
                       onPointerDown={() => setActiveTabId(tabId)}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        setContextMenu({ tabId, x: e.clientX, y: e.clientY })
+                      }}
                     >
                       <TerminalPanel
                         cluster={cluster}
@@ -352,6 +437,26 @@ export default function MainPanel({
           </button>
         </div>
       )}
+      {contextMenu &&
+        (() => {
+          const { tabId } = contextMenu
+          const isPrimary = tabId === primaryTabId
+          const group = groups.find((g) => g.includes(tabId))
+          const others = groups.flat().filter((id) => id !== tabId && id !== primaryTabId)
+          return (
+            <TabContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              onDismiss={() => setContextMenu(null)}
+              onRename={() => startRename(tabId)}
+              onDuplicate={() => handleDuplicateTab(tabId)}
+              onUnstack={group && group.length > 1 ? () => extractToStandaloneGroup(tabId) : null}
+              onCloseTab={isPrimary ? null : () => handleCloseTab(tabId)}
+              onCloseOthers={others.length > 0 ? () => handleCloseOtherTabs(tabId) : null}
+              onCloseAll={others.length > 0 ? () => handleCloseAllTabs() : null}
+            />
+          )
+        })()}
     </div>
   )
 }
