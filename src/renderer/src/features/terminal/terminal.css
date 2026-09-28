@@ -391,3 +391,43 @@
   border-radius: var(--radius-md);
   background-color: #0a0a0c;
 }
+
+/* Right-click menu for a tab, opened from either its tab-strip entry or its session panel - see
+   TabContextMenu.tsx. Fixed positioning at the click point, matching the widget picker's popover
+   styling rather than introducing a new visual language for menus. */
+.tab-context-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 160px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.tab-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-1);
+  font-size: 13px;
+  text-align: left;
+}
+
+.tab-context-menu-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.tab-context-menu-item-danger:hover {
+  color: var(--color-offline);
+}
+
+.tab-context-menu-divider {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background-color: var(--color-border);
+}
