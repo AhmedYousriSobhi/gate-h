@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Columns2, Plus, Rows2, X } from 'lucide-react'
 
 interface TerminalTabBarProps {
@@ -33,6 +33,12 @@ export default function TerminalTabBar({
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
+  // A real mouse fires pointermove faster than React re-renders, so the move/up handlers below
+  // read these refs (updated synchronously, in the same tick) rather than the state above (which
+  // can still be one render behind) - state alone caused a race where a fast drag saw a stale
+  // `draggingId` of null in its very first pointermove and never captured a hover target.
+  const draggingIdRef = useRef<string | null>(null)
+  const hoverIdRef = useRef<string | null>(null)
 
   return (
     <div className={`terminal-tabbar terminal-tabbar-${orientation}`}>
@@ -49,17 +55,26 @@ export default function TerminalTabBar({
           onPointerDown={(e) => {
             if (index === 0) return
             e.currentTarget.setPointerCapture(e.pointerId)
+            draggingIdRef.current = id
+            hoverIdRef.current = null
             setDraggingId(id)
+            setHoverId(null)
           }}
           onPointerMove={(e) => {
-            if (!draggingId) return
+            if (!draggingIdRef.current) return
             const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.terminal-tab')
             const overId = over?.getAttribute('data-tab-id')
-            setHoverId(overId && overId !== tabs[0] ? overId : null)
+            const next = overId && overId !== tabs[0] ? overId : null
+            hoverIdRef.current = next
+            setHoverId(next)
           }}
           onPointerUp={(e) => {
             e.currentTarget.releasePointerCapture(e.pointerId)
-            if (draggingId && hoverId && hoverId !== draggingId) onReorder(draggingId, hoverId)
+            const drag = draggingIdRef.current
+            const hover = hoverIdRef.current
+            if (drag && hover && hover !== drag) onReorder(drag, hover)
+            draggingIdRef.current = null
+            hoverIdRef.current = null
             setDraggingId(null)
             setHoverId(null)
           }}
