@@ -86,6 +86,10 @@ export default function MainPanel({
   // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
   // above the terminal, like typical editor tabs) is the alternative, toggled in TerminalTabBar.
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
+  // Independent of tabOrientation - a stacked group's panes can be shown side by side
+  // ('horizontal') or stacked top/bottom ('vertical') regardless of which way the tab strip
+  // itself is laid out, so a vertical tab sidebar isn't forced into a top/bottom split.
+  const [splitOrientation, setSplitOrientation] = useState<'horizontal' | 'vertical'>('vertical')
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
   const activeGroup = groups.find((g) => g.includes(activeTabId)) ?? groups[0]
@@ -354,6 +358,7 @@ export default function MainPanel({
                 activeTabId={activeTabId}
                 primaryTabId={primaryTabId}
                 orientation={tabOrientation}
+                splitOrientation={splitOrientation}
                 renamingId={renamingId}
                 renameValue={renameValue}
                 onSelect={setActiveTabId}
@@ -366,10 +371,11 @@ export default function MainPanel({
                 onRenameCancel={() => setRenamingId(null)}
                 onContextMenu={(id, x, y) => setContextMenu({ tabId: id, x, y })}
                 onOrientationChange={setTabOrientation}
+                onSplitOrientationChange={setSplitOrientation}
               />
               <div
                 className={`terminal-tab-panes${
-                  activeGroup.length > 1 ? ` terminal-tab-panes-split-${tabOrientation}` : ''
+                  activeGroup.length > 1 ? ` terminal-tab-panes-split-${splitOrientation}` : ''
                 }`}
               >
                 {groups.flat().map((tabId) => {

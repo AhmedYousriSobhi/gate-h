@@ -16,6 +16,12 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  /* Without this, a vertical tab sidebar (itself a row-direction flex parent) combined with a
+     side-by-side pane split (row-direction children) leaves this container at its default
+     min-width: auto - it refuses to shrink below its children's combined content width instead
+     of dividing the available space, so the second pane ends up rendered off past the visible
+     area instead of actually appearing side by side. */
+  min-width: 0;
 }
 
 .terminal-tab-panes-split-horizontal {
@@ -77,6 +83,22 @@
 
 .terminal-tabbar-vertical .terminal-tabbar-spacer {
   display: none;
+}
+
+/* Separates the tab-strip-layout toggle (Columns2/Rows2) from the pane-split-direction toggle
+   (SquareSplitHorizontal/Vertical) - two distinct settings that would otherwise read as one
+   group of four buttons. */
+.terminal-tabbar-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 2px var(--space-1);
+  background-color: var(--color-border);
+}
+
+.terminal-tabbar-vertical .terminal-tabbar-divider {
+  width: auto;
+  height: 1px;
+  margin: var(--space-1) 2px;
 }
 
 /* One group per Fragment in TerminalTabBar - tabs the user dragged together render adjacent,
