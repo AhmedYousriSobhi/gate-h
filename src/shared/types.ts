@@ -99,6 +99,22 @@ export interface AzureSubscription {
   isDefault: boolean
 }
 
+/** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
+ *  the session check and any login (password/OTP prompts, or SSO in the browser) happen in the
+ *  terminal before `tsh ssh` takes over. `connection.host` is the Teleport node name and
+ *  `connection.username` the login; port, auth method and jump host don't apply. No secrets:
+ *  tsh keeps its own certificates in ~/.tsh. */
+export interface TeleportConfig {
+  /** host[:port] of the Teleport proxy, e.g. teleport.example.com:443 */
+  proxy: string
+  /** Leaf cluster to route through, if the node isn't in the proxy's root cluster. */
+  cluster?: string
+  /** Teleport user, if it differs from the local OS user. */
+  user?: string
+  /** Auth connector name (e.g. an SSO connector), if not the cluster's default. */
+  authConnector?: string
+}
+
 export interface Cluster {
   id: string
   name: string
@@ -108,6 +124,7 @@ export interface Cluster {
   grafana: GrafanaProfile | null
   jira: JiraProfile | null
   azureTunnel: AzureTunnelConfig | null
+  teleport: TeleportConfig | null
   /** When true, this cluster's Terminal/Grafana connections stay live in the background - kept
    *  mounted (hidden) and auto-reconnecting even while a different cluster is selected - instead
    *  of only existing while the cluster is the one currently selected in the sidebar. Has no
@@ -135,6 +152,7 @@ export interface ClusterInput {
   jira: JiraProfile | null
   jiraApiToken?: string
   azureTunnel: AzureTunnelConfig | null
+  teleport: TeleportConfig | null
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
