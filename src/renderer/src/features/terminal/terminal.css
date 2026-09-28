@@ -81,10 +81,14 @@
   gap: 2px;
 }
 
+/* Accent-tinted, not just a shade of the neutral surface color already used for plain hover/
+   active states - a stacked group needs to read as clearly different at a glance, not just
+   slightly darker. */
 .terminal-tab-group-stacked {
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background-color: var(--color-surface);
+  padding: 3px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background-color: var(--color-accent-soft);
 }
 
 .terminal-tab-group-divider {
@@ -125,9 +129,29 @@
   opacity: 0.5;
 }
 
+/* Dropping on the middle third of a tab merges into its group (dashed outline, above); dropping
+   on an outer third instead just reorders (a solid line on that edge, below) - see
+   TerminalTabBar's pointermove zone calculation. A box-shadow, not a pseudo-element, so it can't
+   collide with .terminal-tab-active's own ::after accent bar when hovering the active tab. */
 .terminal-tab-hover {
   background-color: var(--color-surface-hover);
   outline: 1px dashed var(--color-border);
+}
+
+.terminal-tabbar-vertical .terminal-tab-drop-before {
+  box-shadow: inset 0 2px 0 0 var(--color-accent);
+}
+
+.terminal-tabbar-vertical .terminal-tab-drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--color-accent);
+}
+
+.terminal-tabbar-horizontal .terminal-tab-drop-before {
+  box-shadow: inset 2px 0 0 0 var(--color-accent);
+}
+
+.terminal-tabbar-horizontal .terminal-tab-drop-after {
+  box-shadow: inset -2px 0 0 0 var(--color-accent);
 }
 
 .terminal-tab-active {
