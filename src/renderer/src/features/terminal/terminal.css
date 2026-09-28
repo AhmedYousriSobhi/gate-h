@@ -100,6 +100,7 @@
 }
 
 .terminal-tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -134,15 +135,72 @@
   color: var(--color-text-1);
 }
 
+/* A flush accent bar on the edge facing the terminal pane - the same "which tab is active"
+   language VS Code uses - rather than relying on background contrast alone. */
+.terminal-tab-active::after {
+  content: '';
+  position: absolute;
+  background-color: var(--color-accent);
+  border-radius: 1px;
+}
+
+.terminal-tabbar-vertical .terminal-tab-active::after {
+  top: 3px;
+  bottom: 3px;
+  right: -7px;
+  width: 2px;
+}
+
+.terminal-tabbar-horizontal .terminal-tab-active::after {
+  left: 3px;
+  right: 3px;
+  bottom: -3px;
+  height: 2px;
+}
+
+.terminal-tab-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab-rename {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-bottom: 1px solid var(--color-accent);
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-text-1);
+}
+
+.terminal-tab-rename:focus {
+  outline: none;
+}
+
 .terminal-tab-close {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   border: none;
   background: none;
   padding: 1px;
   color: inherit;
   border-radius: var(--radius-sm);
+  /* Reserved space always, visible only on hover/active - keeps the close button from crowding
+     the title while never shifting layout when it appears or disappears. */
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab-active .terminal-tab-close,
+.terminal-tab-close:focus-visible {
+  opacity: 1;
 }
 
 .terminal-tab-close:hover {
@@ -151,6 +209,11 @@
 
 .terminal-tab-add {
   margin-left: var(--space-1);
+}
+
+.terminal-tabbar-vertical .terminal-tab-add {
+  margin-left: 0;
+  margin-top: var(--space-1);
 }
 
 .terminal-panel {
