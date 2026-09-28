@@ -18,9 +18,34 @@
   min-height: 0;
 }
 
+.terminal-tab-panes-split-horizontal {
+  flex-direction: row;
+}
+
+.terminal-tab-panes-split-vertical {
+  flex-direction: column;
+}
+
 .terminal-tab-pane {
+  display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-tab-panes-split-horizontal .terminal-tab-pane:not(:last-child) {
+  border-right: 1px solid var(--color-border);
+}
+
+.terminal-tab-panes-split-vertical .terminal-tab-pane:not(:last-child) {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Which pane Ctrl/Cmd+Tab currently targets, in split view only - single-tab mode has no
+   ambiguity, since only the active tab is ever visible. */
+.terminal-tab-pane-focused {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .terminal-tabbar {

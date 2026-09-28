@@ -1,15 +1,19 @@
 import { useRef, useState } from 'react'
-import { Columns2, Plus, Rows2, X } from 'lucide-react'
+import { Columns2, LayoutGrid, Plus, Rows2, X } from 'lucide-react'
 
 interface TerminalTabBarProps {
   tabs: string[]
   activeTabId: string
   orientation: 'horizontal' | 'vertical'
+  /** When true, every tab's terminal is visible at once (arranged per `orientation`) instead of
+   *  only `activeTabId`'s - see MainPanel. */
+  splitView: boolean
   onSelect: (id: string) => void
   onAdd: () => void
   onClose: (id: string) => void
   onReorder: (dragId: string, dropId: string) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
+  onToggleSplitView: () => void
 }
 
 // Tab 0 is the cluster's primary session (the one keepAliveInBackground/standby apply to - see
@@ -25,11 +29,13 @@ export default function TerminalTabBar({
   tabs,
   activeTabId,
   orientation,
+  splitView,
   onSelect,
   onAdd,
   onClose,
   onReorder,
-  onOrientationChange
+  onOrientationChange,
+  onToggleSplitView
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
@@ -111,6 +117,17 @@ export default function TerminalTabBar({
         onClick={() => onOrientationChange('vertical')}
       >
         <Rows2 size={13} strokeWidth={2} />
+      </button>
+      <button
+        className={`btn-icon${splitView ? ' btn-icon-active' : ''}`}
+        title={
+          splitView
+            ? 'Showing every tab at once - click to show one at a time'
+            : 'Show every tab at once, split per the orientation above'
+        }
+        onClick={onToggleSplitView}
+      >
+        <LayoutGrid size={13} strokeWidth={2} />
       </button>
     </div>
   )
