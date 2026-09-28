@@ -74,13 +74,25 @@ session states (none, expired, about to expire, valid, other proxy, other user, 
 profile), login and its failure modes (unreachable proxy, no terminal for a password prompt,
 timeout), and routing through tsh or straight to OpenSSH.
 
-Against real `tsh` v18.11.2 with no proxy, three cases have been checked: no session (exit 4), and
-an unreachable proxy (exit 6), both refused and DNS-failed. A proxy behind a firewall that drops
-packets also gives exit 6. That one shows up as a timeout, while tsh's first request
-(`webapi/ping`) is still pending. The rest is based on Teleport's documented behavior: the
-logged-in `tsh status --format=json` parsing, the no-terminal message for password/OTP login, and
-the ssh/scp handover. To check those, run the script once against a real proxy, or a lab VM
-running `teleport` with auth, proxy and SSH node together.
+### Against a real proxy
+
+These cases have been checked with `tsh` v18.11.2 against a one-VM Teleport v18 cluster (auth,
+proxy and SSH node together) with a local user using password + OTP:
+
+- **Session states**: none (exit 4), valid (the real `tsh status --format=json` is parsed
+  correctly), under `--min-ttl` (exit 4), and belonging to a different `--user` (exit 4).
+- **Login**: interactive password + OTP works. A second `login` doesn't prompt. With no
+  terminal, login fails with exit 5 and the "needs a terminal prompt" message.
+- **Handover**: `ssh` with and without `--cluster`, the remote exit code passed through, and an
+  interactive shell with a real PTY and the local window size. An `scp` round trip works, and
+  stdout carries only the remote command's output.
+- **Direct route**: `ssh` with no `--proxy` runs plain OpenSSH. `tsh login` loads Teleport keys
+  into ssh-agent, so pass `-o IdentitiesOnly=yes` with `-i` if the server limits auth attempts.
+- **Unreachable proxy** (exit 6): refused, DNS-failed, and silently dropped. A dropped proxy
+  shows up as a timeout while tsh's first request (`webapi/ping`) is still pending.
+
+Not yet run against a real proxy: certificate expiry (`tsh login --ttl`) and SSO login (the lab
+has no SSO provider).
 
 ## In the app
 
