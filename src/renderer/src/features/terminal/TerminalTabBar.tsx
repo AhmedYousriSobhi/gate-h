@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState } from 'react'
-import { Columns2, Plus, Rows2, X } from 'lucide-react'
+import { Columns2, Plus, Rows2, SquareSplitHorizontal, SquareSplitVertical, X } from 'lucide-react'
 import type { SessionStatus } from './TerminalPanel'
 
 type DropZone = 'before' | 'after' | 'merge'
@@ -22,6 +22,9 @@ interface TerminalTabBarProps {
   /** Can't be closed or dragged, though other tabs can be dropped onto it to join its group. */
   primaryTabId: string
   orientation: 'horizontal' | 'vertical'
+  /** How a stacked group's panes are arranged - independent of `orientation` (the tab strip's
+   *  own layout), so a vertical sidebar of tabs isn't forced into a top/bottom pane split. */
+  splitOrientation: 'horizontal' | 'vertical'
   onSelect: (id: string) => void
   onAdd: () => void
   onClose: (id: string) => void
@@ -44,6 +47,7 @@ interface TerminalTabBarProps {
   onRenameCancel: () => void
   onContextMenu: (id: string, x: number, y: number) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
+  onSplitOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
 
 // Reordering/grouping uses plain pointer events (setPointerCapture + elementFromPoint
@@ -61,6 +65,7 @@ export default function TerminalTabBar({
   activeTabId,
   primaryTabId,
   orientation,
+  splitOrientation,
   onSelect,
   onAdd,
   onClose,
@@ -72,7 +77,8 @@ export default function TerminalTabBar({
   onRenameCommit,
   onRenameCancel,
   onContextMenu,
-  onOrientationChange
+  onOrientationChange,
+  onSplitOrientationChange
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [hover, setHover] = useState<{ id: string; zone: DropZone } | null>(null)
@@ -259,6 +265,21 @@ export default function TerminalTabBar({
         onClick={() => onOrientationChange('vertical')}
       >
         <Rows2 size={13} strokeWidth={2} />
+      </button>
+      <div className="terminal-tabbar-divider" />
+      <button
+        className={`btn-icon${splitOrientation === 'horizontal' ? ' btn-icon-active' : ''}`}
+        title="Stacked sessions side by side"
+        onClick={() => onSplitOrientationChange('horizontal')}
+      >
+        <SquareSplitHorizontal size={13} strokeWidth={2} />
+      </button>
+      <button
+        className={`btn-icon${splitOrientation === 'vertical' ? ' btn-icon-active' : ''}`}
+        title="Stacked sessions on top of each other"
+        onClick={() => onSplitOrientationChange('vertical')}
+      >
+        <SquareSplitVertical size={13} strokeWidth={2} />
       </button>
     </div>
   )
