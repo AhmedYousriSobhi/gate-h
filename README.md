@@ -328,7 +328,9 @@ src/
   ever gets `has*Secret` booleans back.
 - **Local state lives in SQLite** (`better-sqlite3`): clusters, profiles, notifications, and the
   panel layout. Migrations only ever add columns and run on every launch.
-- **No local PTY.** Every terminal is a remote channel from `ssh2`, rendered with `@xterm/xterm`.
+- **Terminals** are rendered with `@xterm/xterm`. SSH and Azure clusters use a remote `ssh2`
+  channel. Teleport clusters run `tsh ssh` on a local pseudo-terminal (`node-pty`), because
+  `ssh2` can't do Teleport's certificate auth.
 - **Integrations** use the Grafana HTTP API (service-account token) and the Jira REST API (Cloud:
   email + API token; Data Center: Personal Access Token).
 - **Typography and icons ship with the app.** Inter and JetBrains Mono are self-hosted via
@@ -343,6 +345,7 @@ src/
 | [docs/STATUS.md](docs/STATUS.md) | What's shipped today, how each feature was verified, known limitations, and the roadmap. |
 | [docs/ANALYSIS.md](docs/ANALYSIS.md) | Prior art (Open OnDemand, ColdFront/XDMoD, Slurm-web, …) and the reasons behind the architecture. |
 | [docs/AZURE.md](docs/AZURE.md) | Azure tunnels: how they stay alive, investigating drops, and testing. |
+| [docs/TELEPORT.md](docs/TELEPORT.md) | Teleport clusters: the session check, login, routing, and how it's tested. |
 | [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) | Jira setup step by step, and keeping clusters' tickets apart. |
 | [CHANGELOG.md](CHANGELOG.md) | The build log: every change, in order, and why. |
 | [CLAUDE.md](CLAUDE.md) | A short guide for contributors and coding agents: commands, code map, conventions, and gotchas. |
