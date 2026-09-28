@@ -5,6 +5,10 @@ interface TerminalTabBarProps {
   /** Tabs the user has dragged together are "stacked" - shown split, simultaneously - while
    *  separate groups are reached by switching between them. Order here is display order. */
   groups: string[][]
+  /** Stable per-tab label numbers, keyed by creation order (see MainPanel's tabOrder) - not
+   *  recomputed from display position, so a tab's number doesn't shift when it's reordered or
+   *  regrouped. */
+  tabNumbers: Map<string, number>
   activeTabId: string
   /** Can't be closed or dragged, though other tabs can be dropped onto it to join its group. */
   primaryTabId: string
@@ -27,6 +31,7 @@ const DRAG_THRESHOLD_PX = 4
 
 export default function TerminalTabBar({
   groups,
+  tabNumbers,
   activeTabId,
   primaryTabId,
   orientation,
@@ -45,8 +50,6 @@ export default function TerminalTabBar({
   const hoverIdRef = useRef<string | null>(null)
   const startPosRef = useRef<{ x: number; y: number } | null>(null)
   const movedRef = useRef(false)
-
-  const tabNumbers = new Map(groups.flat().map((id, index) => [id, index + 1]))
 
   return (
     <div className={`terminal-tabbar terminal-tabbar-${orientation}`}>
