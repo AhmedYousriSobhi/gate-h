@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
@@ -62,6 +62,13 @@ export default function MainPanel({
   // time. A fresh tab always starts in its own standalone group.
   const [groups, setGroups] = useState<string[][]>(() => [[primaryTabId]])
   const [activeTabId, setActiveTabId] = useState<string>(primaryTabId)
+  // Creation order, not display order - a tab's "Tab N" label comes from here so it stays put
+  // across reorders/regroups instead of relabeling every tab whenever positions shift.
+  const [tabOrder, setTabOrder] = useState<string[]>(() => [primaryTabId])
+  const tabNumbers = useMemo(
+    () => new Map(tabOrder.map((id, index) => [id, index + 1])),
+    [tabOrder]
+  )
   // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
   // above the terminal, like typical editor tabs) is the alternative, toggled in TerminalTabBar.
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
@@ -72,6 +79,7 @@ export default function MainPanel({
   const handleAddTab = useCallback((): void => {
     const id = crypto.randomUUID()
     setGroups((prev) => [...prev, [id]])
+    setTabOrder((prev) => [...prev, id])
     setActiveTabId(id)
   }, [])
 
@@ -220,6 +228,7 @@ export default function MainPanel({
             <div className={`terminal-tabs-layout terminal-tabs-layout-${tabOrientation}`}>
               <TerminalTabBar
                 groups={groups}
+                tabNumbers={tabNumbers}
                 activeTabId={activeTabId}
                 primaryTabId={primaryTabId}
                 orientation={tabOrientation}
