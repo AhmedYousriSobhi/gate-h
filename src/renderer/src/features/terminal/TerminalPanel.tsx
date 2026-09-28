@@ -201,6 +201,7 @@ export default function TerminalPanel({
           <span className="mono">
             {cluster.connection.username}@{cluster.connection.host}
             {cluster.azureTunnel && ` via Azure tunnel :${cluster.azureTunnel.localPort}`}
+            {cluster.teleport && ` via Teleport ${cluster.teleport.proxy}`}
           </span>
           <span className="terminal-status-word">{statusLabel}</span>
         </span>
@@ -228,13 +229,17 @@ export default function TerminalPanel({
               <>
                 <p className="terminal-shade-title">Not connected</p>
                 <p>
-                  {cluster.azureTunnel
+                  {cluster.teleport
                     ? reachability?.status === 'offline'
-                      ? `The Azure tunnel to ${cluster.connection.host} is down - Reconnect now re-opens it (signing in to Azure again if needed).`
-                      : `Couldn't reach the SSH service on ${cluster.connection.host} through the Azure tunnel.`
-                    : reachability?.status === 'offline'
-                      ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
-                      : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
+                      ? `Waiting for the Teleport proxy ${cluster.teleport.proxy} to come back online - will reconnect automatically.`
+                      : `Couldn't open a Teleport session to ${cluster.connection.host}.`
+                    : cluster.azureTunnel
+                      ? reachability?.status === 'offline'
+                        ? `The Azure tunnel to ${cluster.connection.host} is down - Reconnect now re-opens it (signing in to Azure again if needed).`
+                        : `Couldn't reach the SSH service on ${cluster.connection.host} through the Azure tunnel.`
+                      : reachability?.status === 'offline'
+                        ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
+                        : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
                 </p>
                 <button className="btn btn-sm" onClick={resetAndReconnectNow}>
                   <RefreshCw size={13} strokeWidth={2} />
