@@ -244,13 +244,19 @@ do_login() {
   if ! is_interactive; then args+=(--browser=none); fi
   if [[ -n "$CLUSTER" ]]; then args+=("$CLUSTER"); fi
 
-  local runner=()
+  local runner=() stdin=/dev/null
   if command -v timeout >/dev/null 2>&1; then runner=(timeout "$LOGIN_TIMEOUT"); fi
+  if is_interactive; then
+    stdin=/dev/stdin
+    # Without --foreground, timeout moves tsh into its own process group, off
+    # the terminal's foreground group: tsh is then stopped (SIGTTIN) the moment
+    # it reads the OTP prompt, and Ctrl-C never reaches it.
+    if ((${#runner[@]})); then runner=(timeout --foreground "$LOGIN_TIMEOUT"); fi
+  fi
 
   status login "Logging in to $PROXY"
-  local errlog rc=0 stdin=/dev/null
+  local errlog rc=0
   errlog=$(mktemp)
-  if is_interactive; then stdin=/dev/stdin; fi
   # All of tsh's output goes to stderr, so it can't be mistaken for a STATUS
   # line, and is also kept to classify a failure by.
   "${runner[@]}" tsh "${args[@]}" <"$stdin" > >(tee "$errlog" >&2) 2>&1 || rc=$?
