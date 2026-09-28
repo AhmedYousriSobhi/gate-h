@@ -77,28 +77,40 @@
   border-right: 1px solid var(--color-border);
 }
 
-.terminal-tabbar-spacer {
+.terminal-tabbar-tabs {
+  display: flex;
   flex: 1;
+  min-width: 0;
+  gap: var(--space-1);
 }
 
-.terminal-tabbar-vertical .terminal-tabbar-spacer {
-  display: none;
+.terminal-tabbar-horizontal .terminal-tabbar-tabs {
+  flex-direction: row;
+  align-items: center;
 }
 
-/* Separates the tab-strip-layout toggle (Columns2/Rows2) from the pane-split-direction toggle
-   (SquareSplitHorizontal/Vertical) - two distinct settings that would otherwise read as one
-   group of four buttons. */
-.terminal-tabbar-divider {
-  align-self: stretch;
-  width: 1px;
-  margin: 2px var(--space-1);
-  background-color: var(--color-border);
+.terminal-tabbar-vertical .terminal-tabbar-tabs {
+  flex-direction: column;
+  align-items: stretch;
 }
 
-.terminal-tabbar-vertical .terminal-tabbar-divider {
-  width: auto;
-  height: 1px;
-  margin: var(--space-1) 2px;
+/* One compact action header - new, split, layout menu - in the spirit of VS Code's terminal
+   view header: above the list in the side layout, at the far end of the row in the top one. */
+.terminal-tabbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.terminal-tabbar-horizontal .terminal-tabbar-actions {
+  order: 1;
+}
+
+.terminal-tabbar-vertical .terminal-tabbar-actions {
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* One group per Fragment in TerminalTabBar - tabs the user dragged together render adjacent,
@@ -261,14 +273,6 @@
   background-color: var(--color-surface-hover);
 }
 
-.terminal-tab-add {
-  margin-left: var(--space-1);
-}
-
-.terminal-tabbar-vertical .terminal-tab-add {
-  margin-left: 0;
-  margin-top: var(--space-1);
-}
 
 .terminal-panel {
   display: flex;
@@ -446,6 +450,35 @@
 
 .tab-context-menu-item-danger:hover {
   color: var(--color-offline);
+}
+
+.tab-context-menu-item-check,
+.tab-context-menu-item:has(.tab-context-menu-shortcut) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tab-context-menu-check {
+  display: inline-flex;
+  width: 13px;
+  color: var(--color-accent);
+}
+
+.tab-context-menu-shortcut {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--color-text-3);
+}
+
+.tab-context-menu-heading {
+  padding: var(--space-1) var(--space-2) 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-3);
 }
 
 .tab-context-menu-divider {

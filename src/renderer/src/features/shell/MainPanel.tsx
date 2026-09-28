@@ -170,6 +170,21 @@ export default function MainPanel({
     setActiveTabId(newId)
   }, [])
 
+  // VS Code's "Split Terminal": a new session stacked right after `sourceId` in its own group.
+  const handleSplitTab = useCallback((sourceId: string): void => {
+    const newId = crypto.randomUUID()
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (!g.includes(sourceId)) return g
+        const next = [...g]
+        next.splice(g.indexOf(sourceId) + 1, 0, newId)
+        return next
+      })
+    )
+    setTabOrder((prev) => [...prev, newId])
+    setActiveTabId(newId)
+  }, [])
+
   // Pulls `id` out of its current group into its own standalone one - the same outcome as
   // dropping it on empty tab-strip space, also reachable from the context menu's "Unstack".
   const extractToStandaloneGroup = useCallback((id: string): void => {
@@ -363,6 +378,7 @@ export default function MainPanel({
                 renameValue={renameValue}
                 onSelect={setActiveTabId}
                 onAdd={handleAddTab}
+                onSplit={() => handleSplitTab(activeTabId)}
                 onClose={handleCloseTab}
                 onDrop={handleDropTab}
                 onStartRename={startRename}
@@ -408,6 +424,7 @@ export default function MainPanel({
                           if (isPrimary) onTerminalStatusChange?.(status)
                         }}
                         onCycleTab={handleCycleTab}
+                        onSplit={() => handleSplitTab(tabId)}
                       />
                     </div>
                   )
@@ -455,6 +472,7 @@ export default function MainPanel({
               y={contextMenu.y}
               onDismiss={() => setContextMenu(null)}
               onRename={() => startRename(tabId)}
+              onSplit={() => handleSplitTab(tabId)}
               onDuplicate={() => handleDuplicateTab(tabId)}
               onUnstack={group && group.length > 1 ? () => extractToStandaloneGroup(tabId) : null}
               onCloseTab={isPrimary ? null : () => handleCloseTab(tabId)}
