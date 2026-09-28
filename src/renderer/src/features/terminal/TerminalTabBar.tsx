@@ -7,6 +7,20 @@ import TerminalLayoutMenu from './TerminalLayoutMenu'
 const LAYOUT_MENU_WIDTH = 190
 
 type DropZone = 'before' | 'after' | 'merge'
+export type PaneEdge = 'left' | 'right' | 'top' | 'bottom'
+const PANE_EDGES: PaneEdge[] = ['left', 'right', 'top', 'bottom']
+
+function nearestEdge(rect: DOMRect, point: { clientX: number; clientY: number }): PaneEdge {
+  const x = (point.clientX - rect.left) / rect.width
+  const y = (point.clientY - rect.top) / rect.height
+  const distances: Array<[PaneEdge, number]> = [
+    ['left', x],
+    ['right', 1 - x],
+    ['top', y],
+    ['bottom', 1 - y]
+  ]
+  return distances.reduce((best, d) => (d[1] < best[1] ? d : best))[0]
+}
 
 interface TerminalTabBarProps {
   /** Tabs the user has dragged together are "stacked" - shown split, simultaneously - while
@@ -38,10 +52,11 @@ interface TerminalTabBarProps {
    *  (zone is meaningless in that case) - see MainPanel's handleDropTab for the reorder/
    *  merge/pop-out semantics this drives. `zone` is which third of dropId's tab the pointer was
    *  over: the edge thirds reorder (dragId ends up in its own standalone group, positioned next
-   *  to dropId's), the middle third merges dragId into dropId's group instead. Dropping directly
-   *  onto a visible session panel (not just its tab) also calls this, always with zone 'merge'
-   *  and dropId set to that panel's tab id. */
+   *  to dropId's), the middle third merges dragId into dropId's group instead. Drops onto a
+   *  session panel go to onPaneDrop instead. */
   onDrop: (dragId: string, dropId: string | null, zone: DropZone) => void
+  /** Dropped onto a session panel: stack dragId on `edge`'s side of that panel's tab. */
+  onPaneDrop: (dragId: string, paneId: string, edge: PaneEdge) => void
   /** Rename editing is controlled from MainPanel (not owned here) so the context menu's
    *  "Rename" - which can be opened from a session panel, not just the strip - can start the
    *  same edit as double-clicking a tab. */
@@ -77,6 +92,7 @@ export default function TerminalTabBar({
   onSplit,
   onClose,
   onDrop,
+  onPaneDrop,
   renamingId,
   renameValue,
   onStartRename,
@@ -101,6 +117,15 @@ export default function TerminalTabBar({
   // React state - it's a transient visual during a drag, not app data, and elementFromPoint finds
   // it either way regardless of component boundaries.
   const paneHoverElRef = useRef<Element | null>(null)
+  const paneDropRef = useRef<{ id: string; edge: PaneEdge } | null>(null)
+
+  function clearPaneHighlight(): void {
+    paneHoverElRef.current?.classList.remove(
+      ...PANE_EDGES.map((e) => `terminal-tab-pane-drop-${e}`)
+    )
+    paneHoverElRef.current = null
+    paneDropRef.current = null
+  }
   const layoutButtonRef = useRef<HTMLButtonElement | null>(null)
   const [layoutMenu, setLayoutMenu] = useState<{ x: number; y: number } | null>(null)
 
@@ -206,22 +231,20 @@ export default function TerminalTabBar({
                       }
                       const hit = document.elementFromPoint(e.clientX, e.clientY)
                       const overTab = hit?.closest('.terminal-tab')
-                      // Dragging past the tab strip entirely and onto the terminal content itself
-                      // (a session panel, not just its tab) always merges - dropping directly onto
-                      // a session is unambiguous, there's no "just reorder" reading of it - and
-                      // lands dragId right after that pane's tab within its group, i.e. stacked
-                      // below it (or to its right, in horizontal orientation).
+                      // Dragging past the tab strip onto a session panel itself always stacks -
+                      // VS Code-style, the panel's edge nearest the cursor decides where: left/
+                      // right splits side by side, top/bottom stacks, and dragId lands on that side
+                      // of the panel's tab.
                       const overPane = !overTab ? hit?.closest('.terminal-tab-pane') : null
-                      if (paneHoverElRef.current && paneHoverElRef.current !== overPane) {
-                        paneHoverElRef.current.classList.remove('terminal-tab-pane-drop-target')
-                        paneHoverElRef.current = null
-                      }
+                      clearPaneHighlight()
                       let next: { id: string; zone: DropZone } | null = null
                       if (overPane) {
                         const paneId = overPane.getAttribute('data-tab-id')
                         if (paneId && paneId !== dragId) {
-                          overPane.classList.add('terminal-tab-pane-drop-target')
+                          const edge = nearestEdge(overPane.getBoundingClientRect(), e)
+                          overPane.classList.add(`terminal-tab-pane-drop-${edge}`)
                           paneHoverElRef.current = overPane
+                          paneDropRef.current = { id: paneId, edge }
                           next = { id: paneId, zone: 'merge' }
                         }
                       } else {
@@ -250,13 +273,12 @@ export default function TerminalTabBar({
                     onPointerUp={(e) => {
                       e.currentTarget.releasePointerCapture(e.pointerId)
                       if (draggingIdRef.current && movedRef.current) {
+                        const paneDrop = paneDropRef.current
                         const drop = hoverRef.current
-                        onDrop(draggingIdRef.current, drop?.id ?? null, drop?.zone ?? 'merge')
+                        if (paneDrop) onPaneDrop(draggingIdRef.current, paneDrop.id, paneDrop.edge)
+                        else onDrop(draggingIdRef.current, drop?.id ?? null, drop?.zone ?? 'merge')
                       }
-                      if (paneHoverElRef.current) {
-                        paneHoverElRef.current.classList.remove('terminal-tab-pane-drop-target')
-                        paneHoverElRef.current = null
-                      }
+                      clearPaneHighlight()
                       draggingIdRef.current = null
                       hoverRef.current = null
                       startPosRef.current = null

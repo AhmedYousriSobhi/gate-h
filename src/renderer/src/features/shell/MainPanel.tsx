@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
-import TerminalTabBar from '../terminal/TerminalTabBar'
+import TerminalTabBar, { type PaneEdge } from '../terminal/TerminalTabBar'
 import TabContextMenu from '../terminal/TabContextMenu'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
@@ -273,6 +273,28 @@ export default function MainPanel({
     [primaryTabId, extractToStandaloneGroup]
   )
 
+  // A tab dropped onto a session panel's edge (VS Code's drag-to-split): it joins that panel's
+  // group on the dropped side, and the edge also sets the split direction - left/right means side
+  // by side, top/bottom means stacked - so the layout follows the gesture without the menu.
+  const handlePaneDrop = useCallback(
+    (dragId: string, paneId: string, edge: PaneEdge): void => {
+      if (dragId === primaryTabId || dragId === paneId) return
+      setGroups((prev) => {
+        const without = prev.map((g) => g.filter((t) => t !== dragId)).filter((g) => g.length > 0)
+        return without.map((g) => {
+          if (!g.includes(paneId)) return g
+          const next = [...g]
+          const at = g.indexOf(paneId) + (edge === 'left' || edge === 'top' ? 0 : 1)
+          next.splice(at, 0, dragId)
+          return next
+        })
+      })
+      setSplitOrientation(edge === 'left' || edge === 'right' ? 'horizontal' : 'vertical')
+      setActiveTabId(dragId)
+    },
+    [primaryTabId]
+  )
+
   // Ctrl/Cmd+Tab (+Shift to reverse), forwarded up from whichever tab's terminal currently has
   // focus - see TerminalPanel's onCycleTab prop. Cycles every tab across every group (flattened),
   // wrapping around in both directions - which group becomes visible follows from activeGroup.
@@ -381,6 +403,7 @@ export default function MainPanel({
                 onSplit={() => handleSplitTab(activeTabId)}
                 onClose={handleCloseTab}
                 onDrop={handleDropTab}
+                onPaneDrop={handlePaneDrop}
                 onStartRename={startRename}
                 onRenameValueChange={setRenameValue}
                 onRenameCommit={commitRename}

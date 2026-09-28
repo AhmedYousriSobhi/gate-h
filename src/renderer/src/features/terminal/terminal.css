@@ -54,12 +54,38 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
-/* Toggled imperatively (not via React) by TerminalTabBar while dragging a tab over this pane -
-   dropping here stacks the dragged tab into this pane's group. A thick inset outline reads
-   clearly regardless of what the terminal itself is currently rendering underneath. */
-.terminal-tab-pane-drop-target {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+/* Toggled imperatively (not via React) by TerminalTabBar while dragging a tab over this pane: a
+   translucent preview of the half the dropped session will take, like VS Code's drag-to-split.
+   An overlay rather than a border so it reads over whatever the terminal is rendering. */
+.terminal-tab-pane {
+  position: relative;
+}
+
+.terminal-tab-pane[class*='terminal-tab-pane-drop-']::after {
+  content: '';
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent-soft);
+  transition: inset 80ms ease;
+}
+
+.terminal-tab-pane-drop-left::after {
+  inset: 0 50% 0 0;
+}
+
+.terminal-tab-pane-drop-right::after {
+  inset: 0 0 0 50%;
+}
+
+.terminal-tab-pane-drop-top::after {
+  inset: 0 0 50% 0;
+}
+
+.terminal-tab-pane-drop-bottom::after {
+  inset: 50% 0 0 0;
 }
 
 .terminal-tabbar {
