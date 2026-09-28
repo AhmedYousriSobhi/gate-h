@@ -71,6 +71,34 @@
   display: none;
 }
 
+/* One group per Fragment in TerminalTabBar - tabs the user dragged together render adjacent,
+   inside a shared pill when there's more than one; separate groups (reached by clicking between
+   them, not shown split) get a thin divider between them instead. */
+.terminal-tab-group {
+  display: flex;
+  flex-direction: inherit;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.terminal-tab-group-stacked {
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+}
+
+.terminal-tab-group-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 2px;
+  background-color: var(--color-border);
+}
+
+.terminal-tabbar-vertical .terminal-tab-group-divider {
+  width: auto;
+  height: 1px;
+}
+
 .terminal-tab {
   display: flex;
   align-items: center;

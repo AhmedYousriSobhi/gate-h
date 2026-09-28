@@ -49,61 +49,95 @@ export default function MainPanel({
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
-  // Tab 0 is this cluster's primary session - the one keepAliveInBackground/standby apply to
-  // (see AppShell's `hidden` prop) - and lives as long as this MainPanel instance does. Extra
-  // tabs are foreground-only: unmounted (disconnecting their session) whenever this cluster isn't
-  // the one currently selected, not just when explicitly closed - see the `hidden` check below.
-  const [tabs, setTabs] = useState<string[]>(() => [crypto.randomUUID()])
-  const [activeTabId, setActiveTabId] = useState<string>(tabs[0])
-  const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
-  // Split view shows every open tab at once (arranged per tabOrientation) instead of only
-  // activeTabId's - off by default since most sessions only need one tab in view at a time.
-  const [splitView, setSplitView] = useState(false)
+  // The primary tab is this cluster's pinned session - the one keepAliveInBackground/standby
+  // apply to (see AppShell's `hidden` prop) - identified by a stable id rather than array
+  // position, since dragging can now move any other tab into or out of its group. It can't be
+  // closed or dragged itself, but other tabs can be dropped onto it to join its group. Every tab
+  // (in every group, not just the active one) stays mounted for as long as this MainPanel instance
+  // does - only the `hidden` check below (this cluster isn't selected) tears a non-primary tab's
+  // session down, not merely being in an inactive group.
+  const [primaryTabId] = useState(() => crypto.randomUUID())
+  // Tabs the user has dragged onto each other are "stacked" - shown split, simultaneously, per
+  // tabOrientation - while separate groups are reached by clicking/cycling between them, one at a
+  // time. A fresh tab always starts in its own standalone group.
+  const [groups, setGroups] = useState<string[][]>(() => [[primaryTabId]])
+  const [activeTabId, setActiveTabId] = useState<string>(primaryTabId)
+  // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
+  // above the terminal, like typical editor tabs) is the alternative, toggled in TerminalTabBar.
+  const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
+  const activeGroup = groups.find((g) => g.includes(activeTabId)) ?? groups[0]
 
   const handleAddTab = useCallback((): void => {
     const id = crypto.randomUUID()
-    setTabs((prev) => [...prev, id])
+    setGroups((prev) => [...prev, [id]])
     setActiveTabId(id)
   }, [])
 
   const handleCloseTab = useCallback(
     (id: string): void => {
-      if (tabs.length <= 1 || tabs[0] === id) return
-      const next = tabs.filter((t) => t !== id)
-      setTabs(next)
-      if (activeTabId === id) setActiveTabId(next[next.length - 1])
+      if (id === primaryTabId) return
+      setGroups((prev) => prev.map((g) => g.filter((t) => t !== id)).filter((g) => g.length > 0))
+      if (activeTabId === id) {
+        const siblings = groups.find((g) => g.includes(id))?.filter((t) => t !== id) ?? []
+        setActiveTabId(siblings[0] ?? primaryTabId)
+      }
     },
-    [tabs, activeTabId]
+    [activeTabId, groups, primaryTabId]
   )
 
-  // Tab 0 stays first - it's the cluster's primary/pinned session (see the `tabs` comment above),
-  // so neither end of a reorder is allowed to touch it.
-  const handleReorderTab = useCallback(
-    (dragId: string, dropId: string): void => {
-      if (tabs[0] === dragId || tabs[0] === dropId) return
-      const from = tabs.indexOf(dragId)
-      const to = tabs.indexOf(dropId)
-      if (from === -1 || to === -1) return
-      const next = [...tabs]
-      next.splice(from, 1)
-      next.splice(to, 0, dragId)
-      setTabs(next)
+  // The single drop handler behind every drag gesture in the tab strip: dropping one tab onto
+  // another within the same group reorders them; onto a tab in a different group merges dragId
+  // into that group (stacked, shown split together); onto empty strip space (dropId null) pops
+  // dragId back out into its own standalone group. The primary tab can never be the one dragged,
+  // though it's a valid drop target - other tabs can still join its group.
+  const handleDropTab = useCallback(
+    (dragId: string, dropId: string | null): void => {
+      if (dragId === primaryTabId || dragId === dropId) return
+      setGroups((prev) => {
+        const fromIndex = prev.findIndex((g) => g.includes(dragId))
+        if (fromIndex === -1) return prev
+
+        if (dropId === null) {
+          if (prev[fromIndex].length === 1) return prev
+          const next = prev.map((g, i) => (i === fromIndex ? g.filter((t) => t !== dragId) : g))
+          next.push([dragId])
+          return next
+        }
+
+        const toIndex = prev.findIndex((g) => g.includes(dropId))
+        if (toIndex === -1) return prev
+
+        if (fromIndex === toIndex) {
+          const group = [...prev[fromIndex]]
+          group.splice(group.indexOf(dragId), 1)
+          group.splice(group.indexOf(dropId), 0, dragId)
+          return prev.map((g, i) => (i === fromIndex ? group : g))
+        }
+
+        const withoutDrag = prev.map((g) => g.filter((t) => t !== dragId))
+        const toGroup = [...withoutDrag[toIndex]]
+        toGroup.splice(toGroup.indexOf(dropId) + 1, 0, dragId)
+        return withoutDrag.map((g, i) => (i === toIndex ? toGroup : g)).filter((g) => g.length > 0)
+      })
+      setActiveTabId(dragId)
     },
-    [tabs]
+    [primaryTabId]
   )
 
   // Ctrl/Cmd+Tab (+Shift to reverse), forwarded up from whichever tab's terminal currently has
-  // focus - see TerminalPanel's onCycleTab prop. Wraps around in both directions.
+  // focus - see TerminalPanel's onCycleTab prop. Cycles every tab across every group (flattened),
+  // wrapping around in both directions - which group becomes visible follows from activeGroup.
   const handleCycleTab = useCallback(
     (direction: 1 | -1): void => {
+      const flat = groups.flat()
       setActiveTabId((current) => {
-        const idx = tabs.indexOf(current)
-        return tabs[(idx + direction + tabs.length) % tabs.length]
+        const idx = flat.indexOf(current)
+        return flat[(idx + direction + flat.length) % flat.length]
       })
     },
-    [tabs]
+    [groups]
   )
 
   function handleResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
@@ -185,29 +219,32 @@ export default function MainPanel({
           <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
             <div className={`terminal-tabs-layout terminal-tabs-layout-${tabOrientation}`}>
               <TerminalTabBar
-                tabs={tabs}
+                groups={groups}
                 activeTabId={activeTabId}
+                primaryTabId={primaryTabId}
                 orientation={tabOrientation}
-                splitView={splitView}
                 onSelect={setActiveTabId}
                 onAdd={handleAddTab}
                 onClose={handleCloseTab}
-                onReorder={handleReorderTab}
+                onDrop={handleDropTab}
                 onOrientationChange={setTabOrientation}
-                onToggleSplitView={() => setSplitView((v) => !v)}
               />
               <div
-                className={`terminal-tab-panes${splitView ? ` terminal-tab-panes-split-${tabOrientation}` : ''}`}
+                className={`terminal-tab-panes${
+                  activeGroup.length > 1 ? ` terminal-tab-panes-split-${tabOrientation}` : ''
+                }`}
               >
-                {tabs.map((tabId, index) => {
-                  const isPrimary = index === 0
+                {groups.flat().map((tabId) => {
+                  const isPrimary = tabId === primaryTabId
                   if (!isPrimary && hidden) return null
-                  const isVisible = splitView || tabId === activeTabId
+                  const isVisible = activeGroup.includes(tabId)
                   return (
                     <div
                       key={tabId}
                       className={`terminal-tab-pane${
-                        splitView && tabId === activeTabId ? ' terminal-tab-pane-focused' : ''
+                        activeGroup.length > 1 && tabId === activeTabId
+                          ? ' terminal-tab-pane-focused'
+                          : ''
                       }`}
                       style={{ display: isVisible ? 'flex' : 'none' }}
                       onPointerDown={() => setActiveTabId(tabId)}

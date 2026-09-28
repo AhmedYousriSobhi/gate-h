@@ -1,104 +1,133 @@
-import { useRef, useState } from 'react'
-import { Columns2, LayoutGrid, Plus, Rows2, X } from 'lucide-react'
+import { Fragment, useRef, useState } from 'react'
+import { Columns2, Plus, Rows2, X } from 'lucide-react'
 
 interface TerminalTabBarProps {
-  tabs: string[]
+  /** Tabs the user has dragged together are "stacked" - shown split, simultaneously - while
+   *  separate groups are reached by switching between them. Order here is display order. */
+  groups: string[][]
   activeTabId: string
+  /** Can't be closed or dragged, though other tabs can be dropped onto it to join its group. */
+  primaryTabId: string
   orientation: 'horizontal' | 'vertical'
-  /** When true, every tab's terminal is visible at once (arranged per `orientation`) instead of
-   *  only `activeTabId`'s - see MainPanel. */
-  splitView: boolean
   onSelect: (id: string) => void
   onAdd: () => void
   onClose: (id: string) => void
-  onReorder: (dragId: string, dropId: string) => void
+  /** `dropId` is null when the tab was dragged onto empty strip space rather than another tab -
+   *  see MainPanel's handleDropTab for the reorder/merge/pop-out semantics this drives. */
+  onDrop: (dragId: string, dropId: string | null) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
-  onToggleSplitView: () => void
 }
 
-// Tab 0 is the cluster's primary session (the one keepAliveInBackground/standby apply to - see
-// MainPanel) and can't be closed or reordered; every other tab is an ordinary foreground-only
-// session, freely draggable among themselves.
-//
-// Reordering uses plain pointer events (setPointerCapture + elementFromPoint hit-testing), the
-// same technique MainPanel's own pane-resize handle already uses, rather than native HTML5
-// drag-and-drop - the native drag/drop event sequence turned out to be unreliable for a real
-// mouse gesture in this app (it only fired for synthetic/CDP-driven drags), so it never actually
-// reordered anything despite the grab cursor showing.
+// Reordering/grouping uses plain pointer events (setPointerCapture + elementFromPoint
+// hit-testing, gated behind a small movement threshold so a plain click never misfires as a
+// drag), the same technique MainPanel's own pane-resize handle already uses, rather than native
+// HTML5 drag-and-drop - the native drag/drop event sequence turned out to be unreliable for a
+// real mouse gesture in this app (it only fired for synthetic/CDP-driven drags).
+const DRAG_THRESHOLD_PX = 4
+
 export default function TerminalTabBar({
-  tabs,
+  groups,
   activeTabId,
+  primaryTabId,
   orientation,
-  splitView,
   onSelect,
   onAdd,
   onClose,
-  onReorder,
-  onOrientationChange,
-  onToggleSplitView
+  onDrop,
+  onOrientationChange
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
-  // A real mouse fires pointermove faster than React re-renders, so the move/up handlers below
-  // read these refs (updated synchronously, in the same tick) rather than the state above (which
-  // can still be one render behind) - state alone caused a race where a fast drag saw a stale
-  // `draggingId` of null in its very first pointermove and never captured a hover target.
+  // Refs mirror the state above and are what move/up actually read from: a real mouse fires
+  // pointermove faster than React re-renders, so a fast drag's first move could still see a
+  // stale (pre-drag) value from state - refs are updated synchronously, in the same tick.
   const draggingIdRef = useRef<string | null>(null)
   const hoverIdRef = useRef<string | null>(null)
+  const startPosRef = useRef<{ x: number; y: number } | null>(null)
+  const movedRef = useRef(false)
+
+  const tabNumbers = new Map(groups.flat().map((id, index) => [id, index + 1]))
 
   return (
     <div className={`terminal-tabbar terminal-tabbar-${orientation}`}>
-      {tabs.map((id, index) => (
-        <div
-          key={id}
-          data-tab-id={id}
-          className={`terminal-tab${index > 0 ? ' terminal-tab-draggable' : ''}${
-            id === activeTabId ? ' terminal-tab-active' : ''
-          }${id === draggingId ? ' terminal-tab-dragging' : ''}${
-            id === hoverId && id !== draggingId ? ' terminal-tab-hover' : ''
-          }`}
-          onClick={() => onSelect(id)}
-          onPointerDown={(e) => {
-            if (index === 0) return
-            e.currentTarget.setPointerCapture(e.pointerId)
-            draggingIdRef.current = id
-            hoverIdRef.current = null
-            setDraggingId(id)
-            setHoverId(null)
-          }}
-          onPointerMove={(e) => {
-            if (!draggingIdRef.current) return
-            const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.terminal-tab')
-            const overId = over?.getAttribute('data-tab-id')
-            const next = overId && overId !== tabs[0] ? overId : null
-            hoverIdRef.current = next
-            setHoverId(next)
-          }}
-          onPointerUp={(e) => {
-            e.currentTarget.releasePointerCapture(e.pointerId)
-            const drag = draggingIdRef.current
-            const hover = hoverIdRef.current
-            if (drag && hover && hover !== drag) onReorder(drag, hover)
-            draggingIdRef.current = null
-            hoverIdRef.current = null
-            setDraggingId(null)
-            setHoverId(null)
-          }}
-        >
-          <span>Tab {index + 1}</span>
-          {index > 0 && (
-            <button
-              className="terminal-tab-close"
-              title="Close tab"
-              onClick={(e) => {
-                e.stopPropagation()
-                onClose(id)
-              }}
-            >
-              <X size={11} strokeWidth={2} />
-            </button>
-          )}
-        </div>
+      {groups.map((group, groupIndex) => (
+        <Fragment key={group[0]}>
+          <div
+            className={`terminal-tab-group${group.length > 1 ? ' terminal-tab-group-stacked' : ''}`}
+          >
+            {group.map((id) => {
+              const label = tabNumbers.get(id)
+              const isPrimary = id === primaryTabId
+              return (
+                <div
+                  key={id}
+                  data-tab-id={id}
+                  className={`terminal-tab${!isPrimary ? ' terminal-tab-draggable' : ''}${
+                    id === activeTabId ? ' terminal-tab-active' : ''
+                  }${id === draggingId ? ' terminal-tab-dragging' : ''}${
+                    id === hoverId && id !== draggingId ? ' terminal-tab-hover' : ''
+                  }`}
+                  onClick={() => onSelect(id)}
+                  onPointerDown={(e) => {
+                    if (isPrimary) return
+                    e.currentTarget.setPointerCapture(e.pointerId)
+                    draggingIdRef.current = id
+                    hoverIdRef.current = null
+                    startPosRef.current = { x: e.clientX, y: e.clientY }
+                    movedRef.current = false
+                  }}
+                  onPointerMove={(e) => {
+                    const dragId = draggingIdRef.current
+                    const start = startPosRef.current
+                    if (!dragId || !start) return
+                    if (!movedRef.current) {
+                      if (
+                        Math.hypot(e.clientX - start.x, e.clientY - start.y) < DRAG_THRESHOLD_PX
+                      ) {
+                        return
+                      }
+                      movedRef.current = true
+                      setDraggingId(dragId)
+                    }
+                    const over = document
+                      .elementFromPoint(e.clientX, e.clientY)
+                      ?.closest('.terminal-tab')
+                    const overId = over?.getAttribute('data-tab-id') ?? null
+                    hoverIdRef.current = overId
+                    setHoverId(overId)
+                  }}
+                  onPointerUp={(e) => {
+                    e.currentTarget.releasePointerCapture(e.pointerId)
+                    if (draggingIdRef.current && movedRef.current) {
+                      onDrop(draggingIdRef.current, hoverIdRef.current)
+                    }
+                    draggingIdRef.current = null
+                    hoverIdRef.current = null
+                    startPosRef.current = null
+                    movedRef.current = false
+                    setDraggingId(null)
+                    setHoverId(null)
+                  }}
+                >
+                  <span>Tab {label}</span>
+                  {!isPrimary && (
+                    <button
+                      className="terminal-tab-close"
+                      title="Close tab"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onClose(id)
+                      }}
+                    >
+                      <X size={11} strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {groupIndex < groups.length - 1 && <div className="terminal-tab-group-divider" />}
+        </Fragment>
       ))}
       <button className="btn-icon terminal-tab-add" title="New terminal tab" onClick={onAdd}>
         <Plus size={13} strokeWidth={2} />
@@ -117,17 +146,6 @@ export default function TerminalTabBar({
         onClick={() => onOrientationChange('vertical')}
       >
         <Rows2 size={13} strokeWidth={2} />
-      </button>
-      <button
-        className={`btn-icon${splitView ? ' btn-icon-active' : ''}`}
-        title={
-          splitView
-            ? 'Showing every tab at once - click to show one at a time'
-            : 'Show every tab at once, split per the orientation above'
-        }
-        onClick={onToggleSplitView}
-      >
-        <LayoutGrid size={13} strokeWidth={2} />
       </button>
     </div>
   )
