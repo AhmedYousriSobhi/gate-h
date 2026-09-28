@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { LogIn, RefreshCw } from 'lucide-react'
+import { SearchAddon } from '@xterm/addon-search'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { LogIn, RefreshCw, Search, X } from 'lucide-react'
 import type {
   ClusterReachability,
   ClusterSummary,
@@ -72,6 +74,10 @@ export default function TerminalPanel({
     expired: boolean
   } | null>(null)
   const [loginDialog, setLoginDialog] = useState<{ renew: boolean } | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchAddonRef = useRef<SearchAddon | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const statusRef = useRef<SessionStatus>(status)
   useEffect(() => {
     statusRef.current = status
@@ -189,8 +195,39 @@ export default function TerminalPanel({
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
+    const searchAddon = new SearchAddon()
+    term.loadAddon(searchAddon)
+    searchAddonRef.current = searchAddon
+    // Default handler (window.open) is already routed through shell.openExternal by the
+    // app-wide setWindowOpenHandler in src/main/index.ts, so clicked links open safely without
+    // a custom handler here.
+    term.loadAddon(new WebLinksAddon())
     term.open(containerRef.current)
     fitAddon.fit()
+
+    // Intercepted before xterm turns them into control bytes for the shell, so Ctrl+F opens the
+    // search bar instead of sending ACK, and Ctrl/Cmd+Shift+C/V copy/paste the OS clipboard
+    // without touching Ctrl+C's SIGINT (which has no Shift and is left to the default handler).
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true
+      const mod = event.ctrlKey || event.metaKey
+      if (mod && !event.shiftKey && event.key.toLowerCase() === 'f') {
+        setSearchOpen(true)
+        return false
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === 'c') {
+        const selection = term.getSelection()
+        if (selection) void navigator.clipboard.writeText(selection)
+        return false
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === 'v') {
+        void navigator.clipboard.readText().then((text) => {
+          if (sessionId) window.api.ssh.write(sessionId, text)
+        })
+        return false
+      }
+      return true
+    })
 
     const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit()
@@ -252,8 +289,29 @@ export default function TerminalPanel({
       dataDisposable.dispose()
       if (sessionId) window.api.ssh.disconnect(sessionId)
       term.dispose()
+      searchAddonRef.current = null
+      setSearchOpen(false)
     }
   }, [cluster.id, connectNonce, scheduleReconnectOrPause])
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus()
+  }, [searchOpen])
+
+  const closeSearch = useCallback((): void => {
+    setSearchOpen(false)
+    searchAddonRef.current?.clearDecorations()
+  }, [])
+
+  const runSearch = useCallback(
+    (direction: 'next' | 'previous'): void => {
+      if (!searchQuery) return
+      const addon = searchAddonRef.current
+      if (direction === 'next') addon?.findNext(searchQuery)
+      else addon?.findPrevious(searchQuery)
+    },
+    [searchQuery]
+  )
 
   const statusLabel =
     status === 'reconnecting'
@@ -291,6 +349,30 @@ export default function TerminalPanel({
       {connectError && <div className="error-banner terminal-error">{connectError}</div>}
       <div className="terminal-body">
         <div className="terminal-container" ref={containerRef} />
+        {searchOpen && (
+          <div className="terminal-search">
+            <Search size={13} strokeWidth={2} />
+            <input
+              ref={searchInputRef}
+              className="terminal-search-input"
+              placeholder="Find in this session"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  closeSearch()
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  runSearch(e.shiftKey ? 'previous' : 'next')
+                }
+              }}
+            />
+            <button className="btn-icon" title="Close search" onClick={closeSearch}>
+              <X size={13} strokeWidth={2} />
+            </button>
+          </div>
+        )}
         {/* Shades the (possibly stale) terminal buffer whenever there's no live session, so it's
             never mistaken for a connected, responsive prompt. */}
         {status !== 'connected' && (
