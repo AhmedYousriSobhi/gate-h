@@ -124,13 +124,18 @@ export default function MainPanel({
     })
   }, [])
 
-  // The single drop handler behind every drag gesture in the tab strip: dropping one tab onto
-  // another within the same group reorders them; onto a tab in a different group merges dragId
-  // into that group (stacked, shown split together); onto empty strip space (dropId null) pops
-  // dragId back out into its own standalone group. The primary tab can never be the one dragged,
-  // though it's a valid drop target - other tabs can still join its group.
+  // The single drop handler behind every drag gesture in the tab strip. `zone` (see
+  // TerminalTabBar) is which third of dropId's tab was hovered: dropping within the same group
+  // always just reorders that group's pane order regardless of zone; across groups, the middle
+  // third ('merge') stacks dragId into dropId's group (shown split together), while the outer
+  // thirds ('before'/'after') instead reposition dragId as its own standalone group next to
+  // dropId's - without that split, dropping one standalone tab onto another would always merge
+  // them, leaving no way to just swap two ungrouped tabs' positions. Dropping on empty strip
+  // space (dropId null) pops dragId back out into its own standalone group. The primary tab can
+  // never be the one dragged, though it's a valid drop target - other tabs can still join its
+  // group.
   const handleDropTab = useCallback(
-    (dragId: string, dropId: string | null): void => {
+    (dragId: string, dropId: string | null, zone: 'before' | 'after' | 'merge'): void => {
       if (dragId === primaryTabId || dragId === dropId) return
       setGroups((prev) => {
         const fromIndex = prev.findIndex((g) => g.includes(dragId))
@@ -153,10 +158,21 @@ export default function MainPanel({
           return prev.map((g, i) => (i === fromIndex ? group : g))
         }
 
-        const withoutDrag = prev.map((g) => g.filter((t) => t !== dragId))
-        const toGroup = [...withoutDrag[toIndex]]
-        toGroup.splice(toGroup.indexOf(dropId) + 1, 0, dragId)
-        return withoutDrag.map((g, i) => (i === toIndex ? toGroup : g)).filter((g) => g.length > 0)
+        if (zone === 'merge') {
+          const withoutDrag = prev.map((g) => g.filter((t) => t !== dragId))
+          const toGroup = [...withoutDrag[toIndex]]
+          toGroup.splice(toGroup.indexOf(dropId) + 1, 0, dragId)
+          return withoutDrag
+            .map((g, i) => (i === toIndex ? toGroup : g))
+            .filter((g) => g.length > 0)
+        }
+
+        const withoutDrag = prev
+          .map((g) => g.filter((t) => t !== dragId))
+          .filter((g) => g.length > 0)
+        const targetGroupIndex = withoutDrag.findIndex((g) => g.includes(dropId))
+        withoutDrag.splice(zone === 'before' ? targetGroupIndex : targetGroupIndex + 1, 0, [dragId])
+        return withoutDrag
       })
       setActiveTabId(dragId)
     },

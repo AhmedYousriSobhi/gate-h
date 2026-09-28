@@ -2,6 +2,8 @@ import { Fragment, useRef, useState } from 'react'
 import { Columns2, Plus, Rows2, X } from 'lucide-react'
 import type { SessionStatus } from './TerminalPanel'
 
+type DropZone = 'before' | 'after' | 'merge'
+
 interface TerminalTabBarProps {
   /** Tabs the user has dragged together are "stacked" - shown split, simultaneously - while
    *  separate groups are reached by switching between them. Order here is display order. */
@@ -23,9 +25,12 @@ interface TerminalTabBarProps {
   onSelect: (id: string) => void
   onAdd: () => void
   onClose: (id: string) => void
-  /** `dropId` is null when the tab was dragged onto empty strip space rather than another tab -
-   *  see MainPanel's handleDropTab for the reorder/merge/pop-out semantics this drives. */
-  onDrop: (dragId: string, dropId: string | null) => void
+  /** `dropId` is null when the tab was dragged onto empty strip space rather than another tab
+   *  (zone is meaningless in that case) - see MainPanel's handleDropTab for the reorder/
+   *  merge/pop-out semantics this drives. `zone` is which third of dropId's tab the pointer was
+   *  over: the edge thirds reorder (dragId ends up in its own standalone group, positioned next
+   *  to dropId's), the middle third merges dragId into dropId's group instead. */
+  onDrop: (dragId: string, dropId: string | null, zone: DropZone) => void
   onRename: (id: string, title: string) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
@@ -53,14 +58,14 @@ export default function TerminalTabBar({
   onOrientationChange
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [hoverId, setHoverId] = useState<string | null>(null)
+  const [hover, setHover] = useState<{ id: string; zone: DropZone } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   // Refs mirror the state above and are what move/up actually read from: a real mouse fires
   // pointermove faster than React re-renders, so a fast drag's first move could still see a
   // stale (pre-drag) value from state - refs are updated synchronously, in the same tick.
   const draggingIdRef = useRef<string | null>(null)
-  const hoverIdRef = useRef<string | null>(null)
+  const hoverRef = useRef<{ id: string; zone: DropZone } | null>(null)
   const startPosRef = useRef<{ x: number; y: number } | null>(null)
   const movedRef = useRef(false)
 
@@ -77,6 +82,7 @@ export default function TerminalTabBar({
               const status = statuses.get(id)
               const title = titles.get(id) ?? `Session ${label}`
               const isRenaming = renamingId === id
+              const dropZone = hover?.id === id && id !== draggingId ? hover.zone : null
               return (
                 <div
                   key={id}
@@ -84,7 +90,9 @@ export default function TerminalTabBar({
                   className={`terminal-tab${!isPrimary ? ' terminal-tab-draggable' : ''}${
                     id === activeTabId ? ' terminal-tab-active' : ''
                   }${id === draggingId ? ' terminal-tab-dragging' : ''}${
-                    id === hoverId && id !== draggingId ? ' terminal-tab-hover' : ''
+                    dropZone === 'merge' ? ' terminal-tab-hover' : ''
+                  }${dropZone === 'before' ? ' terminal-tab-drop-before' : ''}${
+                    dropZone === 'after' ? ' terminal-tab-drop-after' : ''
                   }`}
                   onClick={() => onSelect(id)}
                   onDoubleClick={(e) => {
@@ -96,7 +104,7 @@ export default function TerminalTabBar({
                     if (isPrimary) return
                     e.currentTarget.setPointerCapture(e.pointerId)
                     draggingIdRef.current = id
-                    hoverIdRef.current = null
+                    hoverRef.current = null
                     startPosRef.current = { x: e.clientX, y: e.clientY }
                     movedRef.current = false
                   }}
@@ -116,21 +124,36 @@ export default function TerminalTabBar({
                     const over = document
                       .elementFromPoint(e.clientX, e.clientY)
                       ?.closest('.terminal-tab')
-                    const overId = over?.getAttribute('data-tab-id') ?? null
-                    hoverIdRef.current = overId
-                    setHoverId(overId)
+                    const overId = over?.getAttribute('data-tab-id')
+                    let next: { id: string; zone: DropZone } | null = null
+                    if (over && overId && overId !== dragId) {
+                      const rect = over.getBoundingClientRect()
+                      // The middle third of the target tab merges dragId into its group; the
+                      // outer thirds (along the strip's own axis) just reorder instead - without
+                      // this split, dropping anywhere on a tab always merged, so two standalone
+                      // tabs could never swap places without also getting stacked together.
+                      const rel =
+                        orientation === 'vertical'
+                          ? (e.clientY - rect.top) / rect.height
+                          : (e.clientX - rect.left) / rect.width
+                      const zone: DropZone = rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'merge'
+                      next = { id: overId, zone }
+                    }
+                    hoverRef.current = next
+                    setHover(next)
                   }}
                   onPointerUp={(e) => {
                     e.currentTarget.releasePointerCapture(e.pointerId)
                     if (draggingIdRef.current && movedRef.current) {
-                      onDrop(draggingIdRef.current, hoverIdRef.current)
+                      const drop = hoverRef.current
+                      onDrop(draggingIdRef.current, drop?.id ?? null, drop?.zone ?? 'merge')
                     }
                     draggingIdRef.current = null
-                    hoverIdRef.current = null
+                    hoverRef.current = null
                     startPosRef.current = null
                     movedRef.current = false
                     setDraggingId(null)
-                    setHoverId(null)
+                    setHover(null)
                   }}
                 >
                   {status && <span className={`session-dot session-dot-${status}`} />}
