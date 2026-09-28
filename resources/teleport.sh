@@ -29,6 +29,7 @@ usage() {
 Usage:
   teleport.sh status [options]              is there a usable session for --proxy?
   teleport.sh login  [options]              log in unless a usable session exists
+                                            (--force: sign out of --proxy first, to renew)
   teleport.sh ssh    [options] -- [ssh args] pre-flight, then tsh ssh (or ssh if no --proxy)
   teleport.sh scp    [options] -- [scp args] pre-flight, then tsh scp (or scp if no --proxy)
 
@@ -42,6 +43,7 @@ Options (each also settable via the env var shown, or in a --config file):
                         counts as expired
   --login-timeout SECS  max wait for `tsh login` (SSO callback)  TPW_LOGIN_TIMEOUT (default: 180)
   --no-login            ssh/scp: fail instead of logging in
+  --force               login: renew even if the session is still valid
   --non-interactive     never prompt; print the SSO link instead TPW_NON_INTERACTIVE=1
                         of opening a browser
   --config FILE         bash file of TPW_*=... assignments       TPW_CONFIG
@@ -71,6 +73,7 @@ parse_args() {
   local o_proxy="" o_cluster="" o_user="" o_auth="" o_ttl="" o_timeout=""
   local o_config="" o_nonint=""
   NO_LOGIN=0
+  FORCE=0
   PASSTHROUGH=()
 
   while (($#)); do
@@ -83,6 +86,7 @@ parse_args() {
       --login-timeout) o_timeout=${2:?--login-timeout needs a value}; shift ;;
       --config) o_config=${2:?--config needs a value}; shift ;;
       --no-login) NO_LOGIN=1 ;;
+      --force) FORCE=1 ;;
       --non-interactive) o_nonint=1 ;;
       --) shift; PASSTHROUGH=("$@"); break ;;
       -h | --help) usage; exit 0 ;;
@@ -259,8 +263,12 @@ do_login() {
   errlog=$(mktemp)
   # All of tsh's output goes to stderr, so it can't be mistaken for a STATUS
   # line, and is also kept to classify a failure by.
-  "${runner[@]}" tsh "${args[@]}" <"$stdin" > >(tee "$errlog" >&2) 2>&1 || rc=$?
-  wait $! 2>/dev/null || true
+  # A pipeline rather than a process substitution, so the shell waits for tee to finish writing
+  # the log before it's read below.
+  set +e
+  "${runner[@]}" tsh "${args[@]}" <"$stdin" 2>&1 | tee "$errlog" >&2
+  rc=${PIPESTATUS[0]}
+  set -e
   if ((rc == 124)); then
     local output
     output=$(cat "$errlog")
@@ -306,6 +314,14 @@ cmd_login() {
   require_proxy
   require_tsh
   tsh_scope
+  if ((FORCE)); then
+    # tsh login returns straight away while a session is still valid, so renewing early means
+    # dropping this proxy's certificate first. Other proxies' profiles are left alone.
+    status login "Signing out of $PROXY to renew the session"
+    tsh logout "${TSH_SCOPE[@]}" >&2 2>&1 || true
+    do_login
+    return
+  fi
   ensure_session
 }
 
