@@ -56,6 +56,9 @@ export default function MainPanel({
   const [tabs, setTabs] = useState<string[]>(() => [crypto.randomUUID()])
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0])
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
+  // Split view shows every open tab at once (arranged per tabOrientation) instead of only
+  // activeTabId's - off by default since most sessions only need one tab in view at a time.
+  const [splitView, setSplitView] = useState(false)
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
 
@@ -87,6 +90,18 @@ export default function MainPanel({
       next.splice(from, 1)
       next.splice(to, 0, dragId)
       setTabs(next)
+    },
+    [tabs]
+  )
+
+  // Ctrl/Cmd+Tab (+Shift to reverse), forwarded up from whichever tab's terminal currently has
+  // focus - see TerminalPanel's onCycleTab prop. Wraps around in both directions.
+  const handleCycleTab = useCallback(
+    (direction: 1 | -1): void => {
+      setActiveTabId((current) => {
+        const idx = tabs.indexOf(current)
+        return tabs[(idx + direction + tabs.length) % tabs.length]
+      })
     },
     [tabs]
   )
@@ -173,26 +188,35 @@ export default function MainPanel({
                 tabs={tabs}
                 activeTabId={activeTabId}
                 orientation={tabOrientation}
+                splitView={splitView}
                 onSelect={setActiveTabId}
                 onAdd={handleAddTab}
                 onClose={handleCloseTab}
                 onReorder={handleReorderTab}
                 onOrientationChange={setTabOrientation}
+                onToggleSplitView={() => setSplitView((v) => !v)}
               />
-              <div className="terminal-tab-panes">
+              <div
+                className={`terminal-tab-panes${splitView ? ` terminal-tab-panes-split-${tabOrientation}` : ''}`}
+              >
                 {tabs.map((tabId, index) => {
                   const isPrimary = index === 0
                   if (!isPrimary && hidden) return null
+                  const isVisible = splitView || tabId === activeTabId
                   return (
                     <div
                       key={tabId}
-                      className="terminal-tab-pane"
-                      style={{ display: tabId === activeTabId ? 'flex' : 'none' }}
+                      className={`terminal-tab-pane${
+                        splitView && tabId === activeTabId ? ' terminal-tab-pane-focused' : ''
+                      }`}
+                      style={{ display: isVisible ? 'flex' : 'none' }}
+                      onPointerDown={() => setActiveTabId(tabId)}
                     >
                       <TerminalPanel
                         cluster={cluster}
                         reachability={reachability}
                         onStatusChange={isPrimary ? onTerminalStatusChange : undefined}
+                        onCycleTab={handleCycleTab}
                       />
                     </div>
                   )

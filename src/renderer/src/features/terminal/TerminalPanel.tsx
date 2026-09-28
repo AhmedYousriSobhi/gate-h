@@ -23,6 +23,9 @@ interface TerminalPanelProps {
    *  online (or already be online at mount) with no such flip ever being observed here. */
   reachability?: ClusterReachability
   onStatusChange?: (status: SessionStatus) => void
+  /** Ctrl/Cmd+Tab (+Shift to reverse) cycles the enclosing tab strip - forwarded up rather than
+   *  handled here since this component has no notion of sibling tabs. */
+  onCycleTab?: (direction: 1 | -1) => void
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -55,9 +58,17 @@ function msLeft(info: TeleportSessionInfo | undefined): number {
 export default function TerminalPanel({
   cluster,
   reachability,
-  onStatusChange
+  onStatusChange,
+  onCycleTab
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
+  // onCycleTab once at setup time - kept fresh here instead of adding it to that effect's deps,
+  // which would otherwise reconnect the SSH session whenever the callback identity changes.
+  const onCycleTabRef = useRef(onCycleTab)
+  useEffect(() => {
+    onCycleTabRef.current = onCycleTab
+  }, [onCycleTab])
   const [connectError, setConnectError] = useState<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [retryAttempt, setRetryAttempt] = useState(0)
@@ -211,6 +222,11 @@ export default function TerminalPanel({
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
       const mod = event.ctrlKey || event.metaKey
+      if (mod && event.key === 'Tab') {
+        event.preventDefault()
+        onCycleTabRef.current?.(event.shiftKey ? -1 : 1)
+        return false
+      }
       if (mod && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         setSearchOpen(true)
