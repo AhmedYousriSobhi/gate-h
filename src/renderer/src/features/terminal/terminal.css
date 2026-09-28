@@ -1,3 +1,61 @@
+.terminal-tab-panes {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-tab-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-tabbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text-2);
+  cursor: pointer;
+}
+
+.terminal-tab:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.terminal-tab-active {
+  background-color: var(--color-surface-active);
+  color: var(--color-text-1);
+}
+
+.terminal-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 1px;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+
+.terminal-tab-close:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.terminal-tab-add {
+  margin-left: var(--space-1);
+}
+
 .terminal-panel {
   display: flex;
   flex-direction: column;
