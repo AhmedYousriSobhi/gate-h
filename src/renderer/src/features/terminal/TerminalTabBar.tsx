@@ -37,7 +37,7 @@ interface TerminalTabBarProps {
    *  "Session {tabNumbers}". */
   titles: Map<string, string>
   activeTabId: string
-  /** Can't be closed or dragged, though other tabs can be dropped onto it to join its group. */
+  /** Can't be closed (no close button), but drags and stacks like any other tab. */
   primaryTabId: string
   orientation: 'horizontal' | 'vertical'
   /** How a stacked group's panes are arranged - independent of `orientation` (the tab strip's
@@ -191,7 +191,7 @@ export default function TerminalTabBar({
                   <div
                     key={id}
                     data-tab-id={id}
-                    className={`terminal-tab${!isPrimary ? ' terminal-tab-draggable' : ''}${
+                    className={`terminal-tab terminal-tab-draggable${
                       id === activeTabId ? ' terminal-tab-active' : ''
                     }${id === draggingId ? ' terminal-tab-dragging' : ''}${
                       dropZone === 'merge' ? ' terminal-tab-hover' : ''
@@ -209,7 +209,6 @@ export default function TerminalTabBar({
                       onContextMenu(id, e.clientX, e.clientY)
                     }}
                     onPointerDown={(e) => {
-                      if (isPrimary) return
                       e.currentTarget.setPointerCapture(e.pointerId)
                       draggingIdRef.current = id
                       hoverRef.current = null

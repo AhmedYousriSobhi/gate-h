@@ -12,39 +12,28 @@
   flex-direction: row;
 }
 
+/* Panes are absolutely positioned from the stack's split tree (MainPanel's layoutRects), not
+   laid out by flexbox - that's what lets one stack mix directions without re-parenting (and so
+   remounting) any session. */
 .terminal-tab-panes {
-  display: flex;
+  position: relative;
   flex: 1;
-  min-height: 0;
-  /* Without this, a vertical tab sidebar (itself a row-direction flex parent) combined with a
-     side-by-side pane split (row-direction children) leaves this container at its default
-     min-width: auto - it refuses to shrink below its children's combined content width instead
-     of dividing the available space, so the second pane ends up rendered off past the visible
-     area instead of actually appearing side by side. */
   min-width: 0;
-}
-
-.terminal-tab-panes-split-horizontal {
-  flex-direction: row;
-}
-
-.terminal-tab-panes-split-vertical {
-  flex-direction: column;
+  min-height: 0;
 }
 
 .terminal-tab-pane {
+  position: absolute;
   display: flex;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
+  box-sizing: border-box;
   overflow: hidden;
 }
 
-.terminal-tab-panes-split-horizontal .terminal-tab-pane:not(:last-child) {
+.terminal-tab-pane-border-right {
   border-right: 1px solid var(--color-border);
 }
 
-.terminal-tab-panes-split-vertical .terminal-tab-pane:not(:last-child) {
+.terminal-tab-pane-border-bottom {
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -57,10 +46,6 @@
 /* Toggled imperatively (not via React) by TerminalTabBar while dragging a tab over this pane: a
    translucent preview of the half the dropped session will take, like VS Code's drag-to-split.
    An overlay rather than a border so it reads over whatever the terminal is rendering. */
-.terminal-tab-pane {
-  position: relative;
-}
-
 .terminal-tab-pane[class*='terminal-tab-pane-drop-']::after {
   content: '';
   position: absolute;
