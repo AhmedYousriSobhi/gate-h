@@ -7,7 +7,12 @@
 // the proxy already, since nobody is there to answer a login prompt.
 
 import { PtyManager, type PtyExit } from '../src/main/pty/manager'
-import { TeleportPreflight, teleportSshCommand } from '../src/main/teleport/session'
+import {
+  EXIT_NO_SESSION,
+  TeleportPreflight,
+  teleportLoginCommand,
+  teleportSshCommand
+} from '../src/main/teleport/session'
 import type { ClusterSummary } from '../src/shared/types'
 
 const manager = new PtyManager()
@@ -183,22 +188,31 @@ async function local(): Promise<void> {
     report(p.error === null, 'ignores everything after the session check passes')
   }
   {
-    // Port 1 on localhost refuses at once. Without tsh installed this exits 3 instead of 6 -
-    // either way the session must fail with the wrapper's reason recorded.
+    // The terminal command never logs in: with no session for the proxy it must exit with
+    // EXIT_NO_SESSION straight away (no network, no prompt), which the renderer turns into
+    // "Teleport login needed".
     const cluster = {
-      name: 'unreachable',
+      name: 'no-session',
       connection: { host: 'node', username: 'user' },
-      teleport: { proxy: '127.0.0.1:1' }
+      teleport: { proxy: 'no-session.invalid:443' }
     } as unknown as ClusterSummary
     const command = teleportSshCommand(cluster)
+    report(command.args.includes('--no-login'), 'the terminal command never logs in (--no-login)')
     const p = new TeleportPreflight()
+    const started = Date.now()
     const r = run(command.file, command.args)
-    const exit = await withTimeout(r.exited, 30000)
+    const exit = await withTimeout(r.exited, 10000)
     p.feed(r.output())
     report(
-      exit !== 'timeout' && exit.exitCode !== 0 && p.error !== null,
-      'a session that fails its check exits non-zero with the reason recorded',
-      `${JSON.stringify(exit)} error=${p.error}`
+      exit !== 'timeout' && exit.exitCode === EXIT_NO_SESSION && Date.now() - started < 5000,
+      'with no session it exits EXIT_NO_SESSION at once, without prompting',
+      `${JSON.stringify(exit)} after ${Date.now() - started}ms error=${p.error}`
+    )
+    report(!/password|OTP/i.test(r.output()), '...and shows no login prompt', r.output())
+    const login = teleportLoginCommand(cluster, true)
+    report(
+      login.args.includes('login') && login.args.includes('--force'),
+      'renew runs teleport.sh login --force'
     )
   }
 }
