@@ -242,6 +242,24 @@ AZT_LOCAL_PORT=2222
 of the tunnel's log are printed, and the full log is kept at
 `$XDG_RUNTIME_DIR/gate-h-azure-tunnel/<name>.log`.
 
+### Clusters behind Teleport
+
+For clusters that are only reachable through a [Teleport](https://goteleport.com/) proxy, the
+terminal runs `tsh ssh` for you. It first checks for a valid Teleport session and, if there
+isn't one, logs you in right in the terminal.
+
+1. Install the Teleport client so `tsh` is on your `PATH`.
+2. Add or edit the cluster and tick **Behind Teleport**:
+   - **Proxy address:** e.g. `teleport.example.com:443`.
+   - **Leaf cluster**, **Teleport user**, **Auth connector:** optional.
+   - **Teleport node name** (in the SSH section): the node as `tsh ls` lists it, e.g. `slogin1`.
+   - **Login:** the OS account to log in as on the node.
+3. Select the cluster. If you need to log in, the password and OTP prompts appear in the
+   terminal, or your browser opens for SSO. The shell starts once you're logged in.
+
+The same session check and routing are available from the command line through
+[resources/teleport.sh](resources/teleport.sh). [docs/TELEPORT.md](docs/TELEPORT.md) covers both.
+
 ## Development
 
 For active development (with hot reload), run Gate-H directly with Node instead — Docker doesn't
