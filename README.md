@@ -20,10 +20,113 @@
 
 ---
 
-**Contents:** [Why Gate-H](#why-gate-h) · [Features](#features) · [Preview](#preview) ·
-[Quick start](#quick-start) · [Connecting to your clusters](#connecting-to-your-clusters) ·
-[Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) ·
-[For developers](#for-developers) · [Documentation](#documentation)
+**Jump to:** [🚀 Quick start](#-quick-start) · [Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) · [Features](#features) · [For developers](#for-developers) · [Documentation](#documentation)
+
+## 🚀 Quick start
+
+**① Install.** You need Linux and [Docker](https://docs.docker.com/engine/install/).
+
+```bash
+git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
+./build-desktop.sh && ./dist/Gate-H-*.AppImage
+```
+
+**② Add a cluster.** Click **+ Add**, give it a name, fill in *SSH connection* (see below), and
+click **Save cluster**.
+
+**③ Open it.** Click the cluster in the sidebar. Its terminal and status open side by side.
+
+### How do you reach your cluster?
+
+Pick the way you'd normally connect, and open it to see what to fill in.
+
+<details>
+<summary><b>🔑 Directly</b> — <code>ssh user@host</code></summary>
+
+<br/>
+
+| Field | Enter |
+|---|---|
+| **Host** / **Port** | the login node, e.g. `login.hpc.example.org` / `22` |
+| **Username** | your cluster username |
+| **Auth method** | **Private key** (path + passphrase), **Password**, or **SSH agent** |
+
+Passwords and passphrases are encrypted with your OS keychain. The first time you connect,
+Gate-H remembers the server's host key and warns you if it ever changes.
+
+</details>
+
+<details>
+<summary><b>🪜 Through a jump host</b> — <code>ssh -J jump user@host</code></summary>
+
+<br/>
+
+1. Fill in the login node as for **Directly**.
+2. Tick **Connect through a jump/bastion host**, then enter the jump host's address, port,
+   username and auth method.
+
+A jump host can reuse the cluster's password or passphrase only if both use the same auth method.
+
+</details>
+
+<details>
+<summary><b>☁️ Through Azure</b> — Azure Bastion or <code>az ssh vm</code></summary>
+
+<br/>
+
+**You need:** the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`), and
+either Azure Bastion (Standard/Premium SKU, *Native client support* on) or a VM you can reach with
+`az ssh vm`.
+
+1. Under *SSH connection*, enter the tunnel's **far end**, not `127.0.0.1`: the target VM
+   (Bastion), or the login node as the VM sees it (`az ssh vm`). Leave the jump host unticked.
+2. Tick **Azure tunnel** and fill in:
+
+   | Field | Enter |
+   |---|---|
+   | **Tunnel through** | Azure Bastion, or VM via `az ssh vm` |
+   | **Local port** | any free port, e.g. `2222` |
+   | **Subscription** | click **Load from az** and pick one |
+   | **Resource group** | the Bastion's or VM's resource group |
+   | **Bastion name** + **Target VM resource ID** | Bastion only |
+   | **VM name** (+ optional **Local VM user**) | `az ssh vm` only |
+
+3. Select the cluster. If Azure needs you to sign in, the terminal shows a code to enter in your
+   browser. Then it opens the tunnel and connects.
+
+💡 Run your shell in `tmux new -A -s main` so a dropped connection doesn't lose your work.
+More: [docs/AZURE.md](docs/AZURE.md).
+
+</details>
+
+<details>
+<summary><b>🛡️ Behind Teleport</b> — <code>tsh login</code> then <code>tsh ssh user@node</code></summary>
+
+<br/>
+
+**You need:** the Teleport client (check with `tsh version`), and from your admin the proxy
+address, your Teleport user, and the node name. First time with a password? Open your invite link,
+set a password, and scan the QR code into an authenticator app.
+
+1. Tick **Behind Teleport** and fill in:
+
+   | Field | Enter |
+   |---|---|
+   | **Proxy address** | e.g. `teleport.example.com:443` |
+   | **Teleport user** | only if it differs from your OS username |
+   | **Leaf cluster** / **Auth connector** | only if your admin gave you one |
+   | **Teleport node name** | the node as `tsh ls` shows it, e.g. `slogin1` |
+   | **Login** | your Linux account on that node |
+
+2. Select the cluster:
+   - **Already logged in:** your shell opens straight away.
+   - **Not logged in:** your browser opens for single sign-on, or the terminal asks for your
+     password and 6-digit code. Then your shell opens.
+
+💡 Proxy uses your organisation's own CA? Start Gate-H with `SSL_CERT_FILE=/path/to/ca.pem`.
+More: [docs/TELEPORT.md](docs/TELEPORT.md).
+
+</details>
 
 ## Why Gate-H
 
@@ -127,162 +230,16 @@ connection attempts. Secrets are encrypted on disk.
 > exactly how, and what's still unverified against real infrastructure.
 
 
-## Quick start
-
-### 1. Install
-
-Gate-H runs on Linux. The simplest way to build it needs only
-[Docker](https://docs.docker.com/engine/install/):
-
-```bash
-git clone git@github.com:AhmedYousriSobhi/gate-h.git
-cd gate-h
-./build-desktop.sh            # builds and packages Gate-H inside a container
-./dist/Gate-H-*.AppImage      # run it
-```
-
-The build runs in a pinned toolchain image ([docker/build.Dockerfile](docker/build.Dockerfile)),
-so you get the same result on any machine.
-
-### 2. Add your first cluster
-
-1. Click **+ Add** in the sidebar.
-2. Enter a **name**, then the **host**, **username** and **auth method** under *SSH connection*.
-   If your cluster needs a jump host, Azure or Teleport, see
-   [Connecting to your clusters](#connecting-to-your-clusters).
-3. Optionally fill in **Grafana** and **Jira**. You can add them later.
-4. Click **Save cluster**. The cluster appears in the sidebar with its reachability light.
-
-### 3. Open it
-
-Click the cluster. Its **Terminal** and **Status** (Grafana and Jira) open side by side, and the
-sidebar stays visible, so switching clusters is one click.
-
-## Connecting to your clusters
-
-How do you normally reach the cluster's login node?
-
-| If you reach it… | Fill in | Section |
-|---|---|---|
-| directly with `ssh user@host` | *SSH connection* only | [Direct SSH](#direct-ssh) |
-| through a jump/bastion host (`ssh -J`) | *SSH connection* + **Connect through a jump/bastion host** | [Through a jump host](#through-a-jump-host) |
-| through Azure Bastion or `az ssh vm` | *SSH connection* + **Azure tunnel** | [Through Azure](#through-azure) |
-| with `tsh login` / `tsh ssh` | *SSH connection* + **Behind Teleport** | [Behind Teleport](#behind-teleport) |
-
-### Direct SSH
-
-Fill in **Host**, **Port** (usually `22`), **Username** and one **Auth method**:
-
-- **Private key:** the key's path, e.g. `~/.ssh/id_ed25519`, plus its passphrase if it has one.
-- **Password:** your password.
-- **SSH agent:** nothing else; Gate-H uses your running `ssh-agent`.
-
-Passwords and passphrases are encrypted with your OS keychain and never shown again. The first
-time you connect, Gate-H remembers the server's host key. If that key ever changes, it refuses to
-connect and tells you why.
-
-### Through a jump host
-
-Fill in the login node as usual, then tick **Connect through a jump/bastion host** and enter the
-jump host's address, port, username and auth method.
-
-> A jump host can reuse the cluster's password or passphrase only when both use the same auth
-> method.
-
-### Through Azure
-
-For login nodes that are only reachable through **Azure Bastion** or a VM you reach with
-**`az ssh vm`**. Gate-H signs in with the Azure CLI, opens a tunnel, and connects SSH through it.
-
-**You need**
-
-- The [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) installed.
-- One of:
-  - **Azure Bastion** (Standard or Premium SKU) with *Native client support* enabled, plus
-    Reader access to the Bastion host and the target VM.
-  - **A VM you can reach with `az ssh vm`.** That needs the *Virtual Machine User Login* or
-    *Administrator Login* role, or a local VM account. The VM then forwards you on to the login
-    node.
-
-**Steps**
-
-1. Run `az login` once in a terminal. You can also skip this: Gate-H shows a sign-in code in the
-   terminal when it needs one.
-2. Under *SSH connection*, enter the **far end** of the tunnel, not `127.0.0.1`:
-   - **Bastion:** the target VM's host name and SSH port.
-   - **az ssh vm:** the login node's host name and port, as the VM sees it.
-
-   Leave the jump host unticked.
-3. Tick **Azure tunnel** and fill in:
-   - **Tunnel through:** Azure Bastion or `az ssh vm`.
-   - **Local port:** any free port, e.g. `2222`.
-   - **Subscription:** click **Load from az** to pick one.
-   - **Resource group**, and optionally **Tenant ID**.
-   - **Bastion:** the **Bastion name** and the **Target VM resource ID**. **az ssh vm:** the
-     **VM name**, and optionally the **Local VM user**.
-4. Select the cluster. The terminal shows each step (*Checking Azure CLI session* → *Using
-   subscription …* → *Tunnel active on port 2222*), then connects.
-
-The tunnel stays open across reconnects and closes when you quit, edit the cluster, or put it in
-standby. To keep your work across the drops Azure sometimes causes, run your shell in
-`tmux new -A -s main` on the login node.
-
-More in [docs/AZURE.md](docs/AZURE.md): why Azure sessions drop, using the tunnel script on its
-own, and testing.
-
-### Behind Teleport
-
-For clusters you normally reach with `tsh login` and then `tsh ssh user@node`. Gate-H checks for a
-valid Teleport session, logs you in if needed, right in the terminal, and then opens your shell
-with `tsh ssh`.
-
-**You need**
-
-- The Teleport client (`tsh`) installed. Check with `tsh version`.
-- From your admin: the **proxy address**, your **Teleport user**, the **node name** and your
-  **login** on it, and a **leaf cluster** or **auth connector** name if your setup uses one.
-
-**First time only.** If you sign in with a password, open the invite link from your admin, choose
-a password, and scan the QR code with an authenticator app. With single sign-on there's nothing
-to set up.
-
-**Steps**
-
-1. Click **+ Add** (or edit a cluster) and tick **Behind Teleport**. Fill in:
-   - **Proxy address:** e.g. `teleport.example.com:443`.
-   - **Teleport user:** if it isn't the same as your OS username.
-   - **Leaf cluster**, **Auth connector:** only if your admin gave you one.
-2. Under *SSH connection*, which now asks only for what Teleport needs, fill in:
-   - **Teleport node name:** the node as `tsh ls` shows it, e.g. `slogin1`.
-   - **Login:** the Linux account to use on it, e.g. your cluster username.
-3. Click **Save cluster** and select the cluster. What you'll see:
-   - **Already logged in:** the shell opens straight away.
-   - **Not logged in, or the session has expired:** your browser opens for single sign-on, or the
-     terminal asks for your password and then the 6-digit code. Then the shell opens.
-
-The cluster's light follows the Teleport proxy. If the proxy can't be reached, Gate-H retries
-twice and then pauses until the proxy is back.
-
-**Tip:** if your proxy uses your organisation's own certificate authority, start Gate-H with
-`SSL_CERT_FILE=/path/to/ca.pem`, the same as you would for `tsh`.
-
-To do the same from a plain terminal, use the bundled script: `./resources/teleport.sh ssh --proxy
-teleport.example.com:443 -- alice@slogin1`. More in [docs/TELEPORT.md](docs/TELEPORT.md).
-
 ## Everyday use
 
-- **Overview.** The home screen shows a card for every cluster in the current profile: its
-  reachability, tags, integrations and unread notifications.
-- **Layout.** Use the toolbar above a cluster's widgets to swap them, stack them, or hide one. The
-  puzzle-piece icon opens the widget picker, which also shows widgets that are coming later.
-- **Notifications.** The bell collects events from every cluster. Click one to jump to the
-  cluster and widget it's about.
-- **Profiles.** Click the profile name at the top of the sidebar to switch, add, rename or delete
-  profiles.
-- **Pin a cluster.** Hover it in the sidebar and click the **pin** icon. Its session and Grafana
-  stay live in the background while you work on other clusters.
-- **Standby.** Click the **power** icon to stop all of a cluster's connections. Select it and
-  click **Resume monitoring** to start again.
+| I want to… | Do this |
+|---|---|
+| see all clusters at a glance | Open **Overview** at the top of the sidebar |
+| rearrange a cluster's widgets | Use the toolbar above them; the puzzle-piece icon shows or hides each one |
+| see what changed anywhere | Click the 🔔 bell; click an entry to jump to that cluster |
+| separate work and research clusters | Click the profile name at the top of the sidebar |
+| keep a session alive in the background | Hover the cluster in the sidebar → **pin** icon |
+| stop all connections to a cluster | Hover it → **power** icon (standby); select it → **Resume monitoring** to restart |
 
 ## Troubleshooting
 
