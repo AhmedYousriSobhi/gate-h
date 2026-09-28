@@ -23,6 +23,7 @@ ticket tracker separately.
 | `Profile` | `id`, `name` | Groups a set of clusters (e.g. "Work" vs "Research"); exactly one profile is active at a time. |
 | `Cluster` | `id`, `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `keepAliveInBackground`, `activeMonitoring` | Belongs to exactly one `Profile`. `grafana`/`jira` are optional — a cluster may be SSH-only. |
 | `AzureTunnelConfig` | `mode` (`bastion`\|`az-ssh`), `subscription`, `resourceGroup`, `localPort`, Bastion name + target VM id or VM name | Optional per cluster. SSH dials `127.0.0.1:localPort`, and `connection.host`/`port` are the tunnel's far end. No secrets: the Azure CLI keeps its own tokens. |
+| `TeleportConfig` | `proxy`, optional `cluster` (leaf), `user`, `authConnector` | Optional per cluster, exclusive with an Azure tunnel or a jump host. `connection.host` is the Teleport node name and `connection.username` the login. No secrets: `tsh` keeps its own certificates. |
 | `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | One SSH identity per cluster; a jump host chains a second SSH hop via `forwardOut`. |
 | `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
@@ -86,6 +87,17 @@ never the plaintext or ciphertext.
   Retries follow the same bounded backoff as §3.3.
 - The tunnel is closed on quit, on edit/removal of the cluster, and in standby (§3.6).
 - A tunneled cluster's reachability (§3.2) reflects the tunnel's health.
+
+### 3.3.2 Teleport-protected clusters
+- A cluster may sit behind a Teleport proxy. Its terminal session is `tsh ssh` on a local
+  pseudo-terminal, behind the same terminal behavior as §3.3: resize, the connection-state
+  shade, and bounded reconnects.
+- Before `tsh ssh`, the app checks for a valid Teleport session for that proxy. A session that
+  is missing or about to expire triggers a login in the terminal itself: password/OTP prompts,
+  or SSO in the browser. The app never answers a prompt on the user's behalf.
+- A failed session check (proxy unreachable, login failed or timed out, `tsh` missing) is shown
+  as the terminal's error and raises a notification.
+- A Teleport cluster's reachability (§3.2) reflects its proxy.
 
 ### 3.4 Grafana status
 - Per cluster, list configured dashboards and show a health check (reachable + version, or the

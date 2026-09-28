@@ -2,8 +2,9 @@
 
 This covers clusters whose login nodes are only reachable through a
 [Teleport](https://goteleport.com/) proxy (`tsh login --proxy=...` then `tsh ssh user@node`).
-Right now this is a standalone script, [resources/teleport.sh](../resources/teleport.sh). The
-in-app terminal can't reach these clusters yet (see [In the app](#in-the-app)).
+The work is done by [resources/teleport.sh](../resources/teleport.sh). You can run it on its own,
+and Gate-H's terminal runs it for clusters set up with **Behind Teleport** (see
+[In the app](#in-the-app)).
 
 ## What the script does
 
@@ -96,19 +97,56 @@ has no SSO provider).
 
 ## In the app
 
-Gate-H's terminal uses `ssh2`, which (as of 1.17) can't authenticate with OpenSSH user
-certificates. Teleport nodes only accept certificate auth, so the `ssh2` session path can't reach
-them even through `tsh proxy ssh`. There are two ways to add in-app support:
+Gate-H's SSH terminal uses `ssh2`, which (as of 1.17) can't authenticate with OpenSSH user
+certificates, and Teleport nodes only accept certificate auth. So a cluster with **Behind
+Teleport** set gets a different kind of session: `teleport.sh ssh` running on a local
+pseudo-terminal ([node-pty](https://github.com/microsoft/node-pty)).
 
-1. **`tsh ssh` under a PTY** (recommended): the main process runs the pre-flight with
-   `teleport.sh login --non-interactive` (the SSO link goes to the terminal view, like Azure's
-   device code), then spawns `tsh --proxy=P ssh --cluster=C user@node` in a pseudo-terminal
-   wired to xterm. This needs `node-pty`, a new native dependency.
-2. **Pipes, no new dependency**: spawn `tsh ssh -t` with plain pipes. This works, but terminal
-   resizes can't reach the remote shell, so full-screen tools (vim, htop) render at a fixed
-   size.
+```
+xterm ──ssh:write/resize──▶ main: ptyManager (src/main/pty/manager.ts)
+      ◀──ssh:data/closed── PTY: bash teleport.sh ssh --proxy P [--cluster C] -- login@node
+                                   │  session check, then (only if needed) tsh login
+                                   └─ exec tsh ssh ──▶ Teleport proxy ──▶ node
+```
 
-The app should never answer tsh's prompts for it. A login runs only as the separate, time-limited
-`login --non-interactive` step, with stdin closed. The terminal's `tsh ssh` starts only after
-that pre-flight passes, so any prompt it still shows (e.g. per-session MFA) appears in the
-terminal, where the user can answer it. Nothing blocks on a prompt no one can see.
+- **Same session interface.** `openSshSession` in `src/main/ssh/manager.ts` sends Teleport
+  clusters to the PTY and SSH/Azure clusters to `ssh2`. Both sit behind the same session IDs and
+  `ssh:*` IPC channels, so the renderer drives both the same way.
+- **Prompts stay with the user.** The wrapper runs interactively in the PTY, so a login
+  happens in the terminal itself: password and OTP prompts appear there, or `tsh` opens the
+  browser for SSO. Gate-H never answers a prompt, so nothing can hang out of sight. A pinned
+  background session left at a prompt gives up after `--login-timeout` (180s) and falls into
+  the normal reconnect and pause logic.
+- **Errors.** Until the wrapper reports `STATUS valid`, `TeleportPreflight` follows its
+  `STATUS` lines. If the session fails its check (proxy unreachable, login failed, `tsh`
+  missing), the reason becomes the terminal's error banner and the notification. Exit code 0
+  (the user typed `exit`) raises no notification.
+- **Resize and close.** Window size changes reach the remote shell through `tsh`. Closing a
+  session sends SIGHUP, as closing a terminal window does, and SIGKILL after 3 seconds if
+  it's still running.
+- **Reachability.** The node name only resolves inside Teleport, so the cluster's LED tracks its
+  proxy, through the proxy's unauthenticated `/webapi/ping` endpoint. Without a port, the probe
+  tries 443 and then 3080. The proxy's multiplexed port sends no SSH banner, so the usual banner
+  check can't be used.
+- **Setup.** In the cluster form, tick **Behind Teleport** and enter the proxy address, plus a
+  leaf cluster, Teleport user or auth connector if needed. Host becomes the Teleport node name
+  (as `tsh ls` shows it) and Username the login. Port, auth method and jump host don't apply.
+  `tsh` must be on the app's `PATH`. For a proxy with a private or self-signed CA, start Gate-H
+  with `SSL_CERT_FILE` pointing at the CA bundle, as for `tsh` itself.
+
+### Testing the PTY session
+
+```bash
+node scripts/test-pty-manager.mjs
+TELEPORT_LAB_PROXY=teleport.example.com:443 TELEPORT_LAB_USER=alice \
+  TELEPORT_LAB_NODE=slogin1 TELEPORT_LAB_LOGIN=alice node scripts/test-pty-manager.mjs
+```
+
+This runs `PtyManager` under Electron's own Node (`ELECTRON_RUN_AS_NODE`), so node-pty loads as
+the build the app ships and no window is needed. It covers spawn size, resize, input, exit codes,
+SIGHUP and the SIGKILL fallback, UTF-8 decoding, and a failed Teleport check. With the
+`TELEPORT_LAB_*` variables set, it also runs a real `tsh ssh` session: the check passes, the
+shell hands over, and it checks the remote size before and after a resize, a clean exit, and a
+kill. That run needs an existing `tsh` session, because nobody is there to answer a login prompt.
+It has been run against a one-VM Teleport v18 lab. The UI (form section, status bar) is only
+checked by typecheck, lint and review, since this environment can't open an Electron window.
