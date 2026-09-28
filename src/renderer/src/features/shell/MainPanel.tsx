@@ -55,6 +55,7 @@ export default function MainPanel({
   // the one currently selected, not just when explicitly closed - see the `hidden` check below.
   const [tabs, setTabs] = useState<string[]>(() => [crypto.randomUUID()])
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0])
+  const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
   const { visible, orientation } = layout
   const ratio = dragRatio ?? layout.splitRatio ?? 0.5
 
@@ -167,32 +168,36 @@ export default function MainPanel({
             </div>
           )}
           <div className="panel-pane" style={paneStyle(visible, 'terminal', ratio)}>
-            <TerminalTabBar
-              tabs={tabs}
-              activeTabId={activeTabId}
-              onSelect={setActiveTabId}
-              onAdd={handleAddTab}
-              onClose={handleCloseTab}
-              onReorder={handleReorderTab}
-            />
-            <div className="terminal-tab-panes">
-              {tabs.map((tabId, index) => {
-                const isPrimary = index === 0
-                if (!isPrimary && hidden) return null
-                return (
-                  <div
-                    key={tabId}
-                    className="terminal-tab-pane"
-                    style={{ display: tabId === activeTabId ? 'flex' : 'none' }}
-                  >
-                    <TerminalPanel
-                      cluster={cluster}
-                      reachability={reachability}
-                      onStatusChange={isPrimary ? onTerminalStatusChange : undefined}
-                    />
-                  </div>
-                )
-              })}
+            <div className={`terminal-tabs-layout terminal-tabs-layout-${tabOrientation}`}>
+              <TerminalTabBar
+                tabs={tabs}
+                activeTabId={activeTabId}
+                orientation={tabOrientation}
+                onSelect={setActiveTabId}
+                onAdd={handleAddTab}
+                onClose={handleCloseTab}
+                onReorder={handleReorderTab}
+                onOrientationChange={setTabOrientation}
+              />
+              <div className="terminal-tab-panes">
+                {tabs.map((tabId, index) => {
+                  const isPrimary = index === 0
+                  if (!isPrimary && hidden) return null
+                  return (
+                    <div
+                      key={tabId}
+                      className="terminal-tab-pane"
+                      style={{ display: tabId === activeTabId ? 'flex' : 'none' }}
+                    >
+                      <TerminalPanel
+                        cluster={cluster}
+                        reachability={reachability}
+                        onStatusChange={isPrimary ? onTerminalStatusChange : undefined}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
           {visible.length === 2 && (
