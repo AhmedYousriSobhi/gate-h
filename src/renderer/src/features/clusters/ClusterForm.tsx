@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BarChart3, Cloud, KeyRound, Ticket } from 'lucide-react'
+import { BarChart3, Cloud, KeyRound, ShieldCheck, Ticket } from 'lucide-react'
 import type {
   AzureSubscription,
   AzureTunnelMode,
@@ -54,6 +54,11 @@ interface FormState {
   azureTargetResourceId: string
   azureVmName: string
   azureLocalUser: string
+  useTeleport: boolean
+  teleportProxy: string
+  teleportCluster: string
+  teleportUser: string
+  teleportAuthConnector: string
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -93,8 +98,22 @@ function toFormState(c?: ClusterSummary): FormState {
     azureBastionName: c?.azureTunnel?.bastionName ?? '',
     azureTargetResourceId: c?.azureTunnel?.targetResourceId ?? '',
     azureVmName: c?.azureTunnel?.vmName ?? '',
-    azureLocalUser: c?.azureTunnel?.localUser ?? ''
+    azureLocalUser: c?.azureTunnel?.localUser ?? '',
+    useTeleport: Boolean(c?.teleport),
+    teleportProxy: c?.teleport?.proxy ?? '',
+    teleportCluster: c?.teleport?.cluster ?? '',
+    teleportUser: c?.teleport?.user ?? '',
+    teleportAuthConnector: c?.teleport?.authConnector ?? ''
   }
+}
+
+/** Returns why the Teleport settings can't be saved, or null if they can. */
+function teleportError(form: FormState): string | null {
+  if (!form.useTeleport) return null
+  if (form.useAzureTunnel) return 'Use either Teleport or an Azure tunnel, not both.'
+  if (!form.teleportProxy.trim()) return 'Teleport needs the proxy address.'
+  if (/\s/.test(form.teleportProxy.trim())) return 'Teleport proxy address must not contain spaces.'
+  return null
 }
 
 /** Returns why the Azure tunnel settings can't be saved, or null if they can. */
@@ -168,7 +187,7 @@ export default function ClusterForm({
       setError('Name, host, and username are required.')
       return
     }
-    const tunnelError = azureTunnelError(form)
+    const tunnelError = teleportError(form) ?? azureTunnelError(form)
     if (tunnelError) {
       setError(tunnelError)
       return
@@ -184,16 +203,18 @@ export default function ClusterForm({
         username: form.username.trim(),
         authMethod: form.authMethod,
         privateKeyPath: form.authMethod === 'private-key' ? form.privateKeyPath.trim() : undefined,
-        jumpHost: form.useJumpHost
-          ? {
-              host: form.jumpHost.trim(),
-              port: Number(form.jumpPort) || 22,
-              username: form.jumpUsername.trim(),
-              authMethod: form.jumpAuthMethod,
-              privateKeyPath:
-                form.jumpAuthMethod === 'private-key' ? form.jumpPrivateKeyPath.trim() : undefined
-            }
-          : undefined
+        // Teleport routes through its proxy, never a jump host (see TeleportConfig).
+        jumpHost:
+          form.useJumpHost && !form.useTeleport
+            ? {
+                host: form.jumpHost.trim(),
+                port: Number(form.jumpPort) || 22,
+                username: form.jumpUsername.trim(),
+                authMethod: form.jumpAuthMethod,
+                privateKeyPath:
+                  form.jumpAuthMethod === 'private-key' ? form.jumpPrivateKeyPath.trim() : undefined
+              }
+            : undefined
       },
       connectionSecret: form.connectionSecret || undefined,
       grafana: form.useGrafana
@@ -226,6 +247,14 @@ export default function ClusterForm({
             vmName: form.azureMode === 'az-ssh' ? form.azureVmName.trim() : undefined,
             localUser:
               form.azureMode === 'az-ssh' ? form.azureLocalUser.trim() || undefined : undefined
+          }
+        : null,
+      teleport: form.useTeleport
+        ? {
+            proxy: form.teleportProxy.trim(),
+            cluster: form.teleportCluster.trim() || undefined,
+            user: form.teleportUser.trim() || undefined,
+            authConnector: form.teleportAuthConnector.trim() || undefined
           }
         : null
     }
@@ -271,37 +300,50 @@ export default function ClusterForm({
             </h4>
             <div className="form-row">
               <div className="form-field">
-                <label htmlFor="host">Host</label>
-                <input id="host" value={form.host} onChange={(e) => set('host', e.target.value)} />
+                <label htmlFor="host">{form.useTeleport ? 'Teleport node name' : 'Host'}</label>
+                <input
+                  id="host"
+                  placeholder={form.useTeleport ? 'slogin1 (as listed by tsh ls)' : undefined}
+                  value={form.host}
+                  onChange={(e) => set('host', e.target.value)}
+                />
               </div>
-              <div className="form-field">
-                <label htmlFor="port">Port</label>
-                <input id="port" value={form.port} onChange={(e) => set('port', e.target.value)} />
-              </div>
+              {!form.useTeleport && (
+                <div className="form-field">
+                  <label htmlFor="port">Port</label>
+                  <input
+                    id="port"
+                    value={form.port}
+                    onChange={(e) => set('port', e.target.value)}
+                  />
+                </div>
+              )}
             </div>
             <div className="form-row">
               <div className="form-field">
-                <label htmlFor="username">Username</label>
+                <label htmlFor="username">{form.useTeleport ? 'Login' : 'Username'}</label>
                 <input
                   id="username"
                   value={form.username}
                   onChange={(e) => set('username', e.target.value)}
                 />
               </div>
-              <div className="form-field">
-                <label htmlFor="authMethod">Auth method</label>
-                <select
-                  id="authMethod"
-                  value={form.authMethod}
-                  onChange={(e) => set('authMethod', e.target.value as SshAuthMethod)}
-                >
-                  <option value="private-key">Private key</option>
-                  <option value="password">Password</option>
-                  <option value="agent">SSH agent</option>
-                </select>
-              </div>
+              {!form.useTeleport && (
+                <div className="form-field">
+                  <label htmlFor="authMethod">Auth method</label>
+                  <select
+                    id="authMethod"
+                    value={form.authMethod}
+                    onChange={(e) => set('authMethod', e.target.value as SshAuthMethod)}
+                  >
+                    <option value="private-key">Private key</option>
+                    <option value="password">Password</option>
+                    <option value="agent">SSH agent</option>
+                  </select>
+                </div>
+              )}
             </div>
-            {form.authMethod === 'private-key' && (
+            {!form.useTeleport && form.authMethod === 'private-key' && (
               <div className="form-field">
                 <label htmlFor="privateKeyPath">Private key path</label>
                 <input
@@ -312,7 +354,7 @@ export default function ClusterForm({
                 />
               </div>
             )}
-            {form.authMethod !== 'agent' && (
+            {!form.useTeleport && form.authMethod !== 'agent' && (
               <div className="form-field">
                 <label htmlFor="connectionSecret">
                   {form.authMethod === 'password' ? 'Password' : 'Key passphrase (if any)'}
@@ -328,15 +370,17 @@ export default function ClusterForm({
                 />
               </div>
             )}
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useJumpHost}
-                onChange={(e) => set('useJumpHost', e.target.checked)}
-              />
-              Connect through a jump/bastion host
-            </label>
-            {form.useJumpHost && (
+            {!form.useTeleport && (
+              <label className="form-field-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.useJumpHost}
+                  onChange={(e) => set('useJumpHost', e.target.checked)}
+                />
+                Connect through a jump/bastion host
+              </label>
+            )}
+            {!form.useTeleport && form.useJumpHost && (
               <>
                 <div className="form-row">
                   <div className="form-field">
@@ -388,6 +432,66 @@ export default function ClusterForm({
                     />
                   </div>
                 )}
+              </>
+            )}
+          </div>
+
+          <div className="form-section">
+            <label className="form-field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.useTeleport}
+                onChange={(e) => set('useTeleport', e.target.checked)}
+              />
+              <h4 style={{ margin: 0 }}>
+                <ShieldCheck size={13} strokeWidth={2} />
+                Behind Teleport
+              </h4>
+            </label>
+            {form.useTeleport && (
+              <>
+                <p className="hint">
+                  The terminal runs tsh ssh through this proxy. If there&apos;s no valid tsh
+                  session, you log in right in the terminal: password and OTP prompts appear there,
+                  or your browser opens for SSO. Needs tsh on PATH. See docs/TELEPORT.md.
+                </p>
+                <div className="form-field">
+                  <label htmlFor="teleportProxy">Proxy address</label>
+                  <input
+                    id="teleportProxy"
+                    placeholder="teleport.example.com:443"
+                    value={form.teleportProxy}
+                    onChange={(e) => set('teleportProxy', e.target.value)}
+                  />
+                </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="teleportCluster">Leaf cluster (optional)</label>
+                    <input
+                      id="teleportCluster"
+                      value={form.teleportCluster}
+                      onChange={(e) => set('teleportCluster', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="teleportUser">Teleport user (optional)</label>
+                    <input
+                      id="teleportUser"
+                      placeholder="Blank = your OS user"
+                      value={form.teleportUser}
+                      onChange={(e) => set('teleportUser', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-field">
+                  <label htmlFor="teleportAuthConnector">Auth connector (optional)</label>
+                  <input
+                    id="teleportAuthConnector"
+                    placeholder="Blank = the cluster's default"
+                    value={form.teleportAuthConnector}
+                    onChange={(e) => set('teleportAuthConnector', e.target.value)}
+                  />
+                </div>
               </>
             )}
           </div>

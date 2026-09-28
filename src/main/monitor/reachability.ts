@@ -1,4 +1,5 @@
 import { connect } from 'net'
+import { request } from 'https'
 
 /**
  * Checks whether a cluster's SSH endpoint is actually up - not just whether its TCP port opens.
@@ -41,4 +42,42 @@ export function checkTcpReachable(host: string, port: number, timeoutMs = 5000):
     socket.once('timeout', () => finish(false))
     socket.once('error', () => finish(false))
   })
+}
+
+function pingProxy(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = request({
+      host,
+      port,
+      path: '/webapi/ping',
+      method: 'GET',
+      timeout: timeoutMs,
+      // Liveness only: no credentials are sent and the response isn't trusted or read, so a
+      // private-CA or self-signed proxy certificate (which tsh itself may be configured to trust)
+      // shouldn't make a reachable proxy look offline. tsh verifies the certificate when it
+      // actually connects.
+      rejectUnauthorized: false
+    })
+    req.once('response', (res) => {
+      res.resume()
+      resolve(true)
+    })
+    req.once('timeout', () => req.destroy())
+    req.once('error', () => resolve(false))
+    req.end()
+  })
+}
+
+/** Checks whether a Teleport proxy answers, via its unauthenticated /webapi/ping endpoint - the
+ *  same first request tsh makes. The SSH-banner check above doesn't work here: the proxy's
+ *  multiplexed port waits for the client to speak first. With no port given, tries 443 and then
+ *  3080, the two ports tsh tries. */
+export async function checkTeleportProxyReachable(
+  proxy: string,
+  timeoutMs = 5000
+): Promise<boolean> {
+  const address = proxy.replace(/^[a-z]+:\/\//i, '').split('/')[0]
+  const match = /^(.*):(\d+)$/.exec(address)
+  if (match) return pingProxy(match[1], Number(match[2]), timeoutMs)
+  return (await pingProxy(address, 443, timeoutMs)) || pingProxy(address, 3080, timeoutMs)
 }

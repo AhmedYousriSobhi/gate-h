@@ -38,7 +38,8 @@ const KEEP_ALIVE_STATUS_LABEL: Record<SessionStatus, string> = {
   connecting: 'Connecting',
   connected: 'Connected',
   reconnecting: 'Reconnecting',
-  paused: 'Paused'
+  paused: 'Paused',
+  'auth-required': 'Login needed'
 }
 
 export default function Sidebar({

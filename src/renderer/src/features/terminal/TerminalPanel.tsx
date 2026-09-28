@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { RefreshCw } from 'lucide-react'
-import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
+import { LogIn, RefreshCw } from 'lucide-react'
+import type {
+  ClusterReachability,
+  ClusterSummary,
+  TeleportSessionInfo
+} from '../../../../shared/types'
+import TeleportLoginDialog from './TeleportLoginDialog'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 
@@ -18,7 +23,10 @@ interface TerminalPanelProps {
   onStatusChange?: (status: SessionStatus) => void
 }
 
-export type SessionStatus = 'connecting' | 'connected' | 'reconnecting' | 'paused'
+/** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
+ *  never resumes it - the proxy being up doesn't make a login happen - only a session update
+ *  (a login here, on another cluster sharing the proxy, or with tsh in any terminal) does. */
+export type SessionStatus = 'connecting' | 'connected' | 'reconnecting' | 'paused' | 'auth-required'
 
 // Bounded, backoff-based retry policy: at most MAX_RECONNECT_ATTEMPTS auto-retries within a
 // rolling RECONNECT_WINDOW_MS window, each spaced out exponentially with jitter, then the session
@@ -28,6 +36,19 @@ const MAX_RECONNECT_ATTEMPTS = 2
 const RECONNECT_WINDOW_MS = 2 * 60_000
 const BASE_RECONNECT_DELAY_MS = 5_000
 const RECONNECT_JITTER_MS = 1_000
+// How long a session must stay up before it counts as a real connection and restores the retry
+// budget. Resetting the moment connect() resolves isn't enough: a Teleport session "connects" as
+// soon as its local PTY starts, and tsh can still fail to reach the proxy a moment later - so a
+// down proxy would reset the budget on every attempt and retry forever.
+const STABLE_SESSION_MS = 30_000
+// Matches the session monitor's warning and teleport.sh's --min-ttl floor: with less than this
+// left, a resume would only be turned away again.
+const TELEPORT_WARN_MS = 15 * 60_000
+const TELEPORT_MIN_TTL_MS = 5 * 60_000
+
+function msLeft(info: TeleportSessionInfo | undefined): number {
+  return info?.validUntil ? Date.parse(info.validUntil) - Date.now() : -Infinity
+}
 
 export default function TerminalPanel({
   cluster,
@@ -42,6 +63,15 @@ export default function TerminalPanel({
   // Latest Azure pre-flight progress line ("Checking Azure CLI session", a device-code login
   // prompt, "Tunnel active on port X", ...) - shown while not connected.
   const [tunnelMessage, setTunnelMessage] = useState<string | null>(null)
+  // Teleport only: expiry of this cluster's tsh session, and whether it's within the warning
+  // window. Both come from session updates, which the main process also pushes at the warning
+  // and expiry times, so no countdown timer is needed here.
+  const [teleportExpiry, setTeleportExpiry] = useState<{
+    at: string
+    soon: boolean
+    expired: boolean
+  } | null>(null)
+  const [loginDialog, setLoginDialog] = useState<{ renew: boolean } | null>(null)
   const statusRef = useRef<SessionStatus>(status)
   useEffect(() => {
     statusRef.current = status
@@ -115,11 +145,38 @@ export default function TerminalPanel({
     [cluster.id]
   )
 
+  const isTeleport = Boolean(cluster.teleport)
+  useEffect(() => {
+    if (!isTeleport) return
+    let disposed = false
+    const apply = (sessions: Record<string, TeleportSessionInfo>): void => {
+      if (disposed) return
+      const info = sessions[cluster.id]
+      const left = msLeft(info)
+      // Past expiry the chip stays: an open shell may keep running, but new connections won't.
+      setTeleportExpiry(
+        info?.validUntil
+          ? { at: info.validUntil, soon: left < TELEPORT_WARN_MS, expired: left <= 0 }
+          : null
+      )
+      if (statusRef.current === 'auth-required' && left > TELEPORT_MIN_TTL_MS) {
+        resetAndReconnectNow()
+      }
+    }
+    void window.api.teleport.sessions().then(apply)
+    const off = window.api.teleport.onSessions(apply)
+    return () => {
+      disposed = true
+      off()
+    }
+  }, [cluster.id, isTeleport, resetAndReconnectNow])
+
   useEffect(() => {
     if (!containerRef.current) return
 
     let disposed = false
     let sessionId: string | null = null
+    let stableTimer: ReturnType<typeof setTimeout> | null = null
     setStatus('connecting')
     setConnectError(null)
 
@@ -145,7 +202,14 @@ export default function TerminalPanel({
       if (event.sessionId === sessionId) term.write(event.chunk)
     })
     const offClosed = window.api.ssh.onClosed((event) => {
-      if (event.sessionId === sessionId && !disposed) scheduleReconnectOrPause()
+      if (event.sessionId !== sessionId || disposed) return
+      if (stableTimer) clearTimeout(stableTimer)
+      if (event.authRequired) {
+        clearRetryTimer()
+        setStatus('auth-required')
+        return
+      }
+      scheduleReconnectOrPause()
     })
     const offError = window.api.ssh.onError((event) => {
       if (event.sessionId === sessionId) setConnectError(event.message)
@@ -163,9 +227,11 @@ export default function TerminalPanel({
           return
         }
         sessionId = result.sessionId
-        windowStartRef.current = Date.now()
-        attemptsRef.current = 0
-        setRetryAttempt(0)
+        stableTimer = setTimeout(() => {
+          windowStartRef.current = Date.now()
+          attemptsRef.current = 0
+          setRetryAttempt(0)
+        }, STABLE_SESSION_MS)
         setStatus('connected')
         window.api.ssh.resize(sessionId, term.cols, term.rows)
         term.focus()
@@ -178,6 +244,7 @@ export default function TerminalPanel({
     return () => {
       disposed = true
       clearRetryTimer()
+      if (stableTimer) clearTimeout(stableTimer)
       resizeObserver.disconnect()
       offData()
       offClosed()
@@ -191,7 +258,9 @@ export default function TerminalPanel({
   const statusLabel =
     status === 'reconnecting'
       ? `reconnecting (attempt ${retryAttempt}/${MAX_RECONNECT_ATTEMPTS})`
-      : status
+      : status === 'auth-required'
+        ? 'login needed'
+        : status
 
   return (
     <div className="terminal-panel">
@@ -201,9 +270,23 @@ export default function TerminalPanel({
           <span className="mono">
             {cluster.connection.username}@{cluster.connection.host}
             {cluster.azureTunnel && ` via Azure tunnel :${cluster.azureTunnel.localPort}`}
+            {cluster.teleport && ` via Teleport ${cluster.teleport.proxy}`}
           </span>
           <span className="terminal-status-word">{statusLabel}</span>
         </span>
+        {teleportExpiry?.soon && (
+          <span className="terminal-statusbar-teleport">
+            {teleportExpiry.expired
+              ? 'Teleport login expired'
+              : `Teleport login expires at ${new Date(teleportExpiry.at).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}`}
+            <button className="btn btn-sm" onClick={() => setLoginDialog({ renew: true })}>
+              {teleportExpiry.expired ? 'Log in' : 'Renew'}
+            </button>
+          </span>
+        )}
       </div>
       {connectError && <div className="error-banner terminal-error">{connectError}</div>}
       <div className="terminal-body">
@@ -224,17 +307,37 @@ export default function TerminalPanel({
               (status === 'connecting' || status === 'reconnecting') && (
                 <p className="terminal-shade-detail">{tunnelMessage}</p>
               )}
+            {status === 'auth-required' && (
+              <>
+                <p className="terminal-shade-title">Teleport login needed</p>
+                <p>
+                  There&apos;s no valid Teleport session for {cluster.teleport?.proxy}. Log in once
+                  and every cluster behind this proxy reconnects.
+                </p>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => setLoginDialog({ renew: false })}
+                >
+                  <LogIn size={13} strokeWidth={2} />
+                  Log in
+                </button>
+              </>
+            )}
             {status === 'paused' && (
               <>
                 <p className="terminal-shade-title">Not connected</p>
                 <p>
-                  {cluster.azureTunnel
+                  {cluster.teleport
                     ? reachability?.status === 'offline'
-                      ? `The Azure tunnel to ${cluster.connection.host} is down - Reconnect now re-opens it (signing in to Azure again if needed).`
-                      : `Couldn't reach the SSH service on ${cluster.connection.host} through the Azure tunnel.`
-                    : reachability?.status === 'offline'
-                      ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
-                      : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
+                      ? `Waiting for the Teleport proxy ${cluster.teleport.proxy} to come back online - will reconnect automatically.`
+                      : `Couldn't open a Teleport session to ${cluster.connection.host}.`
+                    : cluster.azureTunnel
+                      ? reachability?.status === 'offline'
+                        ? `The Azure tunnel to ${cluster.connection.host} is down - Reconnect now re-opens it (signing in to Azure again if needed).`
+                        : `Couldn't reach the SSH service on ${cluster.connection.host} through the Azure tunnel.`
+                      : reachability?.status === 'offline'
+                        ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
+                        : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
                 </p>
                 <button className="btn btn-sm" onClick={resetAndReconnectNow}>
                   <RefreshCw size={13} strokeWidth={2} />
@@ -245,6 +348,13 @@ export default function TerminalPanel({
           </div>
         )}
       </div>
+      {loginDialog && (
+        <TeleportLoginDialog
+          cluster={cluster}
+          renew={loginDialog.renew}
+          onClose={() => setLoginDialog(null)}
+        />
+      )}
     </div>
   )
 }

@@ -99,6 +99,22 @@ export interface AzureSubscription {
   isDefault: boolean
 }
 
+/** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
+ *  the session check and any login (password/OTP prompts, or SSO in the browser) happen in the
+ *  terminal before `tsh ssh` takes over. `connection.host` is the Teleport node name and
+ *  `connection.username` the login; port, auth method and jump host don't apply. No secrets:
+ *  tsh keeps its own certificates in ~/.tsh. */
+export interface TeleportConfig {
+  /** host[:port] of the Teleport proxy, e.g. teleport.example.com:443 */
+  proxy: string
+  /** Leaf cluster to route through, if the node isn't in the proxy's root cluster. */
+  cluster?: string
+  /** Teleport user, if it differs from the local OS user. */
+  user?: string
+  /** Auth connector name (e.g. an SSO connector), if not the cluster's default. */
+  authConnector?: string
+}
+
 export interface Cluster {
   id: string
   name: string
@@ -108,6 +124,7 @@ export interface Cluster {
   grafana: GrafanaProfile | null
   jira: JiraProfile | null
   azureTunnel: AzureTunnelConfig | null
+  teleport: TeleportConfig | null
   /** When true, this cluster's Terminal/Grafana connections stay live in the background - kept
    *  mounted (hidden) and auto-reconnecting even while a different cluster is selected - instead
    *  of only existing while the cluster is the one currently selected in the sidebar. Has no
@@ -135,6 +152,7 @@ export interface ClusterInput {
   jira: JiraProfile | null
   jiraApiToken?: string
   azureTunnel: AzureTunnelConfig | null
+  teleport: TeleportConfig | null
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
@@ -151,6 +169,20 @@ export interface SshDataEvent {
 
 export interface SshClosedEvent {
   sessionId: string
+  /** Set for PTY sessions (Teleport terminals and login dialogs): the process's exit code. */
+  exitCode?: number
+  /** A Teleport terminal ended because there's no usable tsh session for its proxy. Terminal
+   *  sessions never log in by themselves (see TeleportConfig), so this needs the user to log
+   *  in, and retrying automatically would only fail again. */
+  authRequired?: boolean
+}
+
+/** What Gate-H knows about the tsh session a Teleport cluster would use, read from `tsh status`
+ *  (local only - no network). Clusters sharing a proxy and Teleport user share one session. */
+export interface TeleportSessionInfo {
+  clusterId: string
+  /** ISO time the certificate expires, or null when there's no session for this proxy/user. */
+  validUntil: string | null
 }
 
 export interface SshErrorEvent {
@@ -317,6 +349,17 @@ export interface GateHApi {
     onData(callback: (event: SshDataEvent) => void): () => void
     onClosed(callback: (event: SshClosedEvent) => void): () => void
     onError(callback: (event: SshErrorEvent) => void): () => void
+  }
+  teleport: {
+    /** Current session state for every Teleport cluster, keyed by cluster id. */
+    sessions(): Promise<Record<string, TeleportSessionInfo>>
+    /** Pushed whenever a cluster's session changes: a login or logout (in Gate-H or in any
+     *  terminal), the 15-minute warning, and expiry. */
+    onSessions(callback: (sessions: Record<string, TeleportSessionInfo>) => void): () => void
+    /** Runs the interactive login for this cluster's proxy on a PTY. Its output, input, resize
+     *  and close use the ssh.* session calls and events. `renew` signs out first, so a still-valid
+     *  session is replaced instead of reused. */
+    login(clusterId: string, options: { renew: boolean }): Promise<{ sessionId: string }>
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */

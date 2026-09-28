@@ -113,6 +113,10 @@ export function getDb(): Database.Database {
     db.exec('ALTER TABLE clusters ADD COLUMN azure_tunnel TEXT')
   }
 
+  if (!columnExists(db, 'clusters', 'teleport')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN teleport TEXT')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,
