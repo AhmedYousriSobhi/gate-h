@@ -1,8 +1,8 @@
 # Azure tunnels: keeping them alive, investigating drops, testing
 
 This covers clusters whose login node can only be reached through Azure. For setup (the
-prerequisites and form fields), see the README's [Through Azure](../README.md#through-azure)
-section.
+prerequisites and form fields), see "Through Azure" in the README's
+[Quick start](../README.md#-quick-start).
 
 ## How it works
 
