@@ -69,6 +69,11 @@ export default function MainPanel({
     () => new Map(tabOrder.map((id, index) => [id, index + 1])),
     [tabOrder]
   )
+  // Every tab's own connection status (not just the primary's) - drives that tab's status dot in
+  // TerminalTabBar. tabTitles holds only the tabs a user has actually renamed; anything absent
+  // falls back to "Session N" (tabNumbers) in TerminalTabBar.
+  const [tabStatuses, setTabStatuses] = useState<Map<string, SessionStatus>>(() => new Map())
+  const [tabTitles, setTabTitles] = useState<Map<string, string>>(() => new Map())
   // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
   // above the terminal, like typical editor tabs) is the alternative, toggled in TerminalTabBar.
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
@@ -87,6 +92,18 @@ export default function MainPanel({
     (id: string): void => {
       if (id === primaryTabId) return
       setGroups((prev) => prev.map((g) => g.filter((t) => t !== id)).filter((g) => g.length > 0))
+      setTabStatuses((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+      setTabTitles((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
       if (activeTabId === id) {
         const siblings = groups.find((g) => g.includes(id))?.filter((t) => t !== id) ?? []
         setActiveTabId(siblings[0] ?? primaryTabId)
@@ -94,6 +111,18 @@ export default function MainPanel({
     },
     [activeTabId, groups, primaryTabId]
   )
+
+  // An empty/whitespace-only title clears the override, reverting the tab to its default
+  // "Session N" label rather than leaving it stuck on a blank string.
+  const handleRenameTab = useCallback((id: string, title: string): void => {
+    const trimmed = title.trim()
+    setTabTitles((prev) => {
+      const next = new Map(prev)
+      if (trimmed) next.set(id, trimmed)
+      else next.delete(id)
+      return next
+    })
+  }, [])
 
   // The single drop handler behind every drag gesture in the tab strip: dropping one tab onto
   // another within the same group reorders them; onto a tab in a different group merges dragId
@@ -229,6 +258,8 @@ export default function MainPanel({
               <TerminalTabBar
                 groups={groups}
                 tabNumbers={tabNumbers}
+                statuses={tabStatuses}
+                titles={tabTitles}
                 activeTabId={activeTabId}
                 primaryTabId={primaryTabId}
                 orientation={tabOrientation}
@@ -236,6 +267,7 @@ export default function MainPanel({
                 onAdd={handleAddTab}
                 onClose={handleCloseTab}
                 onDrop={handleDropTab}
+                onRename={handleRenameTab}
                 onOrientationChange={setTabOrientation}
               />
               <div
@@ -261,7 +293,12 @@ export default function MainPanel({
                       <TerminalPanel
                         cluster={cluster}
                         reachability={reachability}
-                        onStatusChange={isPrimary ? onTerminalStatusChange : undefined}
+                        onStatusChange={(status) => {
+                          setTabStatuses((prev) =>
+                            prev.get(tabId) === status ? prev : new Map(prev).set(tabId, status)
+                          )
+                          if (isPrimary) onTerminalStatusChange?.(status)
+                        }}
                         onCycleTab={handleCycleTab}
                       />
                     </div>

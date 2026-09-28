@@ -1,5 +1,6 @@
 import { Fragment, useRef, useState } from 'react'
 import { Columns2, Plus, Rows2, X } from 'lucide-react'
+import type { SessionStatus } from './TerminalPanel'
 
 interface TerminalTabBarProps {
   /** Tabs the user has dragged together are "stacked" - shown split, simultaneously - while
@@ -9,6 +10,12 @@ interface TerminalTabBarProps {
    *  recomputed from display position, so a tab's number doesn't shift when it's reordered or
    *  regrouped. */
   tabNumbers: Map<string, number>
+  /** Each tab's own connection status, for its status dot - absent until that tab's session has
+   *  reported at least once (effectively immediately after mount). */
+  statuses: Map<string, SessionStatus>
+  /** User-set custom names, keyed by tab id. A tab with no entry here falls back to
+   *  "Session {tabNumbers}". */
+  titles: Map<string, string>
   activeTabId: string
   /** Can't be closed or dragged, though other tabs can be dropped onto it to join its group. */
   primaryTabId: string
@@ -19,6 +26,7 @@ interface TerminalTabBarProps {
   /** `dropId` is null when the tab was dragged onto empty strip space rather than another tab -
    *  see MainPanel's handleDropTab for the reorder/merge/pop-out semantics this drives. */
   onDrop: (dragId: string, dropId: string | null) => void
+  onRename: (id: string, title: string) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
 
@@ -32,6 +40,8 @@ const DRAG_THRESHOLD_PX = 4
 export default function TerminalTabBar({
   groups,
   tabNumbers,
+  statuses,
+  titles,
   activeTabId,
   primaryTabId,
   orientation,
@@ -39,10 +49,13 @@ export default function TerminalTabBar({
   onAdd,
   onClose,
   onDrop,
+  onRename,
   onOrientationChange
 }: TerminalTabBarProps): React.JSX.Element {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   // Refs mirror the state above and are what move/up actually read from: a real mouse fires
   // pointermove faster than React re-renders, so a fast drag's first move could still see a
   // stale (pre-drag) value from state - refs are updated synchronously, in the same tick.
@@ -61,6 +74,9 @@ export default function TerminalTabBar({
             {group.map((id) => {
               const label = tabNumbers.get(id)
               const isPrimary = id === primaryTabId
+              const status = statuses.get(id)
+              const title = titles.get(id) ?? `Session ${label}`
+              const isRenaming = renamingId === id
               return (
                 <div
                   key={id}
@@ -71,6 +87,11 @@ export default function TerminalTabBar({
                     id === hoverId && id !== draggingId ? ' terminal-tab-hover' : ''
                   }`}
                   onClick={() => onSelect(id)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setRenameValue(title)
+                    setRenamingId(id)
+                  }}
                   onPointerDown={(e) => {
                     if (isPrimary) return
                     e.currentTarget.setPointerCapture(e.pointerId)
@@ -112,7 +133,27 @@ export default function TerminalTabBar({
                     setHoverId(null)
                   }}
                 >
-                  <span>Tab {label}</span>
+                  {status && <span className={`session-dot session-dot-${status}`} />}
+                  {isRenaming ? (
+                    <input
+                      className="terminal-tab-rename"
+                      autoFocus
+                      value={renameValue}
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => {
+                        onRename(id, renameValue)
+                        setRenamingId(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        if (e.key === 'Escape') setRenamingId(null)
+                      }}
+                    />
+                  ) : (
+                    <span className="terminal-tab-label">{title}</span>
+                  )}
                   {!isPrimary && (
                     <button
                       className="terminal-tab-close"
