@@ -289,8 +289,11 @@ isn't one, logs you in right in the terminal.
    - **Leaf cluster**, **Teleport user**, **Auth connector:** optional.
    - **Teleport node name** (in the SSH section): the node as `tsh ls` lists it, e.g. `slogin1`.
    - **Login:** the OS account to log in as on the node.
-3. Select the cluster. If you need to log in, the password and OTP prompts appear in the
-   terminal, or your browser opens for SSO. The shell starts once you're logged in.
+3. Select the cluster. If you're already logged in with `tsh`, the shell opens. Otherwise the
+   terminal shows **Teleport login needed**: click **Log in**, then answer the password and OTP
+   prompts or finish SSO in your browser. Every cluster behind the same proxy then reconnects.
+4. 15 minutes before the login expires, you get a notification and a **Renew** button in the
+   terminal's status bar.
 
 The same session check and routing are available from the command line through
 [resources/teleport.sh](resources/teleport.sh). [docs/TELEPORT.md](docs/TELEPORT.md) covers both.

@@ -92,9 +92,18 @@ never the plaintext or ciphertext.
 - A cluster may sit behind a Teleport proxy. Its terminal session is `tsh ssh` on a local
   pseudo-terminal, behind the same terminal behavior as §3.3: resize, the connection-state
   shade, and bounded reconnects.
-- Before `tsh ssh`, the app checks for a valid Teleport session for that proxy. A session that
-  is missing or about to expire triggers a login in the terminal itself: password/OTP prompts,
-  or SSO in the browser. The app never answers a prompt on the user's behalf.
+- Before `tsh ssh`, the app checks for a valid Teleport session for that proxy. A terminal never
+  starts a login by itself: a session that is missing or about to expire shows *Teleport login
+  needed*, and nothing retries until the user logs in. This applies to pinned background
+  clusters too.
+- Logging in is an explicit user action in its own dialog (password/OTP prompts, or SSO in the
+  browser). The app never answers a prompt on the user's behalf. One login serves every cluster
+  behind the same proxy and Teleport user, and their terminals reconnect. A `tsh login` done
+  outside the app counts too.
+- 15 minutes before a session expires, the user is notified once and can renew it from the
+  terminal without interrupting open sessions.
+- Session tracking is event-driven: no polling, and no `tsh` process at all when there are no
+  Teleport clusters.
 - A failed session check (proxy unreachable, login failed or timed out, `tsh` missing) is shown
   as the terminal's error and raises a notification.
 - A Teleport cluster's reachability (§3.2) reflects its proxy.
