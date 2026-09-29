@@ -1,8 +1,361 @@
+.terminal-tabs-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-tabs-layout-horizontal {
+  flex-direction: column;
+}
+
+.terminal-tabs-layout-vertical {
+  flex-direction: row;
+}
+
+/* Panes are absolutely positioned from the stack's split tree (MainPanel's layoutRects), not
+   laid out by flexbox - that's what lets one stack mix directions without re-parenting (and so
+   remounting) any session. */
+.terminal-tab-panes {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-tab-pane {
+  position: absolute;
+  display: flex;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* The border between two sessions in a stack, draggable to resize them. A 7px invisible grab
+   area centred on the 1px pane border, with an accent line while hovered or dragged. */
+.terminal-tab-divider {
+  position: absolute;
+  z-index: 5;
+  touch-action: none;
+}
+
+.terminal-tab-divider-row {
+  width: 7px;
+  margin-left: -3px;
+  cursor: col-resize;
+}
+
+.terminal-tab-divider-column {
+  height: 7px;
+  margin-top: -3px;
+  cursor: row-resize;
+}
+
+.terminal-tab-divider::after {
+  content: '';
+  position: absolute;
+  background-color: var(--color-accent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.terminal-tab-divider-row::after {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
+}
+
+.terminal-tab-divider-column::after {
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 3px;
+}
+
+.terminal-tab-divider:hover::after,
+.terminal-tab-divider:active::after {
+  opacity: 1;
+}
+
+.terminal-tab-pane-dragging {
+  opacity: 0.5;
+}
+
+/* Set on <body> once a session drag passes the movement threshold - keeps the grabbing cursor and
+   stops text selection wherever the pointer wanders. */
+body.session-dragging,
+body.session-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.terminal-tab-pane-border-right {
+  border-right: 1px solid var(--color-border);
+}
+
+.terminal-tab-pane-border-bottom {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Which pane Ctrl/Cmd+Tab currently targets, in split view only - single-tab mode has no
+   ambiguity, since only the active tab is ever visible. */
+.terminal-tab-pane-focused {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+/* Toggled imperatively (not via React) by TerminalTabBar while dragging a tab over this pane: a
+   translucent preview of the half the dropped session will take, like VS Code's drag-to-split.
+   An overlay rather than a border so it reads over whatever the terminal is rendering. */
+.terminal-tab-pane[class*='terminal-tab-pane-drop-']::after {
+  content: '';
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent-soft);
+  transition: inset 80ms ease;
+}
+
+.terminal-tab-pane-drop-left::after {
+  inset: 0 50% 0 0;
+}
+
+.terminal-tab-pane-drop-right::after {
+  inset: 0 0 0 50%;
+}
+
+.terminal-tab-pane-drop-top::after {
+  inset: 0 0 50% 0;
+}
+
+.terminal-tab-pane-drop-bottom::after {
+  inset: 50% 0 0 0;
+}
+
+.terminal-tabbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.terminal-tabbar-vertical {
+  flex-direction: column;
+  align-items: stretch;
+  /* Shell titles can be long paths - labels ellipsize here (full title in the tooltip) rather
+     than letting the sidebar eat into the terminal. */
+  max-width: 240px;
+  border-bottom: none;
+  border-right: 1px solid var(--color-border);
+}
+
+.terminal-tabbar-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.terminal-tabbar-horizontal .terminal-tabbar-tabs {
+  flex-direction: row;
+  align-items: center;
+}
+
+.terminal-tabbar-vertical .terminal-tabbar-tabs {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* One compact action header - new, split, layout menu - in the spirit of VS Code's terminal
+   view header: above the list in the side layout, at the far end of the row in the top one. */
+.terminal-tabbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.terminal-tabbar-horizontal .terminal-tabbar-actions {
+  order: 1;
+}
+
+.terminal-tabbar-vertical .terminal-tabbar-actions {
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* One group per Fragment in TerminalTabBar - tabs the user dragged together render adjacent,
+   inside a shared pill when there's more than one; separate groups (reached by clicking between
+   them, not shown split) get a thin divider between them instead. */
+.terminal-tab-group {
+  display: flex;
+  flex-direction: inherit;
+  align-items: stretch;
+  gap: 2px;
+}
+
+/* Accent-tinted, not just a shade of the neutral surface color already used for plain hover/
+   active states - a stacked group needs to read as clearly different at a glance, not just
+   slightly darker. */
+.terminal-tab-group-stacked {
+  padding: 3px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background-color: var(--color-accent-soft);
+}
+
+.terminal-tab-group-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 2px;
+  background-color: var(--color-border);
+}
+
+.terminal-tabbar-vertical .terminal-tab-group-divider {
+  width: auto;
+  height: 1px;
+}
+
+.terminal-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text-2);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.terminal-tab:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.terminal-tab-draggable {
+  cursor: grab;
+}
+
+.terminal-tab-dragging {
+  cursor: grabbing;
+  opacity: 0.5;
+}
+
+/* Dropping on the middle third of a tab merges into its group (dashed outline, above); dropping
+   on an outer third instead just reorders (a solid line on that edge, below) - see
+   TerminalTabBar's pointermove zone calculation. A box-shadow, not a pseudo-element, so it can't
+   collide with .terminal-tab-active's own ::after accent bar when hovering the active tab. */
+.terminal-tab-hover {
+  background-color: var(--color-surface-hover);
+  outline: 1px dashed var(--color-border);
+}
+
+.terminal-tabbar-vertical .terminal-tab-drop-before {
+  box-shadow: inset 0 2px 0 0 var(--color-accent);
+}
+
+.terminal-tabbar-vertical .terminal-tab-drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--color-accent);
+}
+
+.terminal-tabbar-horizontal .terminal-tab-drop-before {
+  box-shadow: inset 2px 0 0 0 var(--color-accent);
+}
+
+.terminal-tabbar-horizontal .terminal-tab-drop-after {
+  box-shadow: inset -2px 0 0 0 var(--color-accent);
+}
+
+.terminal-tab-active {
+  background-color: var(--color-surface-active);
+  color: var(--color-text-1);
+}
+
+/* A flush accent bar on the edge facing the terminal pane - the same "which tab is active"
+   language VS Code uses - rather than relying on background contrast alone. */
+.terminal-tab-active::after {
+  content: '';
+  position: absolute;
+  background-color: var(--color-accent);
+  border-radius: 1px;
+}
+
+.terminal-tabbar-vertical .terminal-tab-active::after {
+  top: 3px;
+  bottom: 3px;
+  right: -7px;
+  width: 2px;
+}
+
+.terminal-tabbar-horizontal .terminal-tab-active::after {
+  left: 3px;
+  right: 3px;
+  bottom: -3px;
+  height: 2px;
+}
+
+.terminal-tab-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab-rename {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-bottom: 1px solid var(--color-accent);
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-text-1);
+}
+
+.terminal-tab-rename:focus {
+  outline: none;
+}
+
+.terminal-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 1px;
+  color: inherit;
+  border-radius: var(--radius-sm);
+  /* Reserved space always, visible only on hover/active - keeps the close button from crowding
+     the title while never shifting layout when it appears or disappears. */
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab-active .terminal-tab-close,
+.terminal-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.terminal-tab-close:hover {
+  background-color: var(--color-surface-hover);
+}
+
+
 .terminal-panel {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* Without min-width: 0 at each level down to the xterm container, a pane made narrower (a
+     split, a divider drag) can't shrink below the terminal's current rendered width - FitAddon
+     then keeps the old column count and the right edge, header buttons included, gets clipped. */
+  min-width: 0;
 }
 
 .terminal-statusbar {
@@ -15,7 +368,54 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.terminal-statusbar-draggable {
+  cursor: grab;
+  user-select: none;
+}
+
+/* Right side of a session's header: split / maximize / close. Muted until hovered, and sized
+   (20px with negative block margins) to fit inside the header's existing text line so adding them
+   doesn't make the header taller. */
+.terminal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--space-2);
+}
+
+.terminal-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-block: -3px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-3);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.terminal-header-btn:hover {
+  color: var(--color-text-1);
+  background-color: var(--color-surface-hover);
+}
+
+.terminal-header-btn-active {
+  color: var(--color-accent);
+}
+
+.terminal-header-btn-danger:hover {
+  color: var(--color-offline);
+}
+
 .terminal-statusbar-label {
+  margin-right: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -46,9 +446,13 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.session-dot-auth-required,
 .session-dot-paused {
   background-color: var(--color-offline);
+}
+
+/* Amber, not red: the session isn't broken, it's waiting on a login. */
+.session-dot-auth-required {
+  background-color: var(--color-warning);
 }
 
 .terminal-error {
@@ -59,11 +463,13 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
 }
 
 .terminal-container {
   flex: 1;
+  min-width: 0;
   padding: var(--space-2);
   background-color: #0a0a0c;
   overflow: hidden;
@@ -140,4 +546,73 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background-color: #0a0a0c;
+}
+
+/* Right-click menu for a tab, opened from either its tab-strip entry or its session panel - see
+   TabContextMenu.tsx. Fixed positioning at the click point, matching the widget picker's popover
+   styling rather than introducing a new visual language for menus. */
+.tab-context-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 160px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.tab-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-1);
+  font-size: 13px;
+  text-align: left;
+}
+
+.tab-context-menu-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.tab-context-menu-item-danger:hover {
+  color: var(--color-offline);
+}
+
+.tab-context-menu-item-check,
+.tab-context-menu-item:has(.tab-context-menu-shortcut) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tab-context-menu-check {
+  display: inline-flex;
+  width: 13px;
+  color: var(--color-accent);
+}
+
+.tab-context-menu-shortcut {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--color-text-3);
+}
+
+.tab-context-menu-heading {
+  padding: var(--space-1) var(--space-2) 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-3);
+}
+
+.tab-context-menu-divider {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background-color: var(--color-border);
 }

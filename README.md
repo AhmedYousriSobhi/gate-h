@@ -156,7 +156,13 @@ connection attempts. Secrets are encrypted on disk.
   as the window regains focus.
 - ⌨️ **Built-in terminal.** Host keys are remembered on first use. Dead connections are
   detected, reconnects are limited and spaced out, and the terminal makes it obvious when a
-  session isn't live.
+  session isn't live. Search the scrollback, and click links to open them.
+- 🗔 **Multiple sessions per cluster, VS Code-style.** Open as many terminal sessions as you
+  need, each named after what its shell reports (like `user@host: ~/logs`) and with its own live
+  status dot. Rename them, reorder them, and drag them together to
+  watch several at once. Arrange them in any grid, such as two side by side above a third: drag a
+  tab, or a session's header bar, onto an edge of another session to place it there, then drag
+  the borders between sessions to resize them.
 - ☁️ **Azure clusters.** For clusters behind Azure Bastion or `az ssh vm`, Gate-H signs in with
   the Azure CLI and opens the tunnel for you.
 - 🛡️ **Teleport clusters.** For clusters behind a Teleport proxy, Gate-H checks your `tsh`
@@ -243,6 +249,19 @@ connection attempts. Secrets are encrypted on disk.
 | separate work and research clusters | Click the profile name at the top of the sidebar |
 | keep a session alive in the background | Hover the cluster in the sidebar → **pin** icon |
 | stop all connections to a cluster | Hover it → **power** icon (standby); select it → **Resume monitoring** to restart |
+| open another terminal session | Click **+** above the session tabs |
+| watch two sessions at once | Click the split icon next to **+**, or press **Ctrl+Shift+5** in a terminal |
+| put a session beside, above or below another | Drag its tab or its header bar onto that edge of the other session; the highlighted half shows where it lands |
+| resize sessions shown together | Drag the border between them |
+| reorder tabs, or stack two into one view | Drag a tab onto the edge of another tab to reorder, or onto its middle to stack them |
+| move tabs between the side and the top | Click **⋯** above the tabs → **Tabs position** |
+| rename, split, unstack or close a session | Right-click its tab or the session itself (or double-click the tab to rename) |
+| focus on one session in a stack for a while | Click **Maximize** in its header; **Restore** brings the layout back |
+| split or close a session from where you're looking | Use the icons on the right of its header bar |
+
+**Terminal shortcuts:** **Ctrl+Shift+C** / **Ctrl+Shift+V** copy and paste (plain **Ctrl+C**
+still interrupts). **Ctrl+F** searches the scrollback. **Ctrl+Tab** / **Ctrl+Shift+Tab** switch
+sessions. **Ctrl+Shift+5** splits. On macOS, use **Cmd** instead of **Ctrl**.
 
 ## Troubleshooting
 
