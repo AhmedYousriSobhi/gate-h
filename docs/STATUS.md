@@ -59,17 +59,17 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 
 ## Known limitations / near-term roadmap
 
-- **HPC orchestration: designed, not built.** The design is in
+- **HPC orchestration: Slurm job queue and node health built; the rest designed.** The design is in
   [HPC_ORCHESTRATION.md](./HPC_ORCHESTRATION.md) and the requirements in
   [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned). The widget picker (the puzzle-piece
-  icon on a cluster's panel) already lists the first of these as disabled "coming soon" entries.
-  Planned phases, each its own issue, branch and PR:
+  icon on a cluster's panel) lists GPU usage as a disabled "coming soon" entry.
+  Phases, each its own issue, branch and PR (1 to 3 shipped together):
 
   | # | Feature | Status | Approach |
   |---|---|---|---|
-  | 1 | Scheduler config + safe command runner | 📝 Designed | `SchedulerConfig` per cluster; fixed commands on the terminal's existing `ssh2` connection (`client.exec()`), or a non-interactive `tsh ssh` for Teleport; timeout, output cap, one command in flight per cluster; unit-tested parsers |
-  | 2 | **Job queue** (Slurm) | 📝 Designed | One chained `squeue`+`sinfo` run per refresh; polls only while the cluster is selected and the widget is visible (60 s default, 30 s floor, backoff to 5 min); manual refresh on Teleport by default |
-  | 3 | **Node health** (Slurm) | 📝 Designed | `sinfo` per-partition state counts plus `sinfo --list-reasons` for down/drained nodes, from the same poll |
+  | 1 | Scheduler config + safe command runner | ✅ Done | `SchedulerConfig` per cluster; fixed commands on the terminal's existing `ssh2` connection (`client.exec()`), or a non-interactive `tsh ssh` for Teleport; timeout, output cap, one command in flight per cluster; unit-tested parsers |
+  | 2 | **Job queue** (Slurm) | ✅ Done | Slurm section of the Status widget (`features/status/SlurmSection.tsx`). One chained `squeue`+`sinfo` run per refresh; polls only while the cluster is selected and Status is showing (60 s default, 30 s floor, backoff to 5 min); manual refresh on Teleport by default; job arrays collapsed, expandable on demand. Verified by `scripts/slurm.checks.ts` and `scripts/scheduler-monitor.checks.ts`; **not yet run against a real Slurm cluster** |
+  | 3 | **Node health** (Slurm) | ✅ Done | `sinfo` per-partition state counts plus `sinfo --list-reasons` for down/drained nodes, from the same poll |
   | 4 | **GPU usage** | 📝 Outlined | Grafana `/api/ds/query` on DCGM exporter metrics with the existing token; otherwise an on-demand `srun --overlap … nvidia-smi` sample inside the user's own job |
   | 5 | **File transfer** (SFTP) | 📝 Outlined | `client.sftp()` on the existing connection; Teleport (`tsh scp`) later |
   | 6 | **Job submission helper** | 📝 Outlined | Local `#SBATCH` template library; `sbatch`/`scancel` only after the user confirms the exact command |
