@@ -190,6 +190,13 @@ function teleportError(form: FormState): string | null {
 function azureTunnelError(form: FormState): string | null {
   if (!form.useAzureTunnel) return null
   if (form.useJumpHost) return 'Use either a jump host or an Azure tunnel, not both.'
+  if (['localhost', '127.0.0.1', '::1'].includes(form.host.trim().toLowerCase())) {
+    return (
+      "Host must be the target machine's real hostname or IP, not localhost - SSH always dials " +
+      "the tunnel's local port regardless of this field, which instead identifies the machine " +
+      "for host-key trust (so it can't be shared across clusters or tunnels)."
+    )
+  }
   if (!form.azureSubscription.trim() || !form.azureResourceGroup.trim()) {
     return 'Azure tunnel needs a subscription and a resource group.'
   }
@@ -606,9 +613,11 @@ export default function ClusterForm({
                 <p className="hint">
                   Before connecting, Gate-H signs in with the Azure CLI (az), selects this
                   subscription, and opens a tunnel. SSH then connects to 127.0.0.1 on the local
-                  port, and Host/Port above are the tunnel&apos;s far end: the target VM (Bastion),
-                  or the login node as the VM reaches it (az ssh vm). Needs az on PATH. See the
-                  README section on clusters reachable only through Azure.
+                  port, and Host/Port above are the tunnel&apos;s far end: the target VM&apos;s real
+                  hostname or IP (Bastion), or the login node as the VM reaches it (az ssh vm) -
+                  never localhost, since that field is what host-key trust is pinned to, not the
+                  actual tunnel address. Needs az on PATH. See the README section on clusters
+                  reachable only through Azure.
                 </p>
                 <div className="form-row">
                   <div className="form-field">
