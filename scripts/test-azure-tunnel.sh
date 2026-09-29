@@ -91,7 +91,8 @@ expect 0 "status reports active" status --name t
 pid=$(cut -d' ' -f1 "$AZT_STATE_DIR/t.state")
 expect 0 "down" down --name t
 sleep 0.5
-check "down killed the forwarder child too (port released)" bash -c "! { ss -Hltn 'sport = :$PORT' | grep -q .; }"
+# ss on Linux, lsof on macOS (which has no ss).
+check "down killed the forwarder child too (port released)" bash -c "! { (ss -Hltn 'sport = :$PORT' 2>/dev/null || lsof -nP -iTCP:$PORT -sTCP:LISTEN 2>/dev/null) | grep -q .; }"
 check "down killed the tunnel process group" bash -c "! kill -0 $pid 2>/dev/null"
 expect 8 "status after down reports not running" status --name t
 
