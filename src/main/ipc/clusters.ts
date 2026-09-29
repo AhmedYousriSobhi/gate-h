@@ -5,7 +5,6 @@ import {
   listClustersByProfile,
   removeCluster,
   setClusterActiveMonitoring,
-  setClusterKeepAlive,
   updateCluster
 } from '../clusters'
 import { refreshCluster } from '../monitor/clusterMonitor'
@@ -39,9 +38,6 @@ export function registerClusterIpcHandlers(): void {
     removeCluster(id)
     if (wasTeleport) void refreshTeleportSessions()
   })
-  ipcMain.handle('clusters:setKeepAlive', (_event, id: string, keepAlive: boolean) =>
-    setClusterKeepAlive(id, keepAlive)
-  )
   ipcMain.handle('clusters:setActiveMonitoring', async (_event, id: string, active: boolean) => {
     // Standby means no connections at all for the cluster, and the tunnel is one.
     if (!active && getCluster(id)?.azureTunnel) await stopTunnel(id)

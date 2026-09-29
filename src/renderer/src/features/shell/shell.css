@@ -175,7 +175,16 @@
   color: var(--color-accent);
 }
 
-.keep-alive-badge {
+.icon-btn.close-confirm {
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 510;
+  color: var(--color-offline);
+  white-space: nowrap;
+}
+
+.session-badge {
   display: inline-flex;
   width: fit-content;
   font-size: 10px;
@@ -187,18 +196,18 @@
   background-color: var(--color-surface-active);
 }
 
-.keep-alive-badge-connected {
+.session-badge-connected {
   color: var(--color-online);
   background-color: rgba(61, 220, 132, 0.12);
 }
 
-.keep-alive-badge-reconnecting,
-.keep-alive-badge-connecting {
+.session-badge-reconnecting,
+.session-badge-connecting {
   color: var(--color-checking);
 }
 
-.keep-alive-badge-auth-required,
-.keep-alive-badge-paused {
+.session-badge-auth-required,
+.session-badge-paused {
   color: var(--color-offline);
   background-color: rgba(240, 85, 95, 0.12);
 }
@@ -252,8 +261,8 @@
   gap: var(--space-3);
 }
 
-/* A pinned cluster's MainPanel stays mounted (so its Terminal/Grafana connections keep running)
-   even while a different cluster is selected - just visually hidden rather than unmounted. */
+/* An open cluster's MainPanel stays mounted (so its terminal sessions stay connected) even while a
+   different cluster is selected - just visually hidden rather than unmounted. */
 .main-panel-hidden {
   display: none;
 }

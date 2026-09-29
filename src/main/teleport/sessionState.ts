@@ -7,7 +7,7 @@ import { addNotification } from '../notifications/store'
 import type { ClusterSummary, TeleportSessionInfo } from '../../shared/types'
 
 // Tracks the tsh session each Teleport cluster would use, so the renderer can show "Log in" /
-// "Renew" at the right time and pinned terminals can resume by themselves once the user logs in
+// "Renew" at the right time and waiting terminals can resume by themselves once the user logs in
 // anywhere - in Gate-H or with `tsh login` in any terminal. Entirely event-driven, nothing polls:
 //   - `tsh status` (local only, reads ~/.tsh) runs at startup, when clusters change, after a
 //     login dialog, and when ~/.tsh changes (inotify via fs.watch, debounced);

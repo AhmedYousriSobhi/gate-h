@@ -1,4 +1,5 @@
-import { LayoutDashboard, Pencil, Pin, PinOff, Plus, Power, PowerOff, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { LayoutDashboard, Pencil, Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
@@ -27,14 +28,17 @@ interface SidebarProps {
   onNotificationNavigate: (clusterId: string, widget?: WidgetType) => void
   profilesState: ReturnType<typeof useProfiles>
   onProfileChanged: () => void
-  /** Live Terminal connection status for every currently-mounted cluster (selected, or pinned to
-   *  stay connected in the background) - keyed by cluster id, absent for anything not mounted. */
+  /** Primary Terminal connection status by cluster id - may hold stale entries for clusters no
+   *  longer open, so only read for ids in openClusterIds. */
   terminalStatuses: Record<string, SessionStatus>
-  onToggleKeepAlive: (cluster: ClusterSummary) => void
+  /** Clusters whose sessions are currently mounted (open or selected). */
+  openClusterIds: string[]
+  liveSessionCounts: Record<string, number>
+  onCloseSessions: (cluster: ClusterSummary) => void
   onToggleActiveMonitoring: (cluster: ClusterSummary) => void
 }
 
-const KEEP_ALIVE_STATUS_LABEL: Record<SessionStatus, string> = {
+const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
   connecting: 'Connecting',
   connected: 'Connected',
   reconnecting: 'Reconnecting',
@@ -58,9 +62,14 @@ export default function Sidebar({
   profilesState,
   onProfileChanged,
   terminalStatuses,
-  onToggleKeepAlive,
+  openClusterIds,
+  liveSessionCounts,
+  onCloseSessions,
   onToggleActiveMonitoring
 }: SidebarProps): React.JSX.Element {
+  // Closing a cluster with connected sessions takes a second click on the same button rather
+  // than a modal - ended SSH sessions can't be brought back, but a dialog for it gets in the way.
+  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null)
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -102,6 +111,7 @@ export default function Sidebar({
             key={cluster.id}
             className={`cluster-row${cluster.id === selectedClusterId ? ' cluster-row-active' : ''}`}
             onClick={() => onSelect(cluster)}
+            onMouseLeave={() => setConfirmCloseId((id) => (id === cluster.id ? null : id))}
           >
             <span
               className="cluster-avatar"
@@ -117,12 +127,10 @@ export default function Sidebar({
               </div>
               <div className="cluster-row-host mono">{cluster.connection.host}</div>
               {cluster.activeMonitoring &&
-                cluster.keepAliveInBackground &&
+                openClusterIds.includes(cluster.id) &&
                 terminalStatuses[cluster.id] && (
-                  <div
-                    className={`keep-alive-badge keep-alive-badge-${terminalStatuses[cluster.id]}`}
-                  >
-                    {KEEP_ALIVE_STATUS_LABEL[terminalStatuses[cluster.id]]}
+                  <div className={`session-badge session-badge-${terminalStatuses[cluster.id]}`}>
+                    {SESSION_STATUS_LABEL[terminalStatuses[cluster.id]]}
                   </div>
                 )}
             </div>
@@ -145,24 +153,30 @@ export default function Sidebar({
                   <PowerOff size={13} strokeWidth={2} />
                 )}
               </button>
-              <button
-                className={`icon-btn${cluster.keepAliveInBackground ? ' icon-btn-active' : ''}`}
-                title={
-                  cluster.keepAliveInBackground
-                    ? 'Stop keeping connected in the background'
-                    : 'Keep connected in the background'
-                }
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onToggleKeepAlive(cluster)
-                }}
-              >
-                {cluster.keepAliveInBackground ? (
-                  <Pin size={13} strokeWidth={2} />
-                ) : (
-                  <PinOff size={13} strokeWidth={2} />
-                )}
-              </button>
+              {openClusterIds.includes(cluster.id) && (
+                <button
+                  className={`icon-btn icon-btn-danger${
+                    confirmCloseId === cluster.id ? ' close-confirm' : ''
+                  }`}
+                  title="Close sessions"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const live = liveSessionCounts[cluster.id] ?? 0
+                    if (live > 0 && confirmCloseId !== cluster.id) {
+                      setConfirmCloseId(cluster.id)
+                      return
+                    }
+                    setConfirmCloseId(null)
+                    onCloseSessions(cluster)
+                  }}
+                >
+                  {confirmCloseId === cluster.id ? (
+                    `Close ${liveSessionCounts[cluster.id]} live?`
+                  ) : (
+                    <X size={13} strokeWidth={2} />
+                  )}
+                </button>
+              )}
               <button
                 className="icon-btn"
                 title="Edit"

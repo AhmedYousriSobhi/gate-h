@@ -21,7 +21,7 @@ ticket tracker separately.
 | Entity | Key fields | Notes |
 |---|---|---|
 | `Profile` | `id`, `name` | Groups a set of clusters (e.g. "Work" vs "Research"); exactly one profile is active at a time. |
-| `Cluster` | `id`, `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `keepAliveInBackground`, `activeMonitoring` | Belongs to exactly one `Profile`. `grafana`/`jira` are optional — a cluster may be SSH-only. |
+| `Cluster` | `id`, `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `activeMonitoring` | Belongs to exactly one `Profile`. `grafana`/`jira` are optional — a cluster may be SSH-only. |
 | `AzureTunnelConfig` | `mode` (`bastion`\|`az-ssh`), `subscription`, `resourceGroup`, `localPort`, Bastion name + target VM id or VM name | Optional per cluster. SSH dials `127.0.0.1:localPort`, and `connection.host`/`port` are the tunnel's far end. No secrets: the Azure CLI keeps its own tokens. |
 | `TeleportConfig` | `proxy`, optional `cluster` (leaf), `user`, `authConnector` | Optional per cluster, exclusive with an Azure tunnel or a jump host. `connection.host` is the Teleport node name and `connection.username` the login. No secrets: `tsh` keeps its own certificates. |
 | `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | One SSH identity per cluster; a jump host chains a second SSH hop via `forwardOut`. |
@@ -42,7 +42,8 @@ never the plaintext or ciphertext.
 - Register any number of clusters, each fully self-contained (its own SSH/Grafana/Jira config) —
   nothing about one cluster's setup constrains another's.
 - Create, rename, delete, and switch between profiles; switching profiles clears the current
-  selection (a cluster from the old profile can't stay "selected" under the new one).
+  selection (a cluster from the old profile can't stay "selected" under the new one) and closes
+  every open cluster (§3.6) — a profile is a separate context, often with separate credentials.
 - Background monitors (reachability, Jira polling) watch every cluster in every profile
   regardless of which is active — only the sidebar/dashboard *view* is scoped to the active
   profile.
@@ -50,7 +51,7 @@ never the plaintext or ciphertext.
 ### 3.2 Reachability monitoring
 - Every registered cluster's SSH port is probed on a fixed interval (not just a bare TCP connect —
   the probe confirms an actual SSH banner), independent of whether the cluster is selected,
-  pinned, or in standby (§3.6).
+  open, or in standby (§3.6).
 - A per-cluster LED (online/offline/checking) is shown in the sidebar and the overview dashboard,
   updated in real time as probes complete.
 - Regaining window focus triggers an immediate re-check (throttled to avoid extra probing if
@@ -94,7 +95,7 @@ never the plaintext or ciphertext.
   shade, and bounded reconnects.
 - Before `tsh ssh`, the app checks for a valid Teleport session for that proxy. A terminal never
   starts a login by itself: a session that is missing or about to expire shows *Teleport login
-  needed*, and nothing retries until the user logs in. This applies to pinned background
+  needed*, and nothing retries until the user logs in. This applies to background
   clusters too.
 - Logging in is an explicit user action in its own dialog (password/OTP prompts, or SSO in the
   browser). The app never answers a prompt on the user's behalf. One login serves every cluster
@@ -124,16 +125,19 @@ never the plaintext or ciphertext.
 - Works against both Jira Cloud and Jira Data Center/Server, without the user needing to know
   which auth scheme that entails.
 
-### 3.6 Connection lifecycle: pinning and standby
-- **Default**: a cluster's Terminal session and Grafana polling exist only while it's the
-  currently selected cluster; switching away tears them down cleanly.
-- **Pinned** (`keepAliveInBackground`): the user can mark specific clusters to keep their Terminal
-  session and Grafana polling alive continuously in the background, regardless of which cluster
-  is currently selected/viewed, so switching between clusters doesn't mean re-establishing a
-  session each time. Reconnect-on-failure (§3.3) applies identically whether pinned or selected.
-- **Standby** (`activeMonitoring: false`): a master per-cluster switch that overrides pinning — no
-  SSH session, no Grafana polling, and no reconnect/backoff loop exist for that cluster at all,
-  even if it's pinned or currently selected. Selecting a standby cluster shows a placeholder
+### 3.6 Connection lifecycle: open, background and standby
+- **Open**: selecting a cluster opens it. Switching away never ends its sessions — every
+  terminal tab and split stays connected in the background until the user closes the cluster
+  explicitly (or it goes into standby, is removed, or the profile is switched; §3.1). Closing a
+  cluster with connected sessions asks for a second click on the same control, not a dialog.
+- **Background**: an open cluster that isn't selected stays quiet — its terminals keep
+  receiving output but stop resizing, and no Grafana/Jira polling or live panel embeds run. A
+  session that drops there pauses instead of retrying and reconnects when the cluster is
+  selected again, so many open clusters can't all be retrying against their login nodes at once.
+  Reconnect-on-failure (§3.3) otherwise applies as usual once the cluster is selected.
+- **Standby** (`activeMonitoring: false`): a master per-cluster switch — no SSH session, no
+  Grafana polling, and no reconnect/backoff loop exist for that cluster at all, even if it's
+  currently selected. Selecting a standby cluster shows a placeholder
   (with a one-click way to resume) instead of silently connecting. Turning monitoring back on
   behaves exactly like a fresh selection — same connect flow, same backoff policy, no fast path
   that bypasses rate-limiting. The lightweight reachability probe (§3.2) is unaffected by standby;
