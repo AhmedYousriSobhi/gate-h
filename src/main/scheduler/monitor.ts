@@ -1,25 +1,31 @@
-import { getCluster } from '../clusters'
-import { NoSessionError, runOnCluster } from './exec'
+import { getCluster, listClusters } from '../clusters'
+import { addNotification } from '../notifications/store'
+import { hasLiveConnection, NoSessionError, runOnCluster } from './exec'
+import { describeChanges, finishedJobs, type FinalStates } from './changes'
 import {
   arrayTasksCommand,
   classifyFailure,
+  finalStatesCommand,
+  parseFinalStates,
   historyCommand,
   parseHistory,
   parseJobs,
   parseSnapshot,
-  snapshotCommand
+  snapshotCommand,
+  type SlurmData
 } from './slurm'
 import {
   MIN_SCHEDULER_INTERVAL_SEC,
+  type ClusterSummary,
   type SchedulerConfig,
   type SchedulerSnapshot,
   type SlurmHistoryJob,
   type SlurmJob
 } from '../../shared/types'
 
-// Polls a cluster's Slurm queue only while the renderer is showing it: the Status widget's Slurm
+// Polls a cluster's Slurm queue while the renderer is showing it: the Status widget's Slurm
 // section watches the selected cluster and unwatches when it's hidden, backgrounded or put in
-// standby, so background clusters never poll. slurmctld is shared by every user of the cluster,
+// standby. The one exception is the opt-in background check for notifications (below). slurmctld is shared by every user of the cluster,
 // hence the interval floor, the failure backoff, and the slower cadence while the window is
 // unfocused. Snapshots stay cached per cluster, so switching back shows the last one at once.
 
@@ -85,6 +91,87 @@ function nextDelay(watch: Watch, config: SchedulerConfig, status: string): numbe
   return watch.failures ? Math.min(base * 2 ** watch.failures, MAX_BACKOFF_MS) : base
 }
 
+interface RunResult {
+  snapshot: SchedulerSnapshot
+  /** A command ran (so it counts for the interval), as opposed to waiting for a session. */
+  ran: boolean
+  ok: boolean
+}
+
+// One refresh per cluster at a time, shared by the foreground poll and the background check, so
+// the two can't both diff against the same baseline and notify twice.
+const inFlight = new Map<string, Promise<RunResult>>()
+
+function refresh(cluster: ClusterSummary, config: SchedulerConfig): Promise<RunResult> {
+  const running = inFlight.get(cluster.id)
+  if (running) return running
+  const run = runSnapshot(cluster, config).finally(() => inFlight.delete(cluster.id))
+  inFlight.set(cluster.id, run)
+  return run
+}
+
+async function runSnapshot(cluster: ClusterSummary, config: SchedulerConfig): Promise<RunResult> {
+  const previous = cached(cluster.id, config) ?? emptySnapshot(cluster.id)
+  try {
+    const result = await runOnCluster(cluster, snapshotCommand(config))
+    if (result.exitCode !== 0) {
+      const failure = classifyFailure(result.exitCode, result.stderr)
+      return { snapshot: { ...previous, ...failure }, ran: true, ok: false }
+    }
+    const data = parseSnapshot(result.stdout, config.scope)
+    if (config.notify && previous.fetchedAt) await notifyChanges(cluster, previous, data)
+    return {
+      snapshot: {
+        ...previous,
+        ...data,
+        status: 'ok',
+        message: undefined,
+        fetchedAt: new Date().toISOString()
+      },
+      ran: true,
+      ok: true
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (err instanceof NoSessionError) {
+      return { snapshot: { ...previous, status: 'waiting', message }, ran: false, ok: false }
+    }
+    return { snapshot: { ...previous, status: 'error', message }, ran: true, ok: false }
+  }
+}
+
+// sacct is asked about at most this many finished jobs per refresh; the rest are reported as
+// having left the queue.
+const MAX_FINAL_STATE_LOOKUPS = 100
+
+async function notifyChanges(
+  cluster: ClusterSummary,
+  before: SchedulerSnapshot,
+  after: SlurmData
+): Promise<void> {
+  const user = cluster.connection.username
+  const finished = finishedJobs(before, after, user).slice(0, MAX_FINAL_STATE_LOOKUPS)
+  let finalStates: FinalStates | null = null
+  if (finished.length) {
+    // Accounting storage is optional; without it the jobs still get a "left the queue" notice.
+    try {
+      const result = await runOnCluster(cluster, finalStatesCommand(finished.map((job) => job.id)))
+      if (result.exitCode === 0) finalStates = parseFinalStates(result.stdout)
+    } catch {
+      finalStates = null
+    }
+  }
+  for (const change of describeChanges(before, after, finalStates, user)) {
+    addNotification({
+      clusterId: cluster.id,
+      clusterName: cluster.name,
+      kind: 'scheduler',
+      severity: change.severity,
+      message: change.message
+    })
+  }
+}
+
 async function poll(clusterId: string): Promise<void> {
   const watch = watches.get(clusterId)
   if (!watch || watch.running) return
@@ -100,45 +187,58 @@ async function poll(clusterId: string): Promise<void> {
   if (previous.status !== 'waiting') {
     publish(clusterId, config, { ...previous, refreshing: true, nextRefreshAt: null })
   }
-
-  let next: SchedulerSnapshot
-  try {
-    const result = await runOnCluster(cluster, snapshotCommand(config))
-    watch.lastRunAt = Date.now()
-    if (result.exitCode === 0) {
-      next = {
-        ...previous,
-        ...parseSnapshot(result.stdout, config.scope),
-        status: 'ok',
-        message: undefined,
-        fetchedAt: new Date().toISOString()
-      }
-      watch.failures = 0
-    } else {
-      next = { ...previous, ...classifyFailure(result.exitCode, result.stderr) }
-      watch.failures++
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (err instanceof NoSessionError) {
-      next = { ...previous, status: 'waiting', message }
-    } else {
-      watch.lastRunAt = Date.now()
-      next = { ...previous, status: 'error', message }
-      watch.failures++
-    }
-  }
+  const { snapshot, ran, ok } = await refresh(cluster, config)
+  if (ran) watch.lastRunAt = Date.now()
+  if (ok) watch.failures = 0
+  else if (ran) watch.failures++
   watch.running = false
 
   // Unwatched while the command ran: cache the result, but don't schedule another.
-  const delay = watches.get(clusterId) === watch ? nextDelay(watch, config, next.status) : null
-  next = {
-    ...next,
+  const delay = watches.get(clusterId) === watch ? nextDelay(watch, config, snapshot.status) : null
+  publish(clusterId, config, {
+    ...snapshot,
     refreshing: false,
     nextRefreshAt: delay === null ? null : new Date(Date.now() + delay).toISOString()
-  }
-  publish(clusterId, config, next)
+  })
   if (delay !== null) watch.timer = setTimeout(() => void poll(clusterId), delay)
+}
+
+// With notifications on, an open cluster keeps being checked while it's in the background, on
+// the SSH connection its terminal already holds - every 5 minutes at most, backing off to 30 on
+// failures. Never for Teleport clusters (each run would be an audited session) or without a live
+// connection, so a closed or standby cluster still costs nothing.
+const BACKGROUND_SWEEP_MS = 60_000
+const BACKGROUND_INTERVAL_MS = 5 * 60_000
+const MAX_BACKGROUND_BACKOFF_MS = 30 * 60_000
+const background = new Map<string, { lastRunAt: number; failures: number; running: boolean }>()
+let sweepTimer: ReturnType<typeof setInterval> | null = null
+
+/** Run once a minute by startSchedulerMonitor; exported for scripts/scheduler-monitor.checks.ts. */
+export function sweepBackground(): void {
+  for (const cluster of listClusters()) {
+    const config = cluster.scheduler
+    if (!config?.notify || cluster.teleport || !cluster.activeMonitoring) continue
+    if (watches.has(cluster.id) || !hasLiveConnection(cluster.id)) continue
+    const state = background.get(cluster.id) ?? { lastRunAt: 0, failures: 0, running: false }
+    background.set(cluster.id, state)
+    const fetchedAt = Date.parse(cached(cluster.id, config)?.fetchedAt ?? '0')
+    const wait = Math.min(
+      Math.max(intervalMs(config), BACKGROUND_INTERVAL_MS) * 2 ** state.failures,
+      MAX_BACKGROUND_BACKOFF_MS
+    )
+    if (state.running || Date.now() - Math.max(state.lastRunAt, fetchedAt) < wait) continue
+    state.running = true
+    void refresh(cluster, config).then(({ snapshot, ran, ok }) => {
+      state.running = false
+      if (ran) state.lastRunAt = Date.now()
+      state.failures = ok ? 0 : ran ? state.failures + 1 : state.failures
+      publish(cluster.id, config, { ...snapshot, refreshing: false, nextRefreshAt: null })
+    })
+  }
+}
+
+export function startSchedulerMonitor(): void {
+  if (!sweepTimer) sweepTimer = setInterval(sweepBackground, BACKGROUND_SWEEP_MS)
 }
 
 export function watchScheduler(clusterId: string): void {
@@ -247,4 +347,7 @@ export function stopSchedulerMonitor(): void {
   for (const watch of watches.values()) if (watch.timer) clearTimeout(watch.timer)
   watches.clear()
   onDemand.clear()
+  if (sweepTimer) clearInterval(sweepTimer)
+  sweepTimer = null
+  background.clear()
 }

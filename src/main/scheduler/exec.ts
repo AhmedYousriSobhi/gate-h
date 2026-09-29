@@ -126,6 +126,11 @@ function runNow(cluster: ClusterSummary, command: string): Promise<ExecResult> {
   return execOverSsh(client, command)
 }
 
+/** Whether an ssh2 cluster has a terminal connection a command could run on right now. */
+export function hasLiveConnection(clusterId: string): boolean {
+  return getLiveClient(clusterId) !== null
+}
+
 export function runOnCluster(cluster: ClusterSummary, command: string): Promise<ExecResult> {
   const previous = queues.get(cluster.id) ?? Promise.resolve()
   const run = previous.catch(() => undefined).then(() => runNow(cluster, command))

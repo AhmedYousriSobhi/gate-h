@@ -169,11 +169,35 @@ Cadence:
   kept in memory per cluster, so switching back shows the last result straight away, marked with
   its age, while a fresh one loads.
 
-Notifications aren't part of v1. Detecting job completions or node drains means diffing snapshots,
-which only works while the widget is polling, and a notification that only fires while you're
-looking at the queue isn't worth having. Once the snapshot shape has settled, the natural next
-step is `kind: 'scheduler'` notifications for *your job finished or failed* and *a partition's
-nodes went down or drained*, backed by the same poll.
+### 5.1 Notifications
+
+Each cluster can opt in with `notify`. Change detection (`scheduler/changes.ts`) compares each new
+snapshot against the last good one and raises `kind: 'scheduler'` notifications for:
+
+- **your jobs that left the queue.** One `sacct --jobs=…` call gets their final state (completed,
+  failed with its exit code, hit the time limit, cancelled, out of memory). Without accounting
+  storage, they're reported as having left the queue;
+- **your pending jobs that started**, with the nodes they started on;
+- **nodes newly down or drained**, with the reason.
+
+It only compares the user's own jobs. Collapsed array rows are skipped, because their IDs change as
+tasks start, and truncated snapshots are skipped, because a missing row there doesn't mean the job
+left. More than three changes of one kind become a single summary. The first snapshot is only a
+baseline.
+
+A notification that only fires while you're looking at the queue isn't worth much. So with
+`notify` on, an **open cluster in the background** keeps being checked, but only under these
+limits:
+
+- on the SSH connection its terminal already holds. With no live connection (the cluster is
+  closed, or in standby) nothing runs;
+- every 5 minutes at most, or the cluster's interval if longer, backing off to 30 minutes on
+  failures;
+- never on Teleport clusters, where each run would be an audited session.
+
+A once-a-minute in-memory sweep (`sweepBackground`) decides which clusters are due. One refresh per
+cluster is in flight at a time, shared by the foreground and background paths, so a change is never
+reported twice.
 
 ## 6. What the user sees
 

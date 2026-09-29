@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, CheckCheck, Ticket, TerminalSquare, WifiOff } from 'lucide-react'
+import { Bell, CheckCheck, ListChecks, Ticket, TerminalSquare, WifiOff } from 'lucide-react'
 import type { ClusterNotification, NotificationKind } from '../../../../shared/types'
 import { timeAgo } from '../../lib/timeAgo'
 import type { WidgetType } from './panelLayout'
@@ -17,13 +17,15 @@ const KIND_ICON: Record<
 > = {
   reachability: WifiOff,
   jira: Ticket,
-  ssh: TerminalSquare
+  ssh: TerminalSquare,
+  scheduler: ListChecks
 }
 
 const KIND_WIDGET: Record<NotificationKind, WidgetType | undefined> = {
   reachability: undefined,
   jira: 'status',
-  ssh: 'terminal'
+  ssh: 'terminal',
+  scheduler: 'status'
 }
 
 export default function NotificationBell({
