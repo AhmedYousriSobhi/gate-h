@@ -216,8 +216,11 @@ Built, and not yet verified against real infrastructure (see docs/STATUS.md). Th
   and backed off (§3.3, §3.4); a target that's genuinely down must degrade to a slow, capped retry
   cadence, not sustained pressure. This matters specifically because the "clusters" on the other
   end are real HPC login nodes and shared infrastructure, not disposable test endpoints.
-- **Linux-first** — actively developed and verified on Linux; Windows/macOS packaging targets
-  exist in `electron-builder` config but are unverified (see `docs/STATUS.md`).
+- **Linux and macOS** — developed and verified on Linux. macOS (Apple Silicon and Intel) is
+  built, tested and smoke-tested per architecture in CI (`.github/workflows/macos.yml`) and
+  follows its conventions: native window controls, an app menu, Cmd shortcuts, and the login
+  shell's PATH for tools like `tsh`/`az`. Windows packaging exists in the `electron-builder`
+  config but is unverified (see `docs/STATUS.md`).
 - **No telemetry** — Gate-H does not phone home; the only network calls it makes are to the
   Grafana/Jira/SSH endpoints the user explicitly configured per cluster.
 

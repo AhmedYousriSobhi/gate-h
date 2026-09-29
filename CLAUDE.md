@@ -69,6 +69,9 @@ the terminal.
 - This environment can't render an actual Electron window (no X server, no sudo to install
   `xvfb`) - UI changes are verified with `typecheck`+`lint`+manual code review only. Say that
   explicitly in the PR instead of claiming a live UI test.
+- macOS can't be built or run here; `.github/workflows/macos.yml` is the only check. Keep
+  `resources/*.sh` bash-3.2 safe (empty arrays under `set -u` need `${a[@]+"${a[@]}"}`) and keep
+  macOS shortcut/menu behavior in `src/renderer/src/lib/platform.ts` and `src/main/index.ts`.
 - `git branch --show-current`/`gh auth status` first when picking a base branch or opening a PR -
   this repo's convention is one GitHub issue -> one branch -> one PR per task (see issues
   #14/#16/#18 and their branches), and a branch is sometimes deliberately stacked on another

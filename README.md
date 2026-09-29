@@ -6,6 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f6fed" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/version-0.1.0-7db2ff" alt="Version 0.1.0">
   <img src="https://img.shields.io/badge/platform-Linux-0a0f1c?logo=linux&logoColor=white" alt="Platform: Linux">
+  <img src="https://img.shields.io/badge/platform-macOS-0a0f1c?logo=apple&logoColor=white" alt="Platform: macOS">
   <br/>
   <img src="https://img.shields.io/badge/Electron-39-47848F?logo=electron&logoColor=white" alt="Electron 39">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
@@ -24,12 +25,29 @@
 
 ## 🚀 Quick start
 
-**① Install.** You need Linux and [Docker](https://docs.docker.com/engine/install/).
+**① Install.**
 
-```bash
-git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
-./build-desktop.sh && ./dist/Gate-H-*.AppImage
-```
+- **Linux:** you need [Docker](https://docs.docker.com/engine/install/).
+
+  ```bash
+  git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
+  ./build-desktop.sh && ./dist/Gate-H-*.AppImage
+  ```
+
+- **macOS** (Apple Silicon or Intel): download `Gate-H-macos-arm64` or `-x64` from the latest
+  [macOS workflow run](https://github.com/AhmedYousriSobhi/gate-h/actions/workflows/macos.yml),
+  open the `.dmg`, and drag Gate-H to Applications. Or build it yourself with Node.js 20+:
+
+  ```bash
+  git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
+  npm ci && npm run build:mac && open dist/*.dmg
+  ```
+
+  The app isn't notarized yet, so the first launch is blocked. Go to **System Settings →
+  Privacy & Security** and click **Open Anyway**, or run
+  `xattr -dr com.apple.quarantine /Applications/Gate-H.app`. `tsh` and `az` from Homebrew are
+  found even when Gate-H is started from the Dock. Teleport login needs `python3`, which comes
+  with Xcode's Command Line Tools (`xcode-select --install`).
 
 **② Add a cluster.** Click **+ Add**, give it a name, fill in *SSH connection* (see below), and
 click **Save cluster**.
@@ -312,7 +330,7 @@ every few minutes for a cluster you have open), so they add almost no load to th
 | end a cluster's sessions | Hover it in the sidebar → **×** (click again to confirm if sessions are live) |
 | stop all connections to a cluster | Hover it → **power** icon (standby); select it → **Resume monitoring** to restart |
 | open another terminal session | Click **+** above the session tabs |
-| watch two sessions at once | Click the split icon next to **+**, or press **Ctrl+Shift+5** in a terminal |
+| watch two sessions at once | Click the split icon next to **+**, or press **Ctrl+Shift+5** (**Cmd+\\** on macOS) in a terminal |
 | put a session beside, above or below another | Drag its tab or its header bar onto that edge of the other session; the highlighted half shows where it lands |
 | resize sessions shown together | Drag the border between them |
 | reorder tabs, or stack two into one view | Drag a tab onto the edge of another tab to reorder, or onto its middle to stack them |
@@ -324,7 +342,11 @@ every few minutes for a cluster you have open), so they add almost no load to th
 
 **Terminal shortcuts:** **Ctrl+Shift+C** / **Ctrl+Shift+V** copy and paste (plain **Ctrl+C**
 still interrupts). **Ctrl+F** searches the scrollback. **Ctrl+Tab** / **Ctrl+Shift+Tab** switch
-sessions. **Ctrl+Shift+5** splits. On macOS, use **Cmd** instead of **Ctrl**.
+sessions. **Ctrl+Shift+5** splits.
+
+On macOS: **Cmd+C** / **Cmd+V** copy and paste, **Cmd+F** searches and **Cmd+\\** splits.
+**Ctrl+Tab** still switches sessions, since Cmd+Tab switches apps. Every other Ctrl key goes to
+the shell.
 
 ## Troubleshooting
 
