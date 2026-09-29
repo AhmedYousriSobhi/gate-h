@@ -42,7 +42,15 @@ export interface GrafanaProfile {
    *  'vertical' orientation. Missing or stale entries (a panel added/removed since last saved)
    *  fall back to an equal split - see normalizePanelWidths in src/main/grafana/client.ts. */
   panelWidths?: Record<string, Record<number, number>>
+  /** UID of the Prometheus datasource holding NVIDIA DCGM exporter metrics, for the Slurm
+   *  section's GPU usage. Unset: GPU usage is only available by sampling a job with nvidia-smi. */
+  gpuDatasourceUid?: string
+  /** The metric label naming the node, as Slurm names it. DCGM exporter's default is `Hostname`. */
+  gpuHostLabel?: string
 }
+
+/** A Prometheus label name - it goes into a PromQL selector. */
+export const PROMETHEUS_LABEL_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 export const DEFAULT_PANEL_EMBED_HEIGHT = 240
 export const MIN_PANEL_EMBED_HEIGHT = 120
@@ -115,6 +123,42 @@ export interface TeleportConfig {
   authConnector?: string
 }
 
+export type SchedulerScope = 'mine' | 'partitions'
+
+/** Slurm integration for a cluster's Status widget - see docs/HPC_ORCHESTRATION.md. Commands run
+ *  as the SSH user on a session that's already open, so there are no secrets here. `kind` is the
+ *  only scheduler supported; PBS/LSF would add their own kinds. */
+export interface SchedulerConfig {
+  kind: 'slurm'
+  /** 'mine': the SSH user's own jobs. 'partitions': every user's jobs, but only in `partitions` -
+   *  never the whole queue, which can run to tens of thousands of rows on a large site. */
+  scope: SchedulerScope
+  /** Required (non-empty) for scope 'partitions'; an optional filter for 'mine'. */
+  partitions: string[]
+  intervalSec: number
+  /** Off means refresh only on request. Defaults off for Teleport clusters, where every run is a
+   *  new, audited Teleport session. */
+  autoRefresh: boolean
+  /** Notify when the user's jobs finish or start and when nodes go down or are drained. While
+   *  the cluster is open in the background, this keeps a check every 5 minutes on its existing
+   *  SSH connection (never on Teleport). Absent in configs saved before it existed = off. */
+  notify?: boolean
+}
+
+export const MIN_SCHEDULER_INTERVAL_SEC = 30
+export const DEFAULT_SCHEDULER_INTERVAL_SEC = 60
+/** Partition names are passed to squeue/sinfo on the remote shell, so only these are accepted. */
+export const SLURM_PARTITION_PATTERN = /^[A-Za-z0-9_.-]+$/
+
+/** Paths whose usage and quota the Status widget can check, e.g. `~` or `/scratch/$USER`. */
+export interface StorageConfig {
+  paths: string[]
+}
+
+/** Characters allowed in a storage path, after removing `$USER`/`$HOME` - paths are passed to the
+ *  remote shell, so nothing that could end the quoting or start a command. */
+export const STORAGE_PATH_PATTERN = /^[A-Za-z0-9_./~-]+$/
+
 export interface Cluster {
   id: string
   name: string
@@ -125,6 +169,8 @@ export interface Cluster {
   jira: JiraProfile | null
   azureTunnel: AzureTunnelConfig | null
   teleport: TeleportConfig | null
+  scheduler: SchedulerConfig | null
+  storage: StorageConfig | null
   /** Master on/off switch for this cluster's Terminal/Grafana connections, independent of
    *  whether it's open or selected. False ("standby") means no SSH session and no Grafana
    *  polling exist for this cluster at all, even if it's selected. Defaults to true so existing
@@ -147,6 +193,8 @@ export interface ClusterInput {
   jiraApiToken?: string
   azureTunnel: AzureTunnelConfig | null
   teleport: TeleportConfig | null
+  scheduler: SchedulerConfig | null
+  storage: StorageConfig | null
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
@@ -237,6 +285,147 @@ export interface CreateJiraIssueInput {
   description?: string
 }
 
+export interface SlurmJob {
+  /** As squeue prints it: `123`, an array task `123_7`, or a collapsed array `123_[8-500]`. */
+  id: string
+  partition: string
+  /** Only for scope 'partitions' - with 'mine' every job is the SSH user's. */
+  user?: string
+  state: string
+  elapsed: string
+  timeLimit: string
+  nodes: number
+  /** Start time for a running job, expected start for a pending one; null when Slurm has none. */
+  start: string | null
+  /** Pending reason, e.g. `(Resources)`, or the node list of a running job. */
+  reason: string
+  name: string
+}
+
+/** A finished (or still running) allocation of the SSH user's, from `sacct`. */
+export interface SlurmHistoryJob {
+  id: string
+  partition: string
+  /** e.g. `COMPLETED`, `FAILED`, `TIMEOUT`, `CANCELLED by 1234`. */
+  state: string
+  /** `exit:signal`, e.g. `0:0` or `1:0`. */
+  exitCode: string
+  elapsed: string
+  start: string | null
+  /** Null while the job is still running. */
+  end: string | null
+  name: string
+}
+
+export interface SlurmPartition {
+  name: string
+  available: string
+  totalNodes: number
+  /** Node count per state (`idle`, `mixed`, `allocated`, `drained`, ...). */
+  nodesByState: Record<string, number>
+}
+
+/** A down, drained or failing set of nodes, from `sinfo --list-reasons`. */
+export interface SlurmNodeIssue {
+  nodes: string
+  state: string
+  reason: string
+}
+
+/** 'waiting': no live session to run on yet (nothing ran). 'no-slurm': squeue isn't on the login
+ *  node's PATH. 'busy': slurmctld timed out or rate-limited the query. */
+export type SchedulerStatus = 'ok' | 'waiting' | 'no-slurm' | 'busy' | 'error'
+
+export interface SchedulerSnapshot {
+  clusterId: string
+  status: SchedulerStatus
+  message?: string
+  /** When the data below was fetched. A failed refresh keeps the last good data, so this can be
+   *  older than the status. Null until the first successful fetch. */
+  fetchedAt: string | null
+  refreshing: boolean
+  jobs: SlurmJob[]
+  /** More jobs matched than Gate-H parses per refresh (see MAX_SLURM_JOBS). */
+  truncated: boolean
+  partitions: SlurmPartition[]
+  nodeIssues: SlurmNodeIssue[]
+  /** Null when refresh is manual, or nothing is scheduled. */
+  nextRefreshAt: string | null
+}
+
+export const MAX_SLURM_JOBS = 2000
+
+export interface GpuSample {
+  host: string
+  /** The GPU's index on its node. */
+  gpu: string
+  model: string
+  utilizationPct: number | null
+  memoryUsedMiB: number | null
+  memoryTotalMiB: number | null
+  temperatureC: number | null
+}
+
+/** The user's quota on a path's filesystem, in KiB. Limits are null when there's no limit. */
+export interface StorageQuota {
+  source: 'lfs' | 'mmlsquota'
+  usedKiB: number
+  softKiB: number | null
+  hardKiB: number | null
+  files: number | null
+  filesHard: number | null
+}
+
+export interface StorageUsage {
+  path: string
+  /** As `stat -f -c %T` reports it: `lustre`, `gpfs`, `nfs`, `xfs`, ... */
+  fsType: string
+  /** The whole filesystem, from df - shared with everyone else on it. */
+  filesystem?: { sizeKiB: number; usedKiB: number }
+  quota?: StorageQuota
+  error?: string
+}
+
+export interface RemoteEntry {
+  name: string
+  type: 'dir' | 'file' | 'link'
+  size: number
+  modifiedAt: string
+}
+
+export interface RemoteDirectory {
+  /** Absolute, as the server resolved it. */
+  path: string
+  entries: RemoteEntry[]
+}
+
+/** Progress of one download or upload - sent when it starts, periodically, and once when done. */
+export interface FileTransferEvent {
+  id: string
+  clusterId: string
+  direction: 'download' | 'upload'
+  name: string
+  transferred: number
+  total: number
+  done: boolean
+  error?: string
+}
+
+export interface JobTemplate {
+  id: string
+  name: string
+  /** A batch script with `{{name}}`/`{{name:default}}` placeholders - see shared/templates.ts. */
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface JobTemplateInput {
+  id?: string
+  name: string
+  body: string
+}
+
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
 export interface ClusterReachability {
@@ -245,7 +434,7 @@ export interface ClusterReachability {
   checkedAt: string
 }
 
-export type NotificationKind = 'reachability' | 'jira' | 'ssh'
+export type NotificationKind = 'reachability' | 'jira' | 'ssh' | 'scheduler'
 export type NotificationSeverity = 'info' | 'warning'
 
 export interface ClusterNotification {
@@ -327,6 +516,9 @@ export interface GateHApi {
     /** Arms the embed session (Authorization header + frame-blocking header stripping) for this
      *  cluster's Grafana origin - call and await before pointing a <webview> at it. */
     prepareEmbed(clusterId: string): Promise<void>
+    /** DCGM GPU metrics for the nodes in these Slurm node lists (`gpu[07-08]`), from the
+     *  cluster's GPU datasource - see GrafanaProfile.gpuDatasourceUid. */
+    gpuUsage(clusterId: string, nodelists: string[]): Promise<GpuSample[]>
   }
   jira: {
     list(clusterId: string): Promise<JiraIssueSummary[]>
@@ -351,6 +543,47 @@ export interface GateHApi {
      *  and close use the ssh.* session calls and events. `renew` signs out first, so a still-valid
      *  session is replaced instead of reused. */
     login(clusterId: string, options: { renew: boolean }): Promise<{ sessionId: string }>
+  }
+  scheduler: {
+    /** Starts pushing this cluster's snapshots over onSnapshot (the cached one straight away) and
+     *  polls while at least one watcher remains - call unwatch when the section is hidden. */
+    watch(clusterId: string): void
+    unwatch(clusterId: string): void
+    /** Refreshes now; ignored within 10s of the last run. */
+    refresh(clusterId: string): void
+    onSnapshot(callback: (snapshot: SchedulerSnapshot) => void): () => void
+    /** The tasks of a collapsed job array, run once on request. */
+    arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
+    /** The SSH user's jobs over the last `days` (1 or 7) days, newest first, run once on request. */
+    history(clusterId: string, days: number): Promise<SlurmHistoryJob[]>
+    /** Submits a rendered batch script with `sbatch` - after the main process asks the user to
+     *  confirm in a native dialog. Resolves with the job id, or null if the user declined. */
+    submit(clusterId: string, script: string, label: string): Promise<string | null>
+    /** Cancels one of the user's own queued or running jobs with `scancel`, after a native
+     *  confirmation. Resolves false if the user declined. */
+    cancel(clusterId: string, jobId: string): Promise<boolean>
+    /** One nvidia-smi on each node of one of the user's own running jobs, run once on request. */
+    sampleGpus(clusterId: string, jobId: string, nodes: number): Promise<GpuSample[]>
+  }
+  templates: {
+    /** The active profile's batch script templates. */
+    list(): Promise<JobTemplate[]>
+    save(input: JobTemplateInput): Promise<JobTemplate>
+    remove(id: string): Promise<void>
+  }
+  storage: {
+    /** Usage and quota for the cluster's configured paths, run once on request. */
+    usage(clusterId: string): Promise<StorageUsage[]>
+  }
+  files: {
+    /** A remote directory over SFTP on the terminal's connection; defaults to the home directory. */
+    list(clusterId: string, path?: string): Promise<RemoteDirectory>
+    /** Asks where to save (a native dialog), then downloads. Resolves false if cancelled. */
+    download(clusterId: string, remotePath: string): Promise<boolean>
+    /** Asks which local files to upload (a native dialog) into `remoteDir`, confirming before
+     *  overwriting. Resolves with how many were uploaded. */
+    upload(clusterId: string, remoteDir: string): Promise<number>
+    onTransfer(callback: (event: FileTransferEvent) => void): () => void
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */

@@ -6,9 +6,12 @@ import type {
   ClusterNotification,
   ClusterReachability,
   CreateJiraIssueInput,
+  FileTransferEvent,
   GateHApi,
+  JobTemplateInput,
   PanelLayout,
   PanelOrientation,
+  SchedulerSnapshot,
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent,
@@ -41,7 +44,9 @@ const api: GateHApi = {
       ipcRenderer.invoke('grafana:setPanelEmbedHeight', clusterId, dashboardUid, height),
     setPanelWidths: (clusterId: string, dashboardUid: string, widths: Record<number, number>) =>
       ipcRenderer.invoke('grafana:setPanelWidths', clusterId, dashboardUid, widths),
-    prepareEmbed: (clusterId: string) => ipcRenderer.invoke('grafana:prepareEmbed', clusterId)
+    prepareEmbed: (clusterId: string) => ipcRenderer.invoke('grafana:prepareEmbed', clusterId),
+    gpuUsage: (clusterId: string, nodelists: string[]) =>
+      ipcRenderer.invoke('grafana:gpuUsage', clusterId, nodelists)
   },
   jira: {
     list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),
@@ -85,6 +90,48 @@ const api: GateHApi = {
     },
     login: (clusterId: string, options: { renew: boolean }) =>
       ipcRenderer.invoke('teleport:login', clusterId, options)
+  },
+  scheduler: {
+    watch: (clusterId: string) => ipcRenderer.send('scheduler:watch', clusterId),
+    unwatch: (clusterId: string) => ipcRenderer.send('scheduler:unwatch', clusterId),
+    refresh: (clusterId: string) => ipcRenderer.send('scheduler:refresh', clusterId),
+    onSnapshot: (callback: (snapshot: SchedulerSnapshot) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: SchedulerSnapshot): void =>
+        callback(payload)
+      ipcRenderer.on('scheduler:snapshot', listener)
+      return () => ipcRenderer.removeListener('scheduler:snapshot', listener)
+    },
+    arrayTasks: (clusterId: string, arrayJobId: string) =>
+      ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId),
+    history: (clusterId: string, days: number) =>
+      ipcRenderer.invoke('scheduler:history', clusterId, days),
+    submit: (clusterId: string, script: string, label: string) =>
+      ipcRenderer.invoke('scheduler:submit', clusterId, script, label),
+    cancel: (clusterId: string, jobId: string) =>
+      ipcRenderer.invoke('scheduler:cancel', clusterId, jobId),
+    sampleGpus: (clusterId: string, jobId: string, nodes: number) =>
+      ipcRenderer.invoke('scheduler:sampleGpus', clusterId, jobId, nodes)
+  },
+  files: {
+    list: (clusterId: string, path?: string) => ipcRenderer.invoke('files:list', clusterId, path),
+    download: (clusterId: string, remotePath: string) =>
+      ipcRenderer.invoke('files:download', clusterId, remotePath),
+    upload: (clusterId: string, remoteDir: string) =>
+      ipcRenderer.invoke('files:upload', clusterId, remoteDir),
+    onTransfer: (callback: (event: FileTransferEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: FileTransferEvent): void =>
+        callback(payload)
+      ipcRenderer.on('files:transfer', listener)
+      return () => ipcRenderer.removeListener('files:transfer', listener)
+    }
+  },
+  templates: {
+    list: () => ipcRenderer.invoke('templates:list'),
+    save: (input: JobTemplateInput) => ipcRenderer.invoke('templates:save', input),
+    remove: (id: string) => ipcRenderer.invoke('templates:remove', id)
+  },
+  storage: {
+    usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
