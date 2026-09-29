@@ -31,7 +31,20 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   fi
   cd "$ROOT_DIR"
   echo "==> Building Gate-H for macOS (npm ci && npm run typecheck && npm run build:mac)"
-  npm ci && npm run typecheck && npm run build:mac
+  # Not `a && b && c` on its own line: set -e ignores a failure that isn't the last in an && list.
+  if ! { npm ci && npm run typecheck && npm run build:mac; }; then
+    cat >&2 <<'MSG'
+
+error: the build failed - see the log above.
+If it says "unable to get local issuer certificate" (or another TLS error), your network re-signs
+HTTPS traffic with its own certificate, which Node doesn't trust by default. Either let Node use
+the macOS keychain:
+  NODE_USE_SYSTEM_CA=1 ./build-desktop.sh        (Node 22.15+ / 24)
+or point it at your organisation's CA file:
+  NODE_EXTRA_CA_CERTS=/path/to/ca.pem ./build-desktop.sh
+MSG
+    exit 1
+  fi
   echo
   echo "==> Done. Build artifacts:"
   ls -1 dist/*.dmg dist/*.zip 2>/dev/null || echo "(no dmg/zip found under dist/ - check the build log above)"
