@@ -52,6 +52,7 @@ export function removeProfile(id: string): void {
 
   const transaction = db.transaction(() => {
     db.prepare('DELETE FROM clusters WHERE profile_id = ?').run(id)
+    db.prepare('DELETE FROM job_templates WHERE profile_id = ?').run(id)
     db.prepare('DELETE FROM profiles WHERE id = ?').run(id)
 
     if (getActiveProfileId() === id) {

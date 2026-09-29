@@ -59,10 +59,10 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 
 ## Known limitations / near-term roadmap
 
-- **HPC orchestration: Slurm job queue and node health built; the rest designed.** The design is in
+- **HPC orchestration: built, not yet run against real infrastructure.** The design is in
   [HPC_ORCHESTRATION.md](./HPC_ORCHESTRATION.md) and the requirements in
-  [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned). The widget picker (the puzzle-piece
-  icon on a cluster's panel) lists GPU usage as a disabled "coming soon" entry.
+  [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned). The widget picker's old
+  "coming soon" entries are gone: everything they previewed has shipped.
   Phases, each its own issue, branch and PR (1 to 3 shipped together):
 
   | # | Feature | Status | Approach |
@@ -72,7 +72,7 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   | 3 | **Node health** (Slurm) | ✅ Done | `sinfo` per-partition state counts plus `sinfo --list-reasons` for down/drained nodes, from the same poll |
   | 4 | **GPU usage** | ✅ Done | Per-GPU cards in the Slurm section for running jobs' nodes. Grafana `/api/ds/query` on DCGM exporter metrics with the existing token (new optional Grafana settings: datasource UID, node label), or an on-demand `srun --overlap --whole … nvidia-smi` sample inside the user's own job. Covered by `gpu.checks.ts` (hostlists, parsers, an HTTP round trip to a stand-in Grafana); **not yet run against real DCGM metrics or `srun`** |
   | 5 | **File transfer** (SFTP) | ✅ Done | *Files* dialog from the cluster panel's toolbar (`features/files/FilesDialog.tsx`): browse, download, upload with progress. One `client.sftp()` channel per existing connection; local paths only from native dialogs in main; confirms before overwriting. Not for Teleport clusters yet (`tsh scp`). Covered by `sftp.checks.ts` against a fake SFTP channel; **not yet run against a real SFTP server** |
-  | 6 | **Job submission helper** | 📝 Outlined | Local `#SBATCH` template library; `sbatch`/`scancel` only after the user confirms the exact command |
+  | 6 | **Job templates + submit/cancel** | ✅ Done | *Job templates* dialog (`features/templates/`): per-profile `job_templates` table, `{{name:default}}` placeholders, a review of the rendered script, then `sbatch --parsable` with the script on stdin (works on Teleport too). A cancel button on the user's own jobs runs `scancel --user="$(id -un)"`. Both are confirmed in a native dialog by the main process. Covered by `submit.checks.ts` and `scheduler-exec.checks.ts` (stdin over both paths) |
   | — | **Slurm notifications** | ✅ Done | Opt-in per cluster; snapshot diffs (`scheduler/changes.ts`) plus one `sacct` for final states; background check every 5 min on the open cluster's existing connection, never on Teleport. Covered by `slurm.checks.ts` and `scheduler-monitor.checks.ts` |
   | — | **Job history** | ✅ Done | `sacct` for the user's own allocations over 24 h or 7 days, on request only (`SlurmHistory.tsx`); reuses the phase 1 runner |
   | — | **Storage quota** | ✅ Done | Per-cluster `storage.paths`; on request, one command per refresh: `df` per path plus `lfs quota` (Lustre) or `mmlsquota -Y` (GPFS), picked by `stat -f`. Reuses the phase 1 runner. Covered by `storage.checks.ts`, which runs the real command in a local bash; the Lustre/GPFS parsers are checked against recorded output only |

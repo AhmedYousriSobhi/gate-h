@@ -165,8 +165,8 @@ never the plaintext or ciphertext.
   count — never a blank "pick something" screen.
 
 ### 3.10 HPC orchestration (planned)
-The job queue and node health are built; the rest isn't yet (see docs/STATUS.md). The design is
-in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
+Built, and not yet verified against real infrastructure (see docs/STATUS.md). The design is in
+[docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 - **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
   own jobs, or every user's jobs in named partitions (never the whole queue). Each job shows its
   state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
@@ -199,8 +199,9 @@ in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
   one of the user's own jobs (`srun --overlap`), never polled and never over direct SSH to compute
   nodes.
 - **File transfer.** Browse, upload and download over SFTP on the existing connection.
-- **Job submission helper.** A local library of batch script templates. Submitting shows the full
-  rendered script and the exact command, and runs `sbatch` only after an explicit confirmation.
+- **Job submission helper.** A local library of batch script templates, per profile. Submitting
+  shows the full rendered script and the exact command, and runs `sbatch` only after an explicit
+  confirmation that the main process asks for itself, so the renderer can't skip it.
   Cancelling a job has the same confirmation and applies only to the user's own jobs.
 
 ## 4. Non-functional requirements
