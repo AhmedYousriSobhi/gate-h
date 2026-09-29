@@ -411,6 +411,21 @@ export interface FileTransferEvent {
   error?: string
 }
 
+export interface JobTemplate {
+  id: string
+  name: string
+  /** A batch script with `{{name}}`/`{{name:default}}` placeholders - see shared/templates.ts. */
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface JobTemplateInput {
+  id?: string
+  name: string
+  body: string
+}
+
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
 export interface ClusterReachability {
@@ -541,8 +556,20 @@ export interface GateHApi {
     arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
     /** The SSH user's jobs over the last `days` (1 or 7) days, newest first, run once on request. */
     history(clusterId: string, days: number): Promise<SlurmHistoryJob[]>
+    /** Submits a rendered batch script with `sbatch` - after the main process asks the user to
+     *  confirm in a native dialog. Resolves with the job id, or null if the user declined. */
+    submit(clusterId: string, script: string, label: string): Promise<string | null>
+    /** Cancels one of the user's own queued or running jobs with `scancel`, after a native
+     *  confirmation. Resolves false if the user declined. */
+    cancel(clusterId: string, jobId: string): Promise<boolean>
     /** One nvidia-smi on each node of one of the user's own running jobs, run once on request. */
     sampleGpus(clusterId: string, jobId: string, nodes: number): Promise<GpuSample[]>
+  }
+  templates: {
+    /** The active profile's batch script templates. */
+    list(): Promise<JobTemplate[]>
+    save(input: JobTemplateInput): Promise<JobTemplate>
+    remove(id: string): Promise<void>
   }
   storage: {
     /** Usage and quota for the cluster's configured paths, run once on request. */

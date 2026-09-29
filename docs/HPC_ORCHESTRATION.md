@@ -281,14 +281,24 @@ metrics pipeline.
   dialog opened by the main process. An upload that would overwrite remote files asks first.
   Symlinks can be opened as folders. Teleport clusters would need `tsh scp` and aren't supported
   yet.
-- **Batch script templates.** A local library of `#SBATCH` templates, stored in SQLite and
-  scoped per profile, with placeholders filled in through a form. Submitting uploads the script
-  over SFTP, shows the full rendered script and the exact `sbatch <path>` command, and runs it
-  only on an explicit confirm. `scancel` would follow the same rule: only the user's own jobs,
-  and only after confirmation.
+- **Batch script templates (built).** The *Job templates* dialog (the code icon in the panel
+  toolbar) keeps a local library of batch scripts in SQLite (`job_templates`), scoped per profile
+  like clusters. Templates use `{{name}}` and `{{name:default}}` placeholders, filled in through
+  a generated form. A repeated placeholder takes its first default everywhere.
+  - **Submitting** first shows the fully rendered script and the command. The script then goes to
+    `sbatch --parsable` **on standard input**, over the same runner as every other scheduler
+    command. That means no upload step and no temporary file on the cluster, and it works on
+    Teleport clusters too. The returned job ID is shown, and the queue refreshes at once.
+  - **Cancelling:** the queue gets a cancel button on each of the user's own jobs (tasks of a
+    collapsed array once it's expanded). It runs `scancel --user="$(id -un)" <id>`, so even a
+    wrong ID can only ever touch the user's own jobs.
+  - **Confirmation in main.** Both actions are confirmed in a **native dialog shown by the main
+    process**, which names the cluster, the SSH user and the command, and shows the script for a
+    submit. A renderer bug or a compromised page can't skip it. The renderer's review screen is
+    for reading the script; the native dialog is where the user agrees to run it.
 
-Both change SPEC §5, which today keeps job management out of scope. SPEC §3.10 now says what's
-allowed: reading is automatic, and writing always needs an explicit confirmation.
+Both relax SPEC §5, which kept job management out of scope. SPEC §3.10 says what's allowed:
+reading is automatic, and writing always needs an explicit confirmation.
 
 ## 9. Delivery plan
 

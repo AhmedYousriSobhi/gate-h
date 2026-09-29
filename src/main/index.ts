@@ -20,6 +20,7 @@ import { closeAllSessions } from './ssh/manager'
 import { registerSchedulerIpcHandlers } from './ipc/scheduler'
 import { registerStorageIpcHandlers } from './ipc/storage'
 import { registerFileIpcHandlers } from './ipc/files'
+import { registerTemplateIpcHandlers } from './ipc/templates'
 import {
   setSchedulerBroadcaster,
   setSchedulerWindowFocused,
@@ -146,6 +147,7 @@ app.whenReady().then(() => {
   registerSchedulerIpcHandlers()
   registerStorageIpcHandlers()
   registerFileIpcHandlers()
+  registerTemplateIpcHandlers()
 
   createWindow()
 

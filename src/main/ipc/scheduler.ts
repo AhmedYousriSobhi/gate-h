@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { cancelJob, submitScript } from '../scheduler/submit'
 import {
   fetchArrayTasks,
   fetchJobHistory,
@@ -15,6 +16,19 @@ export function registerSchedulerIpcHandlers(): void {
   ipcMain.handle('scheduler:arrayTasks', (_event, clusterId: string, arrayJobId: string) =>
     fetchArrayTasks(clusterId, arrayJobId)
   )
+  ipcMain.handle(
+    'scheduler:submit',
+    async (event, clusterId: string, script: string, label: string) => {
+      const jobId = await submitScript(clusterId, String(script), String(label), event.sender)
+      if (jobId) refreshScheduler(clusterId, { force: true })
+      return jobId
+    }
+  )
+  ipcMain.handle('scheduler:cancel', async (event, clusterId: string, jobId: string) => {
+    const cancelled = await cancelJob(clusterId, String(jobId), event.sender)
+    if (cancelled) refreshScheduler(clusterId, { force: true })
+    return cancelled
+  })
   ipcMain.handle(
     'scheduler:sampleGpus',
     (_event, clusterId: string, jobId: string, nodes: number) =>
