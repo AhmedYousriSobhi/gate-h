@@ -365,7 +365,7 @@ the shell.
 | *Host key … changed* notification | The server's key changed since your last connection. Ask your cluster admin before trusting it. |
 | Azure: a sign-in code appears | Your Azure login expired. Open the link and enter the code. |
 | macOS: *"Gate-H" can't be opened because Apple cannot check it* | The app isn't notarized. Go to **System Settings → Privacy & Security → Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Gate-H.app`. |
-| Build fails with *unable to get local issuer certificate* | Your network re-signs HTTPS with its own certificate, which Node doesn't trust. Run `NODE_USE_SYSTEM_CA=1 ./build-desktop.sh` (Node 22.15+ or 24; uses the macOS keychain), or `NODE_EXTRA_CA_CERTS=/path/to/ca.pem ./build-desktop.sh` with your organisation's CA file. |
+| Build fails with *unable to get local issuer certificate* | Your network re-signs HTTPS with its own certificate, which Node doesn't trust. `./build-desktop.sh` checks this first and retries with the macOS keychain by itself (Node 22.15+ or 24). If it still fails, run `NODE_EXTRA_CA_CERTS=/path/to/ca.pem ./build-desktop.sh` with your organisation's CA file; the script's error message shows how to export the Mac's CAs to one. |
 | macOS: `tsh` or `az` not found | Install it with Homebrew. Gate-H reads your login shell's PATH, so a restart of Gate-H after installing is enough. |
 | macOS: Teleport login does nothing or fails at once | It needs `python3`. Run `xcode-select --install`. |
 | Teleport: *unreachable* or *no route to host* | Your machine can't reach the proxy. Check the VPN and the proxy address. |
