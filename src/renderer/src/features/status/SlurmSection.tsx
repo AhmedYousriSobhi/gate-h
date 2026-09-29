@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, RefreshCw, X } from 'lucide-react'
 import {
   MAX_SLURM_JOBS,
   type ClusterSummary,
@@ -34,11 +34,14 @@ function isCollapsedArray(id: string): boolean {
 function JobRow({
   job,
   showUser,
-  expander
+  expander,
+  onCancel
 }: {
   job: SlurmJob
   showUser: boolean
   expander?: React.ReactNode
+  /** Only for the user's own jobs; the main process asks for confirmation before scancel. */
+  onCancel?: () => void
 }): React.JSX.Element {
   const pending = job.state === 'PENDING'
   return (
@@ -65,6 +68,13 @@ function JobRow({
       <td className="slurm-name" title={job.name}>
         {job.name}
       </td>
+      <td className="slurm-action">
+        {onCancel && (
+          <button className="btn-icon" title={`Cancel job ${job.id}...`} onClick={onCancel}>
+            <X size={13} strokeWidth={2} />
+          </button>
+        )}
+      </td>
     </tr>
   )
 }
@@ -74,6 +84,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const [snapshot, setSnapshot] = useState<SchedulerSnapshot | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [arrays, setArrays] = useState<Record<string, ArrayTasks>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
   const watching = active && scheduler !== null
   // Re-watch after the settings change, so the next snapshot reflects them.
   const configKey = scheduler ? JSON.stringify(scheduler) : null
@@ -115,6 +126,24 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
     }
   }
 
+  // Collapsed array rows aren't cancellable as a whole; their tasks are, once expanded.
+  function cancellable(job: SlurmJob): boolean {
+    return (
+      !isCollapsedArray(job.id) &&
+      (job.user === undefined || job.user === cluster.connection.username) &&
+      !['COMPLETED', 'COMPLETING', 'CANCELLED'].includes(job.state)
+    )
+  }
+
+  async function cancel(jobId: string): Promise<void> {
+    try {
+      await window.api.scheduler.cancel(cluster.id, jobId)
+      setActionError(null)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : `Failed to cancel job ${jobId}.`)
+    }
+  }
+
   if (!scheduler) {
     return (
       <p className="hint">
@@ -125,7 +154,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   if (!snapshot) return <p className="hint">Loading Slurm queue...</p>
 
   const showUser = scheduler.scope === 'partitions'
-  const columns = showUser ? 8 : 7
+  const columns = showUser ? 9 : 8
   const counts = new Map<string, number>()
   for (const job of snapshot.jobs) counts.set(job.state, (counts.get(job.state) ?? 0) + 1)
 
@@ -158,6 +187,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
       </div>
 
       {snapshot.status === 'waiting' && <p className="hint">{snapshot.message}</p>}
+      {actionError && <div className="error-banner">{actionError}</div>}
       {snapshot.status !== 'ok' && snapshot.status !== 'waiting' && (
         <div className="error-banner">
           {snapshot.message}
@@ -184,6 +214,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                     <th>Nodes</th>
                     <th>Nodes or reason</th>
                     <th>Name</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -199,7 +230,13 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                       </button>
                     ) : undefined
                     return [
-                      <JobRow key={job.id} job={job} showUser={showUser} expander={expander} />,
+                      <JobRow
+                        key={job.id}
+                        job={job}
+                        showUser={showUser}
+                        expander={expander}
+                        onCancel={cancellable(job) ? () => void cancel(job.id) : undefined}
+                      />,
                       tasks === 'loading' && (
                         <tr key={`${job.id}-loading`} className="slurm-subrow">
                           <td colSpan={columns} className="slurm-dim">
@@ -221,6 +258,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                             job={task}
                             showUser={showUser}
                             expander={<span className="slurm-indent" />}
+                            onCancel={cancellable(task) ? () => void cancel(task.id) : undefined}
                           />
                         ))
                     ]

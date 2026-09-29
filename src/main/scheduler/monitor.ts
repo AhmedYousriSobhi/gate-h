@@ -278,9 +278,12 @@ export function unwatchScheduler(clusterId: string): void {
   watches.delete(clusterId)
 }
 
-export function refreshScheduler(clusterId: string): void {
+/** `force` skips the 10s throttle - for right after the user submitted or cancelled a job, when
+ *  the queue is known to have changed. */
+export function refreshScheduler(clusterId: string, options: { force?: boolean } = {}): void {
   const watch = watches.get(clusterId)
-  if (!watch || Date.now() - watch.lastRunAt < MANUAL_REFRESH_GAP_MS) return
+  if (!watch) return
+  if (!options.force && Date.now() - watch.lastRunAt < MANUAL_REFRESH_GAP_MS) return
   void poll(clusterId)
 }
 

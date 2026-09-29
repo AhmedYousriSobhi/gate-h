@@ -77,12 +77,13 @@ function collector(
   }
 }
 
-function execOverSsh(client: Client, command: string): Promise<ExecResult> {
+function execOverSsh(client: Client, command: string, stdin?: string): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     client.exec(command, (err, stream) => {
       if (err) return reject(err)
       let exitCode: number | null = null
       const c = collector(() => stream.close(), resolve, reject)
+      if (stdin !== undefined) stream.end(stdin)
       stream.on('data', c.stdout)
       stream.stderr.on('data', c.stderr)
       stream.on('exit', (code: number | null) => {
@@ -94,11 +95,17 @@ function execOverSsh(client: Client, command: string): Promise<ExecResult> {
   })
 }
 
-function execOverTeleport(cluster: ClusterSummary, command: string): Promise<ExecResult> {
+function execOverTeleport(
+  cluster: ClusterSummary,
+  command: string,
+  stdin?: string
+): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     const { file, args } = teleportExecCommand(cluster, command)
-    const child = spawn(file, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(file, args, { stdio: ['pipe', 'pipe', 'pipe'] })
     const c = collector(() => child.kill('SIGTERM'), resolve, reject)
+    // Closed straight away without input, as /dev/null would be.
+    child.stdin.end(stdin)
     child.stdout.on('data', c.stdout)
     child.stderr.on('data', c.stderr)
     child.on('error', c.fail)
@@ -114,16 +121,16 @@ function hasTeleportSession(clusterId: string): boolean {
   return Boolean(validUntil && Date.parse(validUntil) > Date.now())
 }
 
-function runNow(cluster: ClusterSummary, command: string): Promise<ExecResult> {
+function runNow(cluster: ClusterSummary, command: string, stdin?: string): Promise<ExecResult> {
   if (cluster.teleport) {
     if (!hasTeleportSession(cluster.id)) {
       return Promise.reject(new NoSessionError('Waiting for a Teleport login.'))
     }
-    return execOverTeleport(cluster, command)
+    return execOverTeleport(cluster, command, stdin)
   }
   const client = getLiveClient(cluster.id)
   if (!client) return Promise.reject(new NoSessionError('Waiting for a terminal session.'))
-  return execOverSsh(client, command)
+  return execOverSsh(client, command, stdin)
 }
 
 /** Whether an ssh2 cluster has a terminal connection a command could run on right now. */
@@ -131,9 +138,15 @@ export function hasLiveConnection(clusterId: string): boolean {
   return getLiveClient(clusterId) !== null
 }
 
-export function runOnCluster(cluster: ClusterSummary, command: string): Promise<ExecResult> {
+/** `stdin`, when given, is written to the command's standard input and then closed - e.g. a
+ *  batch script for `sbatch` to read. */
+export function runOnCluster(
+  cluster: ClusterSummary,
+  command: string,
+  stdin?: string
+): Promise<ExecResult> {
   const previous = queues.get(cluster.id) ?? Promise.resolve()
-  const run = previous.catch(() => undefined).then(() => runNow(cluster, command))
+  const run = previous.catch(() => undefined).then(() => runNow(cluster, command, stdin))
   queues.set(cluster.id, run)
   void run
     .catch(() => undefined)

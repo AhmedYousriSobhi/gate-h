@@ -370,6 +370,11 @@
   display: block;
 }
 
+.slurm-table td.slurm-action {
+  padding: 0 var(--space-2);
+  width: 32px;
+}
+
 .slurm-name {
   max-width: 220px;
   overflow: hidden;
