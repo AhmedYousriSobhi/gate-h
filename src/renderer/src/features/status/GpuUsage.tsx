@@ -11,23 +11,21 @@ function Bar({
   label,
   value,
   max,
-  unit
+  format
 }: {
   label: string
   value: number | null
   max: number | null
-  unit: string
+  format: (value: number) => string
 }): React.JSX.Element {
   const fraction = value !== null && max ? Math.min(value / max, 1) : 0
   return (
     <div className="storage-meter">
       <div className="storage-meter-label">
         <span>{label}</span>
-        <span className="slurm-mono">
-          {value === null ? 'n/a' : `${Math.round(value).toLocaleString()}${unit}`}
-          {value !== null && max && unit !== '%'
-            ? ` / ${Math.round(max).toLocaleString()}${unit}`
-            : ''}
+        <span className="slurm-mono storage-meter-value">
+          {value === null ? 'n/a' : format(value)}
+          {value !== null && max && max !== 100 ? ` / ${format(max)}` : ''}
         </span>
       </div>
       <div className="storage-bar">
@@ -39,6 +37,9 @@ function Bar({
     </div>
   )
 }
+
+const percent = (value: number): string => `${Math.round(value)}%`
+const gib = (mib: number): string => `${(mib / 1024).toFixed(1)} GiB`
 
 /** GPUs on the nodes of the user's running jobs: from the cluster's DCGM metrics in Grafana,
  *  refreshed with each Slurm snapshot, or sampled with nvidia-smi inside one job on request. */
@@ -116,8 +117,8 @@ export default function GpuUsage({ cluster, snapshot }: GpuUsageProps): React.JS
                 </span>
               </div>
               {gpu.model && <span className="slurm-dim">{gpu.model}</span>}
-              <Bar label="Utilization" value={gpu.utilizationPct} max={100} unit="%" />
-              <Bar label="Memory" value={gpu.memoryUsedMiB} max={gpu.memoryTotalMiB} unit=" MiB" />
+              <Bar label="Utilization" value={gpu.utilizationPct} max={100} format={percent} />
+              <Bar label="Memory" value={gpu.memoryUsedMiB} max={gpu.memoryTotalMiB} format={gib} />
             </div>
           ))}
         </div>

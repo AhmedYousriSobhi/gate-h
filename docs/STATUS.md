@@ -53,6 +53,10 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
    Vite dev server, opening it in a headless Chromium browser (Playwright), and exercising it
    against a mocked `window.api` (the same interface the real Electron preload bridge exposes)
    with realistic sample data. This is how the screenshots and GIFs in the README were produced.
+   The HPC orchestration screenshots (`slurm-status.png`, `storage-quota.png`,
+   `file-transfer.png`, `job-templates.png`) were made the same way. The Status panel and the
+   dialogs were rendered alone in headless Chromium at 1440×900, with sample Slurm, DCGM, Lustre
+   and GPFS data.
 3. **Not yet verified against real infrastructure**: an actual SSH server, a real Grafana
    instance, or a real Jira instance. If you have access to any of those, running `npm run dev`
    on a normal desktop and pointing Gate-H at them is the natural next verification step.
