@@ -29,9 +29,9 @@ These come from what Gate-H already promises, not from Slurm:
 
 ```
 renderer                         preload                 main
-features/scheduler/              window.api.scheduler    ipc/scheduler.ts
-  JobQueueWidget.tsx  ── subscribe(clusterId) ──►          │
-  NodeHealthWidget.tsx ◄─ onSnapshot(snapshot) ──        scheduler/monitor.ts   (who polls, when)
+features/status/                 window.api.scheduler    ipc/scheduler.ts
+  SlurmSection.tsx    ── watch(clusterId) ─────►           │
+   (queue + nodes)    ◄─ onSnapshot(snapshot) ──         scheduler/monitor.ts   (who polls, when)
                                                            │
                                                          scheduler/slurm.ts     (fixed commands + parsers)
                                                            │
@@ -47,8 +47,8 @@ features/scheduler/              window.api.scheduler    ipc/scheduler.ts
 | `src/main/scheduler/exec.ts` | runs one fixed command on the cluster's live session, with a timeout and an output cap | the `Client` held in `ssh/manager.ts`'s `sessions` map; `teleport/session.ts`'s `scopeArgs()` |
 | `src/main/scheduler/slurm.ts` | the command strings and their parsers | nothing; pure functions, which makes this the first code in Gate-H that is easy to unit test |
 | `src/main/scheduler/monitor.ts` | decides when to poll, backs off on failure, pushes snapshots | the backoff shape in `GrafanaStatusSection.tsx` |
-| `src/main/ipc/scheduler.ts` | `subscribe` / `unsubscribe` / `refresh` handlers | the one-file-per-namespace IPC pattern |
-| `src/renderer/src/features/scheduler/` | the Job queue and Node health widgets | `WidgetPicker.tsx` (the roadmap entries become real toggles), the panel layout |
+| `src/main/ipc/scheduler.ts` | `watch` / `unwatch` / `refresh` / `arrayTasks` handlers | the one-file-per-namespace IPC pattern |
+| `src/renderer/src/features/status/SlurmSection.tsx` | the job queue and node health, as a section of the Status widget | `StatusPanel.tsx`, next to Grafana and Jira |
 
 ### 2.1 Configuration
 
@@ -56,12 +56,17 @@ A cluster gains one optional field, mirrored end to end the way `activeMonitorin
 
 ```ts
 interface SchedulerConfig {
-  kind: 'slurm'              // PBS/LSF would add kinds later; nothing else is designed for them yet
-  scope: 'mine' | 'all'      // squeue --me (default) or the whole queue
-  partitions?: string[]      // limit squeue/sinfo to these partitions
-  intervalSec: number        // default 60, minimum 30
+  kind: 'slurm'                    // the only kind; no PBS/LSF abstraction until someone needs it
+  scope: 'mine' | 'partitions'     // squeue --me, or every user's jobs in `partitions`
+  partitions: string[]             // required for 'partitions'; an optional filter for 'mine'
+  intervalSec: number              // default 60, minimum 30
+  autoRefresh: boolean             // default on, except on Teleport clusters (see §3)
 }
 ```
+
+There is no "whole queue" scope. On a large site, `squeue --all` can return tens of thousands of
+rows, and parsing and rendering them would cost more CPU and memory than the rest of Gate-H put
+together. Every user's jobs are only shown for named partitions.
 
 `null` means the cluster has no scheduler integration, which is the default, so existing clusters
 behave exactly as before. There are no secrets: every command runs as the SSH user on the session
@@ -79,9 +84,10 @@ opens a connection of its own.
 - **Teleport clusters.** The terminal is `tsh ssh` on a PTY, so there is no client to share. The
   command runs as a separate non-interactive `teleport.sh ssh --no-login -- login@node '<cmd>'`,
   and only while the Teleport session is valid (`teleport/sessionState.ts`). It never triggers a
-  login. **Each run is a new Teleport session and shows up in the cluster's audit log**, so
-  Teleport clusters default to manual refresh, and automatic refresh is off until the user turns
-  it on.
+  login. **Each run is a new Teleport session and shows up in the cluster's audit log.** Polling
+  every minute would add well over a thousand routine `squeue` entries a day to the site's
+  security logs, so Teleport clusters default to manual refresh (`autoRefresh: false`). Users can
+  opt in per cluster.
 - **No live session** (terminal closed, paused, or not yet connected): nothing runs. The widget
   says *Waiting for a terminal session* and resumes when one connects.
 
@@ -110,8 +116,13 @@ echo '@@gateh@@'
 LC_ALL=C sinfo --noheader --list-reasons --format='%N|%T|%E'
 ```
 
-- `--me` becomes `--all` (and `--format` gains `%u`) when `scope` is `all`. `--partition=` is
-  added when partitions are configured.
+- With `scope: 'partitions'`, `--me` is dropped, `--format` gains `%u`, and `--partition=` is
+  always set. With `scope: 'mine'`, `--partition=` is added only when partitions are configured.
+- **Job arrays stay collapsed**, the way `squeue` shows them by default (`123_[1-500]` is one row),
+  which keeps the table short. Expanding an array row runs one on-demand
+  `squeue --array --jobs=<id>` for that array's tasks. The ID is validated as digits only.
+- **At most 2,000 jobs are parsed** per refresh. Past that, the snapshot is marked truncated and
+  the widget suggests narrowing the partitions.
 - **Free text goes last.** The job name (`%j`) and the drain reason (`%E`) can contain `|`, so the
   parser splits on the first N−1 delimiters only.
 - **Why not `squeue --json`:** it needs Slurm 21.08 or later, built with a JSON data-parser
@@ -139,7 +150,8 @@ A cluster is polled only while **all** of these are true:
    subscribes when the widget mounts visibly and unsubscribes when it is hidden, backgrounded or
    unmounted),
 4. it has a live session (§3), and
-5. for Teleport, the user has turned on automatic refresh.
+5. `autoRefresh` is on. With it off, the only runs are ones the user starts with the refresh
+   button, and the first snapshot after the section opens.
 
 Cadence:
 
@@ -156,7 +168,7 @@ Cadence:
   kept in memory per cluster, so switching back shows the last result straight away, marked with
   its age, while a fresh one loads.
 
-Notifications stay out of v1. Detecting job completions or node drains means diffing snapshots,
+Notifications aren't part of v1. Detecting job completions or node drains means diffing snapshots,
 which only works while the widget is polling, and a notification that only fires while you're
 looking at the queue isn't worth having. Once the snapshot shape has settled, the natural next
 step is `kind: 'scheduler'` notifications for *your job finished or failed* and *a partition's
@@ -164,19 +176,19 @@ nodes went down or drained*, backed by the same poll.
 
 ## 6. What the user sees
 
-**Job queue widget.** A table of jobs: ID, partition, state, elapsed and limit, nodes, expected
-start or reason, and name. It can be filtered by state, and counts by state are shown above it.
-It is read-only in v1. A job ID can be copied, and *Show in terminal* types
-`scontrol show job <id>` into the active terminal tab **without pressing Enter**, so the user
-stays in control of what runs.
+The queue and node health are a **Slurm section of the Status widget**, next to Grafana and Jira,
+rather than separate panes. The panel layout holds exactly two panes, and a cluster's scheduler
+state belongs with its other status. The section is subscribed only while the Status widget is
+showing, and the widget picker's *Job queue* and *Node health* roadmap entries are dropped.
 
-**Node health widget.** One row per partition: availability, node counts by state
-(idle/mixed/allocated/down/drained), and the drain reasons from `sinfo --list-reasons`, with
-problems listed first.
+**Job queue.** Counts by state, then a table of jobs: ID, partition, state, elapsed and limit,
+nodes, expected start or reason, and name (and user, for partition scope). It is read-only.
+An array row expands to show its tasks.
 
-Both widgets show the snapshot's age, a manual refresh button, and the states from §4. They are
-added to the panel layout the same way Status is: toggled from the widget picker, and kept mounted
-(but unsubscribed) while hidden.
+**Node health.** One row per partition: availability and node counts by state, plus the down and
+drained nodes from `sinfo --list-reasons` with their reasons.
+
+The section shows the snapshot's age, a refresh button, and the states from §4.
 
 ## 7. GPU and node telemetry (outline)
 
@@ -221,18 +233,23 @@ Each phase is one GitHub issue, one branch and one PR, following the repo conven
 | Phase | Scope | Depends on |
 |---|---|---|
 | 1 | `SchedulerConfig` end to end (type, column, form, IPC), `scheduler/exec.ts` with its limits, `slurm.ts` parsers with unit tests | — |
-| 2 | `scheduler/monitor.ts` and the Job queue widget | 1 |
-| 3 | Node health widget | 2 |
+| 2 | `scheduler/monitor.ts` and the job queue | 1 |
+| 3 | Node health | 2 |
+
+Phases 1 to 3 ship as one PR, because phase 1 on its own would add code nothing calls yet.
 | 4 | Native GPU widget via Grafana `/api/ds/query`, plus the on-demand `srun … nvidia-smi` sample | 2 |
 | 5 | SFTP panel | — |
 | 6 | Batch templates and confirmed `sbatch`/`scancel` | 2, 5 |
 
-## 10. Open questions
+## 10. Decisions
 
-- **Teleport audit noise:** is manual-only refresh acceptable by default, or should a site be able
-  to allow automatic refresh for all its clusters?
-- **`scope: 'all'` on large sites:** the whole queue can run to tens of thousands of lines. Should
-  v1 support only `--me` and partition-scoped views?
-- **Job arrays:** show `123_[1-500]` collapsed, as `squeue` does by default, or expand them
-  (`--array`)?
-- **PBS/LSF:** keep `kind` open for them, but hold off until a user needs them.
+These were open questions, now settled for v1:
+
+- **Teleport audit noise.** Refresh is manual by default on Teleport clusters, because each run
+  is an audited session. Automatic refresh is an opt-in per cluster (`autoRefresh`).
+- **Large queues.** There is no whole-queue scope. The options are `--me`, or every user's jobs in
+  named partitions, with a 2,000-row parse cap as a backstop.
+- **Job arrays.** Collapsed by default, as `squeue` shows them. A row expands on demand to list its
+  tasks.
+- **PBS/LSF.** Not now. `kind: 'slurm'` leaves room in the type, but there is no scheduler
+  abstraction until a real user asks for one.
