@@ -611,7 +611,13 @@ export default function MainPanel({
             />
           )}
           <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
-            {!hidden && <StatusPanel cluster={cluster} reachability={reachability} />}
+            {!hidden && (
+              <StatusPanel
+                cluster={cluster}
+                reachability={reachability}
+                active={visible.includes('status')}
+              />
+            )}
           </div>
         </div>
       ) : (

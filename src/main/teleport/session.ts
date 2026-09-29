@@ -36,6 +36,13 @@ export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
   }
 }
 
+/** A one-off, non-interactive remote command (scheduler queries - see ../scheduler/exec.ts).
+ *  `--no-login`: without a usable session it exits with EXIT_NO_SESSION instead of prompting. */
+export function teleportExecCommand(cluster: ClusterSummary, command: string): PtySpawnOptions {
+  const ssh = teleportSshCommand(cluster)
+  return { ...ssh, args: [...ssh.args, command] }
+}
+
 /** The interactive login: password/OTP prompts in the PTY, or tsh opening the browser for SSO.
  *  `renew` replaces a still-valid session (see teleport.sh's `login --force`). */
 export function teleportLoginCommand(cluster: ClusterSummary, renew: boolean): PtySpawnOptions {

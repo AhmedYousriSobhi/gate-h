@@ -4,9 +4,7 @@ import {
   Check,
   Cpu,
   HardDrive,
-  ListChecks,
   ClipboardList,
-  ServerCog,
   Terminal as TerminalIcon
 } from 'lucide-react'
 import type { WidgetType } from './panelLayout'
@@ -27,7 +25,7 @@ const AVAILABLE_WIDGETS: Array<{
   {
     type: 'status',
     label: 'Status',
-    description: 'Grafana health/dashboards + Jira issues',
+    description: 'Grafana health/dashboards, Slurm jobs and nodes, Jira issues',
     icon: Activity
   }
 ]
@@ -35,13 +33,9 @@ const AVAILABLE_WIDGETS: Array<{
 // Ideas for future per-cluster widgets, based on what HPC-specific monitoring stacks (Slurm-web,
 // Grafana Slurm dashboards, XDMoD) surface that Gate-H doesn't yet - shown disabled here so the
 // picker doubles as a visible roadmap, not just a control. None of these exist yet: each needs a
-// real backend (either a scheduler client over the existing SSH session, or its own API).
+// real backend (either a scheduler command over the existing SSH session, or its own API). The job
+// queue and node health shipped as the Status widget's Slurm section instead.
 const ROADMAP_WIDGETS: Array<{ label: string; description: string; icon: typeof TerminalIcon }> = [
-  {
-    label: 'Job queue',
-    description: 'Pending/running jobs and wait times (squeue/qstat/bjobs)',
-    icon: ListChecks
-  },
   {
     label: 'GPU usage',
     description: 'Per-node GPU utilization, memory, and temperature',
@@ -51,11 +45,6 @@ const ROADMAP_WIDGETS: Array<{ label: string; description: string; icon: typeof 
     label: 'Storage quota',
     description: 'Home/scratch usage vs. quota (lfs quota, df)',
     icon: HardDrive
-  },
-  {
-    label: 'Node health',
-    description: 'Partition/node up, down, and drained state (sinfo/pbsnodes)',
-    icon: ServerCog
   },
   {
     label: 'Job history',

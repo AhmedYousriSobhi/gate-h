@@ -17,6 +17,12 @@ import { setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
 import { registerTeleportIpcHandlers } from './ipc/teleport'
 import { startTeleportSessionMonitor, stopTeleportSessionMonitor } from './teleport/sessionState'
 import { closeAllSessions } from './ssh/manager'
+import { registerSchedulerIpcHandlers } from './ipc/scheduler'
+import {
+  setSchedulerBroadcaster,
+  setSchedulerWindowFocused,
+  stopSchedulerMonitor
+} from './scheduler/monitor'
 import {
   startClusterMonitor,
   stopClusterMonitor,
@@ -29,6 +35,7 @@ import type {
   AzureTunnelStatusEvent,
   ClusterNotification,
   ClusterReachability,
+  SchedulerSnapshot,
   TeleportSessionInfo
 } from '../shared/types'
 
@@ -73,7 +80,11 @@ function createWindow(): void {
   // reconnecting a VPN) instead of waiting for the next scheduled sweep - throttled inside
   // triggerImmediateSweepIfStale so this can never turn into extra probing beyond the normal
   // sweep cadence.
-  win.on('focus', () => triggerImmediateSweepIfStale())
+  win.on('focus', () => {
+    triggerImmediateSweepIfStale()
+    setSchedulerWindowFocused(true)
+  })
+  win.on('blur', () => setSchedulerWindowFocused(false))
 
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -129,6 +140,7 @@ app.whenReady().then(() => {
   registerLayoutIpcHandlers()
   registerAzureIpcHandlers()
   registerTeleportIpcHandlers()
+  registerSchedulerIpcHandlers()
 
   createWindow()
 
@@ -149,6 +161,11 @@ app.whenReady().then(() => {
     }
   })
   startJiraMonitor()
+  setSchedulerBroadcaster((snapshot: SchedulerSnapshot) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('scheduler:snapshot', snapshot)
+    }
+  })
   startTeleportSessionMonitor((sessions: Record<string, TeleportSessionInfo>) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('teleport:sessions', sessions)
@@ -171,6 +188,7 @@ app.on('window-all-closed', () => {
   stopClusterMonitor()
   stopJiraMonitor()
   stopTeleportSessionMonitor()
+  stopSchedulerMonitor()
   if (process.platform !== 'darwin') {
     app.quit()
   }

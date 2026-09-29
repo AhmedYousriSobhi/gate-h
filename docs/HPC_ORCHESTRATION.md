@@ -1,6 +1,7 @@
 # HPC orchestration: design
 
-Status: **proposed, nothing built yet.** This is the design for Gate-H's next features: a Slurm
+Status: **phases 1 to 3 (the Slurm job queue and node health) are built; the rest is proposed.**
+This is the design for Gate-H's next features: a Slurm
 job queue and node view, GPU and node telemetry, and later a file transfer panel and a job
 submission helper. [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned) states the
 requirements; [STATUS.md](./STATUS.md#known-limitations--near-term-roadmap) tracks progress.
@@ -158,8 +159,7 @@ Cadence:
 - **Default 60 s, minimum 30 s.** That is the same cadence as the reachability probe, and far
   below what `slurmctld` sees from `watch squeue`.
 - **Failure backoff:** the interval doubles on each consecutive failure, capped at 5 minutes, the
-  same as Grafana (`GRAFANA_MAX_REFRESH_BACKOFF_MS`). It resets on a success or when reachability
-  flips back to online.
+  same as Grafana (`GRAFANA_MAX_REFRESH_BACKOFF_MS`). It resets on a success.
 - **Manual refresh** is throttled to once every 10 s.
 - **Unfocused window:** when the window loses focus, polling stretches to 5 minutes, and it catches
   up once on refocus, as reachability already does. A queue nobody is looking at doesn't need

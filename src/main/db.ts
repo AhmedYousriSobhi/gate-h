@@ -119,6 +119,10 @@ export function getDb(): Database.Database {
     db.exec('ALTER TABLE clusters ADD COLUMN teleport TEXT')
   }
 
+  if (!columnExists(db, 'clusters', 'scheduler')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN scheduler TEXT')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,
