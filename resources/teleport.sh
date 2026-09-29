@@ -248,14 +248,18 @@ do_login() {
   if ! is_interactive; then args+=(--browser=none); fi
   if [[ -n "$CLUSTER" ]]; then args+=("$CLUSTER"); fi
 
-  local runner=() stdin=/dev/null
-  if command -v timeout >/dev/null 2>&1; then runner=(timeout "$LOGIN_TIMEOUT"); fi
+  # GNU timeout; macOS has none unless coreutils is installed (as gtimeout),
+  # and then the login simply isn't time-limited.
+  local runner=() stdin=/dev/null timeout_cmd=''
+  if command -v timeout >/dev/null 2>&1; then timeout_cmd=timeout
+  elif command -v gtimeout >/dev/null 2>&1; then timeout_cmd=gtimeout; fi
+  if [[ -n "$timeout_cmd" ]]; then runner=("$timeout_cmd" "$LOGIN_TIMEOUT"); fi
   if is_interactive; then
     stdin=/dev/stdin
     # Without --foreground, timeout moves tsh into its own process group, off
     # the terminal's foreground group: tsh is then stopped (SIGTTIN) the moment
     # it reads the OTP prompt, and Ctrl-C never reaches it.
-    if ((${#runner[@]})); then runner=(timeout --foreground "$LOGIN_TIMEOUT"); fi
+    if [[ -n "$timeout_cmd" ]]; then runner=("$timeout_cmd" --foreground "$LOGIN_TIMEOUT"); fi
   fi
 
   status login "Logging in to $PROXY"
@@ -266,7 +270,9 @@ do_login() {
   # A pipeline rather than a process substitution, so the shell waits for tee to finish writing
   # the log before it's read below.
   set +e
-  "${runner[@]}" tsh "${args[@]}" <"$stdin" 2>&1 | tee "$errlog" >&2
+  # ${a[@]+"${a[@]}"}: bash before 4.4 (macOS ships 3.2) treats an empty
+  # array as unbound under set -u.
+  ${runner[@]+"${runner[@]}"} tsh "${args[@]}" <"$stdin" 2>&1 | tee "$errlog" >&2
   rc=${PIPESTATUS[0]}
   set -e
   if ((rc == 124)); then
@@ -331,7 +337,7 @@ passthrough() {
   local tool=$1
   if [[ -z "$PROXY" ]]; then
     command -v "$tool" >/dev/null 2>&1 || die "$EXIT_DEPS" "'$tool' not found on PATH"
-    exec "$tool" "${PASSTHROUGH[@]}"
+    exec "$tool" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
   fi
   require_tsh
   tsh_scope
@@ -340,7 +346,7 @@ passthrough() {
   ensure_session >&2
   local args=("${TSH_SCOPE[@]}" "$tool")
   if [[ -n "$CLUSTER" ]]; then args+=(--cluster="$CLUSTER"); fi
-  exec tsh "${args[@]}" "${PASSTHROUGH[@]}"
+  exec tsh "${args[@]}" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 }
 
 cmd_ssh() { passthrough ssh; }
