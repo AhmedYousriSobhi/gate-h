@@ -86,8 +86,10 @@ export interface AzureTunnelConfig {
   localPort: number
   /** mode "bastion" */
   bastionName?: string
+  /** mode "bastion": full ARM resource id of the target VM. If absent, `vmName` is resolved to
+   *  one via `az vm show` when the tunnel opens. */
   targetResourceId?: string
-  /** mode "az-ssh" */
+  /** mode "az-ssh": VM name (required). mode "bastion": alternative to `targetResourceId`. */
   vmName?: string
   localUser?: string
 }

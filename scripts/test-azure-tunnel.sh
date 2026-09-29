@@ -24,12 +24,25 @@ s.bind(('127.0.0.1', int(sys.argv[1]))); s.listen(); time.sleep(float(sys.argv[2
 s.close(); time.sleep(float(sys.argv[3]))" "$@"
 }
 port_arg() { printf '%s\n' "$@" | grep -oE '^127\.0\.0\.1:[0-9]+' | cut -d: -f2; }
+vm_name_arg() { # prints the value right after a bare "-n"
+  local prev=""
+  for a in "$@"; do
+    [[ "$prev" == "-n" ]] && { printf '%s\n' "$a"; return; }
+    prev=$a
+  done
+}
 case "$1 $2" in
   "account get-access-token") [[ -f "$MOCK/logged-in" ]] ;;
   "account list") cat "$MOCK/subscriptions" ;;
   "account set") echo "${@: -1}" >"$MOCK/selected" ;;
   "account show") cat "$MOCK/selected" ;;
   "login "*) touch "$MOCK/logged-in" ;;
+  "vm show")
+    name=$(vm_name_arg "$@")
+    case "${MOCK_VM:-ok}" in
+      ok) echo "/subscriptions/fake/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/$name" ;;
+      missing) exit 1 ;;
+    esac ;;
   "ssh vm") listen "$(port_arg "$@")" 600 0 & wait ;;
   "network bastion")
     port=$(printf '%s\n' "$@" | grep -A1 -- '--port' | tail -1)
@@ -103,6 +116,14 @@ MOCK_BASTION=hang expect 0 "bastion tunnel comes up" up "${BASTION[@]}"
 sleep 4
 expect 7 "hung tunnel (process alive, port gone) reports degraded" status --name t
 expect 0 "down cleans up the hung tunnel" down --name t
+
+echo "-- bastion by VM name (no --target-id)"
+BASTION_BY_VM=(--name t --mode bastion -g rg --bastion b --vm jump -l "$PORT" -s sub-a --non-interactive)
+expect 2 "bastion needs --target-id or --vm" up --name t --mode bastion -g rg --bastion b -l "$PORT" -s sub-a --non-interactive
+expect 0 "--vm resolves to a resource id via az vm show" up "${BASTION_BY_VM[@]}"
+check "...and the resolved id reached the tunnel command" grep -q -- "-> jump:" "$WORK/out"
+expect 0 "down" down --name t
+MOCK_VM=missing expect 7 "an unresolvable VM name fails cleanly" up "${BASTION_BY_VM[@]}"
 
 echo
 if ((failures)); then echo "$failures check(s) failed"; exit 1; fi

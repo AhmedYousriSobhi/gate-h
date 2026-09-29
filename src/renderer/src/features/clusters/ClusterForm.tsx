@@ -197,11 +197,11 @@ function azureTunnelError(form: FormState): string | null {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return 'Azure tunnel local port must be a number between 1 and 65535.'
   }
-  if (
-    form.azureMode === 'bastion' &&
-    (!form.azureBastionName.trim() || !form.azureTargetResourceId.trim())
-  ) {
-    return 'Azure Bastion needs the bastion name and the target VM resource ID.'
+  if (form.azureMode === 'bastion') {
+    if (!form.azureBastionName.trim()) return 'Azure Bastion needs the bastion name.'
+    if (!form.azureTargetResourceId.trim() && !form.azureVmName.trim()) {
+      return 'Azure Bastion needs the target VM resource ID or its VM name.'
+    }
   }
   if (form.azureMode === 'az-ssh' && !form.azureVmName.trim()) {
     return 'az ssh vm needs the VM name.'
@@ -320,8 +320,13 @@ export default function ClusterForm({
             localPort: Number(form.azureLocalPort),
             bastionName: form.azureMode === 'bastion' ? form.azureBastionName.trim() : undefined,
             targetResourceId:
-              form.azureMode === 'bastion' ? form.azureTargetResourceId.trim() : undefined,
-            vmName: form.azureMode === 'az-ssh' ? form.azureVmName.trim() : undefined,
+              form.azureMode === 'bastion'
+                ? form.azureTargetResourceId.trim() || undefined
+                : undefined,
+            vmName:
+              form.azureMode === 'az-ssh' || form.azureMode === 'bastion'
+                ? form.azureVmName.trim() || undefined
+                : undefined,
             localUser:
               form.azureMode === 'az-ssh' ? form.azureLocalUser.trim() || undefined : undefined
           }
@@ -683,12 +688,23 @@ export default function ClusterForm({
                       />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="azureTargetResourceId">Target VM resource ID</label>
+                      <label htmlFor="azureTargetResourceId">
+                        Target VM resource ID (optional)
+                      </label>
                       <input
                         id="azureTargetResourceId"
                         placeholder="/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/virtualMachines/..."
                         value={form.azureTargetResourceId}
                         onChange={(e) => set('azureTargetResourceId', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="azureVmName">or VM name</label>
+                      <input
+                        id="azureVmName"
+                        placeholder="Resolved to a resource ID via `az vm show` when opened"
+                        value={form.azureVmName}
+                        onChange={(e) => set('azureVmName', e.target.value)}
                       />
                     </div>
                   </>

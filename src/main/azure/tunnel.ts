@@ -64,6 +64,7 @@ function upArgs(cluster: ClusterSummary): string[] {
   if (tunnel.mode === 'bastion') {
     if (tunnel.bastionName) args.push('--bastion', tunnel.bastionName)
     if (tunnel.targetResourceId) args.push('--target-id', tunnel.targetResourceId)
+    else if (tunnel.vmName) args.push('--vm', tunnel.vmName)
   } else {
     if (tunnel.vmName) args.push('--vm', tunnel.vmName)
     args.push('--remote-host', cluster.connection.host)

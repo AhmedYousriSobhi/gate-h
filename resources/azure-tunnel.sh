@@ -50,8 +50,10 @@ Options (each also settable via the env var shown, or in a --config file):
   mode=bastion (az network bastion tunnel; needs Standard SKU + native client support):
       --bastion         bastion host name                        AZT_BASTION
       --target-id       full resource id of the target VM        AZT_TARGET_ID
+                        (or use --vm; resolved via `az vm show`)
   mode=az-ssh (az ssh vm with Entra ID auth, then ssh -L):
       --vm              VM name                                  AZT_VM
+                        (required for az-ssh; alternative to --target-id for bastion)
       --remote-host     host to forward to, as seen from the VM  AZT_REMOTE_HOST (default: localhost)
       --local-user      local VM account instead of Entra ID     AZT_LOCAL_USER
   --timeout SECS        max wait for the tunnel to listen        AZT_TIMEOUT (default: 60)
@@ -163,7 +165,9 @@ validate_up_args() {
     bastion)
       require RESOURCE_GROUP --resource-group
       require BASTION_NAME --bastion
-      require TARGET_ID --target-id
+      if [[ -z "$TARGET_ID" && -z "$VM_NAME" ]]; then
+        die "$EXIT_USAGE" "--target-id or --vm is required for mode 'bastion'"
+      fi
       ;;
     az-ssh)
       require RESOURCE_GROUP --resource-group
@@ -230,6 +234,19 @@ prompt_subscription() {
     fi
     log "Enter a number between 1 and $#."
   done
+}
+
+# Bastion needs a full ARM resource id; a bare VM name (as a person would type it, or as a
+# manual bastion-tunnel script resolves with the same `az vm show` call) is looked up once here so
+# the form field can take either.
+resolve_target_id() {
+  [[ "$MODE" == bastion && -z "$TARGET_ID" ]] || return 0
+  status tunnel "Resolving VM '$VM_NAME' to its resource ID"
+  TARGET_ID=$(az vm show --only-show-errors -g "$RESOURCE_GROUP" -n "$VM_NAME" \
+    --query id --output tsv) ||
+    die "$EXIT_TUNNEL" "Could not resolve VM '$VM_NAME' in resource group '$RESOURCE_GROUP' to a resource ID"
+  [[ -n "$TARGET_ID" ]] ||
+    die "$EXIT_TUNNEL" "VM '$VM_NAME' not found in resource group '$RESOURCE_GROUP'"
 }
 
 select_subscription() {
@@ -397,6 +414,7 @@ cmd_up() {
 
   ensure_login
   select_subscription
+  resolve_target_id
   build_tunnel_cmd
   start_tunnel
 
