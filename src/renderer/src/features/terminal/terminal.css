@@ -146,8 +146,30 @@ body.session-dragging * {
   /* Shell titles can be long paths - labels ellipsize here (full title in the tooltip) rather
      than letting the sidebar eat into the terminal. */
   max-width: 240px;
+  flex-shrink: 0;
   border-bottom: none;
-  border-right: 1px solid var(--color-border);
+}
+
+/* The line between the side tab list and the sessions, and its drag handle: a 1px line with a
+   wider invisible hit area, so it's easy to grab without taking space from either side. */
+.terminal-tabbar-resizer {
+  flex: 0 0 1px;
+  position: relative;
+  background-color: var(--color-border);
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.terminal-tabbar-resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+
+.terminal-tabbar-resizer:hover,
+.terminal-tabbar-resizer:active {
+  background-color: var(--color-accent);
 }
 
 .terminal-tabbar-tabs {

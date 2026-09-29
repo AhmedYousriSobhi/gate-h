@@ -58,6 +58,9 @@ interface TerminalTabBarProps {
   onContextMenu: (id: string, x: number, y: number) => void
   onOrientationChange: (orientation: 'horizontal' | 'vertical') => void
   onSplitOrientationChange: (orientation: 'horizontal' | 'vertical') => void
+  /** Width in px of the side (vertical) tab list, set by dragging its divider; unset, the list
+   *  sizes to its titles up to the CSS max-width. */
+  width?: number | null
 }
 
 export default function TerminalTabBar({
@@ -84,13 +87,17 @@ export default function TerminalTabBar({
   onRenameCancel,
   onContextMenu,
   onOrientationChange,
-  onSplitOrientationChange
+  onSplitOrientationChange,
+  width
 }: TerminalTabBarProps): React.JSX.Element {
   const layoutButtonRef = useRef<HTMLButtonElement | null>(null)
   const [layoutMenu, setLayoutMenu] = useState<{ x: number; y: number } | null>(null)
 
   return (
-    <div className={`terminal-tabbar terminal-tabbar-${orientation}`}>
+    <div
+      className={`terminal-tabbar terminal-tabbar-${orientation}`}
+      style={orientation === 'vertical' && width ? { width, maxWidth: 'none' } : undefined}
+    >
       <div className="terminal-tabbar-actions">
         <button
           className="btn-icon"
