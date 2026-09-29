@@ -28,7 +28,7 @@ ticket tracker separately.
 | `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
 | `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
-| `SchedulerConfig` *(planned)* | `kind` (`slurm`), `scope` (`mine`\|`all`), optional `partitions`, `intervalSec` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
+| `SchedulerConfig` *(planned)* | `kind` (`slurm`), `scope` (`mine`\|`partitions`), `partitions`, `intervalSec`, `autoRefresh` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
 | `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
 
 Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
@@ -166,8 +166,9 @@ never the plaintext or ciphertext.
 ### 3.10 HPC orchestration (planned)
 Not built yet. The design is in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 - **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
-  jobs (or the whole queue, or chosen partitions) with state, elapsed/limit, nodes, and expected
-  start or pending reason, plus per-partition node counts by state and drain reasons.
+  own jobs, or every user's jobs in named partitions (never the whole queue). Each job shows its
+  state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
+  collapsed until expanded. Also show per-partition node counts by state and drain reasons.
 - **Scheduler commands never open a connection.** They run only on a session the user already has
   open: an extra `ssh2` channel on the terminal's connection, or, for Teleport, a non-interactive
   `tsh ssh` while the Teleport session is valid. With no live session, nothing runs, and a
@@ -180,7 +181,7 @@ Not built yet. The design is in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATI
   is selected, not in standby, and a scheduler widget is visible, with a floor on the interval,
   the same failure backoff as §3.4, and a slower cadence while the window is unfocused.
   Background clusters (§3.6) never poll. On Teleport clusters, where each run is an audited
-  session, refresh is manual unless the user turns automatic refresh on.
+  session, refresh is manual unless the user opts in per cluster.
 - **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
   running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
   existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside
