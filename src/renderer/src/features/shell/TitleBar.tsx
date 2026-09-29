@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Copy, Minus, Square, X } from 'lucide-react'
+import { isMac } from '../../lib/platform'
 import './titlebar.css'
 
 export default function TitleBar(): React.JSX.Element {
@@ -16,6 +17,16 @@ export default function TitleBar(): React.JSX.Element {
       off()
     }
   }, [])
+
+  // macOS draws its own traffic lights in this bar (titleBarStyle 'hidden', see src/main/index.ts)
+  // and zooms on double-click itself, following the user's system setting.
+  if (isMac) {
+    return (
+      <div className="titlebar">
+        <span className="titlebar-title">Gate-H</span>
+      </div>
+    )
+  }
 
   function handleDoubleClick(e: React.MouseEvent): void {
     // Only the draggable background should toggle maximize - not a double-click that happens to

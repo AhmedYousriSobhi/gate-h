@@ -21,6 +21,7 @@ import type {
 import TeleportLoginDialog from './TeleportLoginDialog'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
+import { isMac, SPLIT_SHORTCUT_LABEL } from '../../lib/platform'
 
 interface TerminalPanelProps {
   cluster: ClusterSummary
@@ -295,19 +296,26 @@ export default function TerminalPanel({
     fitAddon.fit()
 
     // Intercepted before xterm turns them into control bytes for the shell, so Ctrl+F opens the
-    // search bar instead of sending ACK, and Ctrl/Cmd+Shift+C/V copy/paste the OS clipboard
-    // without touching Ctrl+C's SIGINT (which has no Shift and is left to the default handler).
+    // search bar instead of sending ACK, and Ctrl+Shift+C/V copy/paste the OS clipboard without
+    // touching Ctrl+C's SIGINT (which has no Shift and is left to the default handler). On macOS
+    // the app's own shortcuts use Cmd, as in Terminal.app and VS Code, and plain Ctrl is left to
+    // the shell entirely (Ctrl+F is readline's forward-char there too); Cmd+C/V need nothing
+    // here, since the Edit menu's copy/paste roles reach xterm as native copy/paste events.
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
-      const mod = event.ctrlKey || event.metaKey
-      if (mod && event.key === 'Tab') {
+      const mod = isMac ? event.metaKey : event.ctrlKey || event.metaKey
+      // Ctrl+Tab everywhere: on macOS Cmd+Tab belongs to the system's app switcher.
+      if (event.ctrlKey && event.key === 'Tab') {
         event.preventDefault()
         onCycleTabRef.current?.(event.shiftKey ? -1 : 1)
         return false
       }
-      // VS Code's split-terminal chord. `code`, not `key` - with Shift held, `key` is '%' on a
-      // US layout and something else elsewhere.
-      if (mod && event.shiftKey && event.code === 'Digit5') {
+      // VS Code's split-terminal chord: Cmd+\ on macOS, Ctrl+Shift+5 elsewhere. `code`, not
+      // `key` - with Shift held, `key` is '%' on a US layout and something else elsewhere.
+      const split = isMac
+        ? mod && !event.shiftKey && event.code === 'Backslash'
+        : mod && event.shiftKey && event.code === 'Digit5'
+      if (split) {
         event.preventDefault()
         onSplitRef.current?.()
         return false
@@ -317,6 +325,7 @@ export default function TerminalPanel({
         setSearchOpen(true)
         return false
       }
+      if (isMac) return true
       if (mod && event.shiftKey && event.key.toLowerCase() === 'c') {
         event.preventDefault()
         const selection = term.getSelection()
@@ -467,7 +476,7 @@ export default function TerminalPanel({
           {onSplit && (
             <button
               className="terminal-header-btn"
-              title="Split Terminal (Ctrl+Shift+5)"
+              title={`Split Terminal (${SPLIT_SHORTCUT_LABEL})`}
               aria-label="Split terminal"
               onClick={onSplit}
             >

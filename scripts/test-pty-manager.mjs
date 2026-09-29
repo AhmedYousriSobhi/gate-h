@@ -17,7 +17,8 @@
 //     query and its response parsing;
 //   - scripts/sftp.checks.ts: file listing and transfers over a fake ssh2 SFTP channel;
 //   - scripts/submit.checks.ts: template placeholders, and sbatch/scancel only after the native
-//     confirmation, with a stubbed dialog, cluster store and command runner.
+//     confirmation, with a stubbed dialog, cluster store and command runner;
+//   - scripts/shell-path.checks.ts: adopting the login shell's PATH (for macOS GUI launches).
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -201,6 +202,9 @@ try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
   mkdirSync(home, { recursive: true })
+  // Separate from the session monitor's HOME, whose checks count the fake tsh's calls there.
+  const ptyHome = join(work, 'home-pty')
+  mkdirSync(ptyHome, { recursive: true })
   mkdirSync(bin, { recursive: true })
   writeFileSync(
     join(bin, 'tsh'),
@@ -210,7 +214,16 @@ try {
   chmodSync(join(bin, 'tsh'), 0o755)
 
   const jobs = [
-    { entry: 'pty-manager.checks.ts', plugins: [assetPath], env: {} },
+    // The fake tsh too (it reports no session), unless it's the optional run against a real
+    // Teleport lab, which needs the real one - otherwise the result depends on whether this
+    // machine happens to have tsh installed and logged in.
+    {
+      entry: 'pty-manager.checks.ts',
+      plugins: [assetPath],
+      env: process.env.TELEPORT_LAB_PROXY
+        ? {}
+        : { HOME: ptyHome, PATH: `${bin}:${process.env.PATH}` }
+    },
     {
       entry: 'teleport-sessions.checks.ts',
       plugins: [assetPath, stubStores],
@@ -222,7 +235,8 @@ try {
     { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} },
     { entry: 'gpu.checks.ts', plugins: [], env: {} },
     { entry: 'sftp.checks.ts', plugins: [stubSftpDeps], env: {} },
-    { entry: 'submit.checks.ts', plugins: [stubSubmitDeps], env: {} }
+    { entry: 'submit.checks.ts', plugins: [stubSubmitDeps], env: {} },
+    { entry: 'shell-path.checks.ts', plugins: [], env: {} }
   ]
   let failed = false
   for (const job of jobs) {

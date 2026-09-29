@@ -49,26 +49,32 @@ async function main(): Promise<void> {
     '$USER is kept for the remote shell to expand'
   )
 
-  console.log('-- run locally')
-  g.__clusters = {
-    c: { id: 'c', activeMonitoring: true, storage: { paths: ['~', '/definitely/missing'] } }
+  // The command is written for the cluster's GNU userland (`stat -f -c %T`); running it here
+  // only means something on Linux. macOS's BSD stat reads those flags differently.
+  if (process.platform === 'linux') {
+    console.log('-- run locally')
+    g.__clusters = {
+      c: { id: 'c', activeMonitoring: true, storage: { paths: ['~', '/definitely/missing'] } }
+    }
+    const usage = await fetchStorageUsage('c')
+    const home = usage.find((u) => u.path === '~')
+    report(usage.length === 2, 'one entry per configured path', JSON.stringify(usage))
+    report(
+      Boolean(
+        home?.fsType && home.fsType !== 'missing' && home.filesystem && home.filesystem.sizeKiB > 0
+      ),
+      `df reads ${homedir()}'s filesystem`,
+      JSON.stringify(home)
+    )
+    report(
+      usage[1]?.error === 'Path not found.',
+      'a missing path is reported, not an error for the rest'
+    )
+    await fetchStorageUsage('c')
+    report(g.__commands.length === 1, 'checking again within 30s reuses the result')
+  } else {
+    console.log('-- run locally: skipped (the command targets GNU stat on the cluster)')
   }
-  const usage = await fetchStorageUsage('c')
-  const home = usage.find((u) => u.path === '~')
-  report(usage.length === 2, 'one entry per configured path', JSON.stringify(usage))
-  report(
-    Boolean(
-      home?.fsType && home.fsType !== 'missing' && home.filesystem && home.filesystem.sizeKiB > 0
-    ),
-    `df reads ${homedir()}'s filesystem`,
-    JSON.stringify(home)
-  )
-  report(
-    usage[1]?.error === 'Path not found.',
-    'a missing path is reported, not an error for the rest'
-  )
-  await fetchStorageUsage('c')
-  report(g.__commands.length === 1, 'checking again within 30s reuses the result')
 
   console.log('-- parsers')
   const lfs = parseLfsQuota(
