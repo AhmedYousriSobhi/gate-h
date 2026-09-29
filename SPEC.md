@@ -25,11 +25,12 @@ ticket tracker separately.
 | `AzureTunnelConfig` | `mode` (`bastion`\|`az-ssh`), `subscription`, `resourceGroup`, `localPort`, Bastion name + target VM id or VM name | Optional per cluster. SSH dials `127.0.0.1:localPort`, and `connection.host`/`port` are the tunnel's far end. No secrets: the Azure CLI keeps its own tokens. |
 | `TeleportConfig` | `proxy`, optional `cluster` (leaf), `user`, `authConnector` | Optional per cluster, exclusive with an Azure tunnel or a jump host. `connection.host` is the Teleport node name and `connection.username` the login. No secrets: `tsh` keeps its own certificates. |
 | `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | One SSH identity per cluster; a jump host chains a second SSH hop via `forwardOut`. |
-| `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
+| `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths`, optional `gpuDatasourceUid`/`gpuHostLabel` | A service-account API token is stored alongside but never returned to the renderer. The two GPU fields point GPU usage (§3.10) at a DCGM Prometheus datasource. |
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
 | `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
 | `SchedulerConfig` | `kind` (`slurm`), `scope` (`mine`\|`partitions`), `partitions`, `intervalSec`, `autoRefresh` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
 | `StorageConfig` | `paths` | Optional per cluster: paths whose usage and quota the Status widget checks on request. See §3.10. |
+| `JobTemplate` | `id`, `name`, `body`, `createdAt`, `updatedAt` | A batch script with `{{name}}` / `{{name:default}}` placeholders. Stored per profile, not per cluster. See §3.10. |
 | `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
 
 Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
@@ -80,6 +81,25 @@ never the plaintext or ciphertext.
 - While a session isn't connected (initial connect, a retry in progress, or paused), the terminal
   view makes that state unmistakable — a stale output buffer must never be mistakable for a live,
   responsive prompt.
+
+### 3.3.0 Terminal sessions and layout
+- A cluster can have any number of terminal sessions. Each is named after what its shell reports
+  (for example `user@host: ~/logs`), has its own connection-state dot, and can be renamed by the
+  user.
+- Sessions appear as tabs, in a side list (the default) or along the top; the user chooses. The
+  side list's width is drag-resizable, and double-clicking the divider resets it.
+- Sessions can be shown together. The user drags a tab, or a session's header bar, onto an edge
+  of another session to place it beside, above or below it, and drags the borders between
+  sessions to resize them. Dropping a tab onto the middle of another tab stacks the two into one
+  view, and a stack can be unstacked. Any grid results, for example two sessions side by side
+  above a third.
+- Any session in a stack can be maximized and then restored, and split or closed from its header
+  bar or its context menu.
+- The terminal offers scrollback search and clickable links. Copy and paste, search, split and
+  session switching have keyboard shortcuts, and macOS uses Cmd where Linux uses Ctrl+Shift (so
+  plain Ctrl keys still reach the shell). Ctrl+Tab switches sessions on both.
+- Sessions, their layout and these tab settings live only as long as the app runs; none of them
+  is saved across restarts. (The Terminal/Status layout of §3.8 is.)
 
 ### 3.3.1 Azure tunnel pre-flight
 - A cluster may require an Azure tunnel. Before its SSH session connects, the app signs in with
@@ -168,13 +188,15 @@ never the plaintext or ciphertext.
   reachability, tags, which integrations (Grafana/Jira) are configured, and unread notification
   count — never a blank "pick something" screen.
 
-### 3.10 HPC orchestration (planned)
-Built, and not yet verified against real infrastructure (see docs/STATUS.md). The design is in
+### 3.10 HPC orchestration
+Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). The design is in
 [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 - **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
   own jobs, or every user's jobs in named partitions (never the whole queue). Each job shows its
   state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
   collapsed until expanded. Also show per-partition node counts by state and drain reasons.
+- **Job history.** On request, the user's own finished jobs from the last 24 hours or 7 days
+  (from `sacct`), with final state and exit code. Never polled.
 - **Scheduler commands never open a connection.** They run only on a session the user already has
   open: an extra `ssh2` channel on the terminal's connection, or, for Teleport, a non-interactive
   `tsh ssh` while the Teleport session is valid. With no live session, nothing runs, and a
@@ -202,8 +224,11 @@ Built, and not yet verified against real infrastructure (see docs/STATUS.md). Th
   existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside
   one of the user's own jobs (`srun --overlap`), never polled and never over direct SSH to compute
   nodes.
-- **File transfer.** Browse, upload and download over SFTP on the existing connection.
-- **Job submission helper.** A local library of batch script templates, per profile. Submitting
+- **File transfer.** Browse, upload and download over SFTP on the existing connection, with
+  progress. Local paths come only from native file dialogs, and overwriting asks first. Not
+  available on Teleport clusters yet.
+- **Job submission helper.** A local library of batch script templates, per profile
+  (`{{placeholders}}` with optional defaults). Submitting
   shows the full rendered script and the exact command, and runs `sbatch` only after an explicit
   confirmation that the main process asks for itself, so the renderer can't skip it.
   Cancelling a job has the same confirmation and applies only to the user's own jobs.
@@ -221,6 +246,14 @@ Built, and not yet verified against real infrastructure (see docs/STATUS.md). Th
   follows its conventions: native window controls, an app menu, Cmd shortcuts, and the login
   shell's PATH for tools like `tsh`/`az`. Windows packaging exists in the `electron-builder`
   config but is unverified (see `docs/STATUS.md`).
+- **Packaging and releases.** Linux ships as an AppImage, built reproducibly inside Docker
+  (`./build-desktop.sh`). macOS ships as a `.dmg` and `.zip` per chip (arm64, x64), built natively
+  by the same script, because a Mac app can only be built on a Mac. Pushing a `v*` tag makes CI
+  build both and publish a GitHub release with the four files and a `SHA256SUMS`. Build steps skip
+  an unchanged dependency install, retry transient npm network failures, and pin Node 22. macOS
+  builds are ad-hoc signed and not notarized, so the first launch needs a manual approval.
+- **Dependencies stay clear of known high-severity advisories** — `npm audit` reports none at the
+  pinned Electron version.
 - **No telemetry** — Gate-H does not phone home; the only network calls it makes are to the
   Grafana/Jira/SSH endpoints the user explicitly configured per cluster.
 
@@ -232,7 +265,9 @@ Built, and not yet verified against real infrastructure (see docs/STATUS.md). Th
   single-user desktop app; there is no server component and no concept of other users.
 - **Becoming a scheduler client or admin tool.** Gate-H won't talk to `slurmrestd`, won't
   perform admin actions (drain/resume nodes, change partitions, manage accounts), and won't
-  submit or cancel anything without an explicit per-action confirmation. The planned
+  submit or cancel anything without an explicit per-action confirmation. The
   job-queue, node-health, GPU and submission features (§3.10) run ordinary user-level scheduler
   commands over the session the user already has open.
+- **Notarized macOS builds and Windows builds** for now. They need a Developer ID and a Windows
+  test machine respectively.
 - **PBS/LSF** for now. `SchedulerConfig.kind` leaves room for them, but only Slurm is designed.
