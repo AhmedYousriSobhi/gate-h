@@ -202,6 +202,9 @@ try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
   mkdirSync(home, { recursive: true })
+  // Separate from the session monitor's HOME, whose checks count the fake tsh's calls there.
+  const ptyHome = join(work, 'home-pty')
+  mkdirSync(ptyHome, { recursive: true })
   mkdirSync(bin, { recursive: true })
   writeFileSync(
     join(bin, 'tsh'),
@@ -211,7 +214,16 @@ try {
   chmodSync(join(bin, 'tsh'), 0o755)
 
   const jobs = [
-    { entry: 'pty-manager.checks.ts', plugins: [assetPath], env: {} },
+    // The fake tsh too (it reports no session), unless it's the optional run against a real
+    // Teleport lab, which needs the real one - otherwise the result depends on whether this
+    // machine happens to have tsh installed and logged in.
+    {
+      entry: 'pty-manager.checks.ts',
+      plugins: [assetPath],
+      env: process.env.TELEPORT_LAB_PROXY
+        ? {}
+        : { HOME: ptyHome, PATH: `${bin}:${process.env.PATH}` }
+    },
     {
       entry: 'teleport-sessions.checks.ts',
       plugins: [assetPath, stubStores],
