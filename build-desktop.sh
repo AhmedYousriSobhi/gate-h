@@ -20,6 +20,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE_TAG="gateh-builder:latest"
 
+# A slow or throttled registry link ends in EIDLETIMEOUT with npm's defaults (2 retries, short
+# timeouts); retry more and wait longer between attempts. Also read by npm inside the container.
+export npm_config_fetch_retries=5
+export npm_config_fetch_retry_mintimeout=20000
+export npm_config_fetch_retry_maxtimeout=120000
+export npm_config_fetch_timeout=300000
+
 if [[ "$(uname -s)" == "Darwin" ]]; then
   if ! command -v node >/dev/null 2>&1 || (( $(node -p 'process.versions.node.split(".")[0]') < 20 )); then
     echo "error: Node.js 20+ is required (brew install node)" >&2
@@ -86,7 +93,8 @@ MSG
   if [[ -f "$stamp_file" && "$(cat "$stamp_file")" == "$install_stamp" ]]; then
     echo "==> Dependencies unchanged since the last build; skipping npm ci"
   else
-    npm ci || { echo "error: npm ci failed - see the log above." >&2; exit 1; }
+    npm ci || { echo "==> npm ci failed (often a network hiccup); retrying once"; npm ci; } \
+      || { echo "error: npm ci failed - see the log above." >&2; exit 1; }
     echo "$install_stamp" > "$stamp_file"
   fi
   npm run typecheck || { echo "error: typecheck failed - see the log above." >&2; exit 1; }
@@ -139,8 +147,20 @@ docker run --rm \
   -v gateh_build_node_modules:/workspace/node_modules \
   -v gateh_build_home:/home/build \
   -w /workspace \
+  -e npm_config_fetch_retries -e npm_config_fetch_retry_mintimeout \
+  -e npm_config_fetch_retry_maxtimeout -e npm_config_fetch_timeout \
   "$IMAGE_TAG" \
-  bash -c "npm ci && npm run typecheck && npm run build:linux"
+  bash -c '
+    # npm ci wipes node_modules and rebuilds native modules; skip it when nothing relevant changed.
+    stamp="$(sha256sum package-lock.json | cut -d" " -f1) node-$(node -v)"
+    if [ -f node_modules/.gateh-install-stamp ] && [ "$(cat node_modules/.gateh-install-stamp)" = "$stamp" ]; then
+      echo "==> Dependencies unchanged since the last build; skipping npm ci"
+    else
+      npm ci || { echo "==> npm ci failed (often a network hiccup); retrying once"; npm ci; }
+      echo "$stamp" > node_modules/.gateh-install-stamp
+    fi
+    npm run typecheck && npm run build:linux
+  '
 
 echo
 echo "==> Done. Build artifact:"
