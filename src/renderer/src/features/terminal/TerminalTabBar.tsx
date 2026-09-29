@@ -4,6 +4,14 @@ import type { SessionStatus } from './TerminalPanel'
 import TerminalLayoutMenu from './TerminalLayoutMenu'
 import type { DropZone } from './useSessionDrag'
 
+const STATUS_WORDS: Record<SessionStatus, string> = {
+  connecting: 'connecting',
+  connected: 'connected',
+  reconnecting: 'reconnecting',
+  paused: 'paused',
+  'auth-required': 'login needed'
+}
+
 // Matches .tab-context-menu's min-width plus a little slack, for keeping the menu on-screen.
 const LAYOUT_MENU_WIDTH = 190
 
@@ -18,8 +26,8 @@ interface TerminalTabBarProps {
   /** Each tab's own connection status, for its status dot - absent until that tab's session has
    *  reported at least once (effectively immediately after mount). */
   statuses: Map<string, SessionStatus>
-  /** User-set custom names, keyed by tab id. A tab with no entry here falls back to
-   *  "Session {tabNumbers}". */
+  /** Each tab's label - its rename, else its shell's window title (see MainPanel's tabTitle).
+   *  A tab missing here falls back to "Session {tabNumbers}". */
   titles: Map<string, string>
   activeTabId: string
   /** Can't be closed (no close button), but drags and stacks like any other tab. */
@@ -143,6 +151,7 @@ export default function TerminalTabBar({
                   <div
                     key={id}
                     data-tab-id={id}
+                    title={status ? `${title} - ${STATUS_WORDS[status]}` : title}
                     className={`terminal-tab terminal-tab-draggable${
                       id === activeTabId ? ' terminal-tab-active' : ''
                     }${id === draggingId ? ' terminal-tab-dragging' : ''}${

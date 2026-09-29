@@ -88,6 +88,9 @@ export default function MainPanel({
   // falls back to "Session N" (tabNumbers) in TerminalTabBar.
   const [tabStatuses, setTabStatuses] = useState<Map<string, SessionStatus>>(() => new Map())
   const [tabTitles, setTabTitles] = useState<Map<string, string>>(() => new Map())
+  // What each session's remote shell titles its window (e.g. `vagrant@compute-node: ~/logs`) -
+  // tells same-host sessions apart by where they are, without anyone having to rename them.
+  const [shellTitles, setShellTitles] = useState<Map<string, string>>(() => new Map())
   // Rename editing lives here (not in TerminalTabBar) so both the tab strip's double-click and
   // the context menu's "Rename" - triggered from either the strip or a session panel - can start
   // the same edit.
@@ -119,9 +122,15 @@ export default function MainPanel({
     (activeIsSplit ? activeGroup.dir : defaultSplit) === 'row' ? 'horizontal' : 'vertical'
   const defaultEdge: Edge = defaultSplit === 'row' ? 'right' : 'bottom'
 
+  // A rename wins, then the shell's own title, then "Session N".
   const tabTitle = useCallback(
-    (id: string): string => tabTitles.get(id) ?? `Session ${tabNumbers.get(id)}`,
-    [tabTitles, tabNumbers]
+    (id: string): string =>
+      tabTitles.get(id) ?? shellTitles.get(id) ?? `Session ${tabNumbers.get(id)}`,
+    [tabTitles, shellTitles, tabNumbers]
+  )
+  const tabLabels = useMemo(
+    () => new Map(allTabs.map((id) => [id, tabTitle(id)])),
+    [allTabs, tabTitle]
   )
 
   const handleAddTab = useCallback((): void => {
@@ -139,6 +148,10 @@ export default function MainPanel({
       return new Map([...prev].filter(([id]) => !ids.has(id)))
     })
     setTabTitles((prev) => {
+      if (![...prev.keys()].some((id) => ids.has(id))) return prev
+      return new Map([...prev].filter(([id]) => !ids.has(id)))
+    })
+    setShellTitles((prev) => {
       if (![...prev.keys()].some((id) => ids.has(id))) return prev
       return new Map([...prev].filter(([id]) => !ids.has(id)))
     })
@@ -440,7 +453,7 @@ export default function MainPanel({
                 groups={groupLeaves}
                 tabNumbers={tabNumbers}
                 statuses={tabStatuses}
-                titles={tabTitles}
+                titles={tabLabels}
                 activeTabId={activeTabId}
                 primaryTabId={primaryTabId}
                 orientation={tabOrientation}
@@ -509,6 +522,16 @@ export default function MainPanel({
                           onCycleTab={handleCycleTab}
                           onSplit={() => handleSplitTab(tabId)}
                           onHeaderPointerDown={(e) => sessionDrag.startDrag(tabId, e)}
+                          onTitleChange={(title) =>
+                            setShellTitles((prev) => {
+                              const trimmed = title.trim()
+                              if ((prev.get(tabId) ?? '') === trimmed) return prev
+                              const next = new Map(prev)
+                              if (trimmed) next.set(tabId, trimmed)
+                              else next.delete(tabId)
+                              return next
+                            })
+                          }
                         />
                       </div>
                     )

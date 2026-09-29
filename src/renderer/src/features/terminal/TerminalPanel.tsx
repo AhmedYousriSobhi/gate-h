@@ -30,6 +30,9 @@ interface TerminalPanelProps {
   onSplit?: () => void
   /** Pressing on the header bar - lets the session be dragged by it, like its tab. */
   onHeaderPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void
+  /** The window title the remote shell sets (typically `user@host: ~/dir`) - used as the tab's
+   *  default label, the way VS Code names a terminal after what's running in it. */
+  onTitleChange?: (title: string) => void
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -65,7 +68,8 @@ export default function TerminalPanel({
   onStatusChange,
   onCycleTab,
   onSplit,
-  onHeaderPointerDown
+  onHeaderPointerDown,
+  onTitleChange
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
@@ -79,6 +83,10 @@ export default function TerminalPanel({
   useEffect(() => {
     onSplitRef.current = onSplit
   }, [onSplit])
+  const onTitleChangeRef = useRef(onTitleChange)
+  useEffect(() => {
+    onTitleChangeRef.current = onTitleChange
+  }, [onTitleChange])
   const [connectError, setConnectError] = useState<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [retryAttempt, setRetryAttempt] = useState(0)
@@ -294,6 +302,7 @@ export default function TerminalPanel({
     const dataDisposable = term.onData((data) => {
       if (sessionId) window.api.ssh.write(sessionId, data)
     })
+    const titleDisposable = term.onTitleChange((title) => onTitleChangeRef.current?.(title))
 
     window.api.ssh
       .connect(cluster.id)
@@ -326,6 +335,7 @@ export default function TerminalPanel({
       offClosed()
       offError()
       dataDisposable.dispose()
+      titleDisposable.dispose()
       if (sessionId) window.api.ssh.disconnect(sessionId)
       term.dispose()
       searchAddonRef.current = null

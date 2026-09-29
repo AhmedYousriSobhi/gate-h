@@ -158,7 +158,8 @@ connection attempts. Secrets are encrypted on disk.
   detected, reconnects are limited and spaced out, and the terminal makes it obvious when a
   session isn't live. Search the scrollback, and click links to open them.
 - 🗔 **Multiple sessions per cluster, VS Code-style.** Open as many terminal sessions as you
-  need, each with its own live status dot. Name them, reorder them, and drag them together to
+  need, each named after what its shell reports (like `user@host: ~/logs`) and with its own live
+  status dot. Rename them, reorder them, and drag them together to
   watch several at once. Arrange them in any grid, such as two side by side above a third: drag a
   tab, or a session's header bar, onto an edge of another session to place it there, then drag
   the borders between sessions to resize them.

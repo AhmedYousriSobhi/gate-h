@@ -143,6 +143,9 @@ body.session-dragging * {
 .terminal-tabbar-vertical {
   flex-direction: column;
   align-items: stretch;
+  /* Shell titles can be long paths - labels ellipsize here (full title in the tooltip) rather
+     than letting the sidebar eat into the terminal. */
+  max-width: 240px;
   border-bottom: none;
   border-right: 1px solid var(--color-border);
 }
@@ -397,9 +400,13 @@ body.session-dragging * {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.session-dot-auth-required,
 .session-dot-paused {
   background-color: var(--color-offline);
+}
+
+/* Amber, not red: the session isn't broken, it's waiting on a login. */
+.session-dot-auth-required {
+  background-color: var(--color-warning);
 }
 
 .terminal-error {
