@@ -198,6 +198,16 @@
   width: 100%;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+  /* Hidden until the guest page is ready (prepareWebview in GrafanaStatusSection.tsx) - a
+     <webview> paints white first, which flashed against the dark UI on every cluster switch.
+     opacity rather than display/visibility, which Electron's docs warn can upset a webview. */
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.panel-embed webview.panel-embed-loaded {
+  opacity: 1;
 }
 
 .panel-embed figcaption {
