@@ -145,8 +145,8 @@ never the plaintext or ciphertext.
   it is cheap enough to always run for every cluster.
 
 ### 3.7 Cross-cluster notifications
-- A single feed collects reachability transitions, Jira ticket activity, and unexpected SSH
-  disconnects from every cluster, so the user doesn't have to check each cluster individually to
+- A single feed collects reachability transitions, Jira ticket activity, unexpected SSH
+  disconnects, and (opt-in) Slurm job and node changes from every cluster, so the user doesn't have to check each cluster individually to
   notice something changed.
 - Unread count is visible at a glance; clicking a notification jumps straight to the relevant
   cluster and the specific widget (Terminal or Status) it concerns.
@@ -181,8 +181,14 @@ in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 - **Scheduler polling is scoped to what the user is looking at.** It polls only while the cluster
   is selected, not in standby, and a scheduler widget is visible, with a floor on the interval,
   the same failure backoff as §3.4, and a slower cadence while the window is unfocused.
-  Background clusters (§3.6) never poll. On Teleport clusters, where each run is an audited
-  session, refresh is manual unless the user opts in per cluster.
+  Background clusters (§3.6) don't poll, with one opt-in exception: notifications (below). On
+  Teleport clusters, where each run is an audited session, refresh is manual unless the user opts
+  in per cluster.
+- **Scheduler notifications (opt-in per cluster).** Notify when the user's own jobs finish (with
+  their final state and exit code) or start, and when nodes go down or are drained. Bursts become
+  one summary. While the cluster is open in the background, it's checked at most every 5 minutes,
+  on its terminal's existing SSH connection only, with backoff, and never on Teleport clusters. A
+  closed or standby cluster runs nothing.
 - **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
   running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
   existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside

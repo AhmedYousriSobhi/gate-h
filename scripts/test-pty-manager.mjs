@@ -61,23 +61,31 @@ const stubStores = {
   }
 }
 
-// The scheduler monitor reads clusters and runs commands through ./exec (which needs a live SSH
-// session); the checks supply both through globals instead.
+// The scheduler monitor reads clusters, runs commands through ./exec (which needs a live SSH
+// session) and raises notifications; the checks supply all three through globals instead.
 const stubScheduler = {
   name: 'stub-scheduler',
   setup(b) {
-    b.onResolve({ filter: /^(\.\.\/clusters|\.\/exec)$/ }, (args) => ({
+    b.onResolve({ filter: /^(\.\.\/clusters|\.\/exec|\.\.\/notifications\/store)$/ }, (args) => ({
       path: args.path,
       namespace: 'stub-scheduler'
     }))
     b.onLoad({ filter: /clusters$/, namespace: 'stub-scheduler' }, () => ({
-      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      contents:
+        'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null, ' +
+        'listClusters: () => Object.values(globalThis.__clusters) }',
       loader: 'js'
     }))
     b.onLoad({ filter: /exec$/, namespace: 'stub-scheduler' }, () => ({
       contents:
         'class NoSessionError extends Error {}\n' +
-        'module.exports = { NoSessionError, runOnCluster: (c, cmd) => globalThis.__run(c, cmd, NoSessionError) }',
+        'module.exports = { NoSessionError, ' +
+        'hasLiveConnection: (id) => globalThis.__live.has(id), ' +
+        'runOnCluster: (c, cmd) => globalThis.__run(c, cmd, NoSessionError) }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /store$/, namespace: 'stub-scheduler' }, () => ({
+      contents: 'module.exports = { addNotification: (n) => globalThis.__notifications.push(n) }',
       loader: 'js'
     }))
   }

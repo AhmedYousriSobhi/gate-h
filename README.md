@@ -177,7 +177,8 @@ connection attempts. Secrets are encrypted on disk.
 - 🧩 **Widgets side by side.** Show, hide, swap, stack and resize the terminal and status views.
   Your layout is remembered.
 - 🔔 **One notification feed.** Reachability changes, Jira activity and dropped sessions from
-  every cluster. Click one to jump to it.
+  every cluster, plus, if you turn it on, your Slurm jobs finishing or starting and nodes going
+  down. Click one to jump to it.
 - 🗂️ **Profiles and an overview.** Group clusters into profiles such as "Work" and "Research".
   The home screen shows every cluster in the current profile.
 - ⏸️ **Switch clusters without losing work.** Every cluster you open keeps its sessions connected
