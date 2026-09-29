@@ -3,7 +3,16 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { LogIn, RefreshCw, Search, X } from 'lucide-react'
+import {
+  LogIn,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  Search,
+  SquareSplitHorizontal,
+  SquareSplitVertical,
+  X
+} from 'lucide-react'
 import type {
   ClusterReachability,
   ClusterSummary,
@@ -23,6 +32,23 @@ interface TerminalPanelProps {
    *  online (or already be online at mount) with no such flip ever being observed here. */
   reachability?: ClusterReachability
   onStatusChange?: (status: SessionStatus) => void
+  /** Ctrl/Cmd+Tab (+Shift to reverse) cycles the enclosing tab strip - forwarded up rather than
+   *  handled here since this component has no notion of sibling tabs. */
+  onCycleTab?: (direction: 1 | -1) => void
+  /** Ctrl/Cmd+Shift+5 - splits this session, forwarded up for the same reason as onCycleTab. */
+  onSplit?: () => void
+  /** Pressing on the header bar - lets the session be dragged by it, like its tab. */
+  onHeaderPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void
+  /** The window title the remote shell sets (typically `user@host: ~/dir`) - used as the tab's
+   *  default label, the way VS Code names a terminal after what's running in it. */
+  onTitleChange?: (title: string) => void
+  /** Header toolbar: which way the split button splits (sets its icon), whether this session is
+   *  maximized over its stack, and the maximize/close actions - close is omitted for sessions
+   *  that can't be closed, maximize for ones not shown alongside others. */
+  splitDirection?: 'horizontal' | 'vertical'
+  maximized?: boolean
+  onToggleMaximize?: () => void
+  onClose?: () => void
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -55,9 +81,32 @@ function msLeft(info: TeleportSessionInfo | undefined): number {
 export default function TerminalPanel({
   cluster,
   reachability,
-  onStatusChange
+  onStatusChange,
+  onCycleTab,
+  onSplit,
+  onHeaderPointerDown,
+  onTitleChange,
+  splitDirection = 'vertical',
+  maximized = false,
+  onToggleMaximize,
+  onClose
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
+  // onCycleTab once at setup time - kept fresh here instead of adding it to that effect's deps,
+  // which would otherwise reconnect the SSH session whenever the callback identity changes.
+  const onCycleTabRef = useRef(onCycleTab)
+  useEffect(() => {
+    onCycleTabRef.current = onCycleTab
+  }, [onCycleTab])
+  const onSplitRef = useRef(onSplit)
+  useEffect(() => {
+    onSplitRef.current = onSplit
+  }, [onSplit])
+  const onTitleChangeRef = useRef(onTitleChange)
+  useEffect(() => {
+    onTitleChangeRef.current = onTitleChange
+  }, [onTitleChange])
   const [connectError, setConnectError] = useState<string | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [retryAttempt, setRetryAttempt] = useState(0)
@@ -211,6 +260,18 @@ export default function TerminalPanel({
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
       const mod = event.ctrlKey || event.metaKey
+      if (mod && event.key === 'Tab') {
+        event.preventDefault()
+        onCycleTabRef.current?.(event.shiftKey ? -1 : 1)
+        return false
+      }
+      // VS Code's split-terminal chord. `code`, not `key` - with Shift held, `key` is '%' on a
+      // US layout and something else elsewhere.
+      if (mod && event.shiftKey && event.code === 'Digit5') {
+        event.preventDefault()
+        onSplitRef.current?.()
+        return false
+      }
       if (mod && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         setSearchOpen(true)
@@ -261,6 +322,7 @@ export default function TerminalPanel({
     const dataDisposable = term.onData((data) => {
       if (sessionId) window.api.ssh.write(sessionId, data)
     })
+    const titleDisposable = term.onTitleChange((title) => onTitleChangeRef.current?.(title))
 
     window.api.ssh
       .connect(cluster.id)
@@ -293,6 +355,7 @@ export default function TerminalPanel({
       offClosed()
       offError()
       dataDisposable.dispose()
+      titleDisposable.dispose()
       if (sessionId) window.api.ssh.disconnect(sessionId)
       term.dispose()
       searchAddonRef.current = null
@@ -328,7 +391,10 @@ export default function TerminalPanel({
 
   return (
     <div className="terminal-panel">
-      <div className="terminal-statusbar">
+      <div
+        className={`terminal-statusbar${onHeaderPointerDown ? ' terminal-statusbar-draggable' : ''}`}
+        onPointerDown={onHeaderPointerDown}
+      >
         <span className="terminal-statusbar-label">
           <span className={`session-dot session-dot-${status}`} />
           <span className="mono">
@@ -351,6 +417,48 @@ export default function TerminalPanel({
             </button>
           </span>
         )}
+        {/* Stops pointerdown so pressing a button never starts a header drag. */}
+        <span className="terminal-header-actions" onPointerDown={(e) => e.stopPropagation()}>
+          {onSplit && (
+            <button
+              className="terminal-header-btn"
+              title="Split Terminal (Ctrl+Shift+5)"
+              aria-label="Split terminal"
+              onClick={onSplit}
+            >
+              {splitDirection === 'horizontal' ? (
+                <SquareSplitHorizontal size={13} strokeWidth={2} />
+              ) : (
+                <SquareSplitVertical size={13} strokeWidth={2} />
+              )}
+            </button>
+          )}
+          {onToggleMaximize && (
+            <button
+              className={`terminal-header-btn${maximized ? ' terminal-header-btn-active' : ''}`}
+              title={maximized ? 'Restore Pane' : 'Maximize Pane'}
+              aria-label={maximized ? 'Restore pane' : 'Maximize pane'}
+              aria-pressed={maximized}
+              onClick={onToggleMaximize}
+            >
+              {maximized ? (
+                <Minimize2 size={13} strokeWidth={2} />
+              ) : (
+                <Maximize2 size={13} strokeWidth={2} />
+              )}
+            </button>
+          )}
+          {onClose && (
+            <button
+              className="terminal-header-btn terminal-header-btn-danger"
+              title="Close Session"
+              aria-label="Close session"
+              onClick={onClose}
+            >
+              <X size={13} strokeWidth={2} />
+            </button>
+          )}
+        </span>
       </div>
       {connectError && <div className="error-banner terminal-error">{connectError}</div>}
       <div className="terminal-body">
