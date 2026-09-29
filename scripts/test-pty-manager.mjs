@@ -12,7 +12,9 @@
 //   - scripts/scheduler-exec.checks.ts: the scheduler command runner's limits and queueing,
 //     against a fake ssh2 client and a local `bash` standing in for `tsh ssh`;
 //   - scripts/storage.checks.ts: the storage usage command, run in a local bash, and the
-//     lfs/mmlsquota parsers.
+//     lfs/mmlsquota parsers;
+//   - scripts/gpu.checks.ts: hostlist expansion, the nvidia-smi sampler, and the Grafana DCGM
+//     query and its response parsing.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -167,7 +169,8 @@ try {
     { entry: 'slurm.checks.ts', plugins: [], env: {} },
     { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} },
     { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} },
-    { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} }
+    { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} },
+    { entry: 'gpu.checks.ts', plugins: [], env: {} }
   ]
   let failed = false
   for (const job of jobs) {
