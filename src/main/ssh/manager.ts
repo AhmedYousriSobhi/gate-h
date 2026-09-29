@@ -272,7 +272,7 @@ function openTeleportSession(cluster: ClusterSummary, sender: WebContents): { se
       const intentional = intentionalCloses.delete(sessionId)
       if (!intentional && exitCode === EXIT_NO_SESSION && !signal) {
         // Not a failure to report: the terminal needs the user to log in. The session monitor
-        // already announces expiry once per proxy, rather than once per pinned cluster.
+        // already announces expiry once per proxy, rather than once per open cluster.
         void refreshTeleportSessions()
         safeSend(sender, 'ssh:closed', { sessionId, exitCode, authRequired: true })
         return

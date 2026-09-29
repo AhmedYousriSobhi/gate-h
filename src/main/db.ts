@@ -99,6 +99,8 @@ export function getDb(): Database.Database {
 
   migrateToProfiles(db)
 
+  // No longer read - the per-cluster pin it backed was removed once every opened cluster stayed
+  // connected in the background - but migrations are additive-only, so the column stays.
   if (!columnExists(db, 'clusters', 'keep_alive')) {
     db.exec('ALTER TABLE clusters ADD COLUMN keep_alive INTEGER NOT NULL DEFAULT 0')
   }

@@ -49,6 +49,12 @@ interface TerminalPanelProps {
   maximized?: boolean
   onToggleMaximize?: () => void
   onClose?: () => void
+  /** True while this session's cluster isn't the selected one. The session stays connected and
+   *  keeps receiving output, but stops resizing the remote pty (the pane is `display: none`, so a
+   *  fit would only measure nothing) and refits once when it comes back. A suspended session that
+   *  drops pauses instead of retrying, and reconnects when its cluster is selected again - so a
+   *  pile of open background clusters can't all be retrying against their login nodes at once. */
+  suspended?: boolean
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -89,7 +95,8 @@ export default function TerminalPanel({
   splitDirection = 'vertical',
   maximized = false,
   onToggleMaximize,
-  onClose
+  onClose,
+  suspended = false
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
@@ -138,6 +145,13 @@ export default function TerminalPanel({
   const windowStartRef = useRef(0)
   const attemptsRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Read from the connect effect's callbacks, which only re-run on reconnect.
+  const suspendedRef = useRef(suspended)
+  // Set when a drop was paused only because the cluster was in the background - the one pause
+  // that selecting the cluster again resumes. A pause from an exhausted retry budget still waits
+  // for reachability or a manual Reconnect, as before.
+  const pausedInBackgroundRef = useRef(false)
+  const refitRef = useRef<(() => void) | null>(null)
 
   function clearRetryTimer(): void {
     if (retryTimerRef.current) {
@@ -149,6 +163,11 @@ export default function TerminalPanel({
   /** Called whenever a connection attempt fails or an established session drops. Schedules a
    *  backed-off retry if the rolling window still has attempts left, otherwise pauses. */
   const scheduleReconnectOrPause = useCallback((): void => {
+    if (suspendedRef.current) {
+      pausedInBackgroundRef.current = true
+      setStatus('paused')
+      return
+    }
     const now = Date.now()
     if (now - windowStartRef.current > RECONNECT_WINDOW_MS) {
       windowStartRef.current = now
@@ -174,6 +193,7 @@ export default function TerminalPanel({
    *  was left over from the failure that caused the pause. */
   const resetAndReconnectNow = useCallback((): void => {
     clearRetryTimer()
+    pausedInBackgroundRef.current = false
     windowStartRef.current = Date.now()
     attemptsRef.current = 0
     setRetryAttempt(0)
@@ -187,10 +207,30 @@ export default function TerminalPanel({
     // enough not to look like abuse), not just on a detected offline -> online flip - only worth
     // acting on when the session is actually sitting paused; a connecting/connected/retrying
     // session has nothing to nudge.
-    if (reachability?.status === 'online' && statusRef.current === 'paused') {
+    if (
+      reachability?.status === 'online' &&
+      statusRef.current === 'paused' &&
+      !suspendedRef.current
+    ) {
       resetAndReconnectNow()
     }
   }, [reachability, resetAndReconnectNow])
+
+  useEffect(() => {
+    suspendedRef.current = suspended
+    if (suspended) {
+      // A retry already scheduled when the cluster went to the background would otherwise still
+      // fire there.
+      if (retryTimerRef.current) {
+        clearRetryTimer()
+        pausedInBackgroundRef.current = true
+        setStatus('paused')
+      }
+      return
+    }
+    refitRef.current?.()
+    if (pausedInBackgroundRef.current) resetAndReconnectNow()
+  }, [suspended, resetAndReconnectNow])
 
   useEffect(
     () =>
@@ -296,9 +336,13 @@ export default function TerminalPanel({
       return true
     })
 
-    const resizeObserver = new ResizeObserver(() => {
+    const refit = (): void => {
       fitAddon.fit()
       if (sessionId) window.api.ssh.resize(sessionId, term.cols, term.rows)
+    }
+    refitRef.current = refit
+    const resizeObserver = new ResizeObserver(() => {
+      if (!suspendedRef.current) refit()
     })
     resizeObserver.observe(containerRef.current)
 
@@ -351,6 +395,7 @@ export default function TerminalPanel({
       clearRetryTimer()
       if (stableTimer) clearTimeout(stableTimer)
       resizeObserver.disconnect()
+      refitRef.current = null
       offData()
       offClosed()
       offError()

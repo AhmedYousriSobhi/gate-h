@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
@@ -31,10 +31,13 @@ interface MainPanelProps {
    *  it's passed straight through rather than reduced to a one-shot signal. */
   reachability?: ClusterReachability
   /** True when this cluster isn't the one currently selected in the sidebar - kept mounted
-   *  (instead of unmounted) so a pinned cluster's Terminal/Grafana connections keep running in
-   *  the background, just visually hidden. */
+   *  (instead of unmounted) so every one of its terminal sessions stays connected in the
+   *  background, just visually hidden. Status is unmounted meanwhile (no Grafana/Jira polling, no
+   *  live panel embeds) and remounts fresh on return. */
   hidden?: boolean
   onTerminalStatusChange?: (status: SessionStatus) => void
+  /** How many of this cluster's sessions are connected - what closing the cluster would end. */
+  onLiveSessionCountChange?: (count: number) => void
   /** Flips `cluster.activeMonitoring` back on - offered from the standby placeholder below. */
   onResumeMonitoring?: () => void
 }
@@ -61,15 +64,15 @@ export default function MainPanel({
   reachability,
   hidden = false,
   onTerminalStatusChange,
+  onLiveSessionCountChange,
   onResumeMonitoring
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
-  // The primary tab is this cluster's pinned session - the one keepAliveInBackground/standby
-  // apply to (see AppShell's `hidden` prop) - identified by a stable id rather than position, so
-  // it can be dragged anywhere like any other tab; it just can't be closed. Every tab (in every
-  // stack, not just the visible one) stays mounted for as long as this MainPanel instance does -
-  // only the `hidden` check below tears a non-primary tab's session down.
+  // The primary tab is the session whose status the sidebar shows - identified by a stable id
+  // rather than position, so it can be dragged anywhere like any other tab; it just can't be
+  // closed. Every tab (in every stack, not just the visible one) stays mounted for as long as this
+  // MainPanel instance does, hidden or not.
   const [primaryTabId] = useState(() => crypto.randomUUID())
   // One split tree per stack (see splitLayout.ts): sessions dragged together are shown at once,
   // arranged by the tree - which can mix directions, e.g. two side by side above a third - while
@@ -88,6 +91,13 @@ export default function MainPanel({
   // falls back to "Session N" (tabNumbers) in TerminalTabBar.
   const [tabStatuses, setTabStatuses] = useState<Map<string, SessionStatus>>(() => new Map())
   const [tabTitles, setTabTitles] = useState<Map<string, string>>(() => new Map())
+  // Standby unmounts every session, but tabStatuses keeps their last readings.
+  const liveSessionCount = cluster.activeMonitoring
+    ? [...tabStatuses.values()].filter((status) => status === 'connected').length
+    : 0
+  useEffect(() => {
+    onLiveSessionCountChange?.(liveSessionCount)
+  }, [liveSessionCount, onLiveSessionCountChange])
   // What each session's remote shell titles its window (e.g. `vagrant@compute-node: ~/logs`) -
   // tells same-host sessions apart by where they are, without anyone having to rename them.
   const [shellTitles, setShellTitles] = useState<Map<string, string>>(() => new Map())
@@ -499,7 +509,6 @@ export default function MainPanel({
                   .filter((id) => allTabs.includes(id))
                   .map((tabId) => {
                     const isPrimary = tabId === primaryTabId
-                    if (!isPrimary && hidden) return null
                     const rect = activeRects.get(tabId)
                     return (
                       <div
@@ -531,6 +540,7 @@ export default function MainPanel({
                         <TerminalPanel
                           cluster={cluster}
                           reachability={reachability}
+                          suspended={hidden}
                           onStatusChange={(status) => {
                             setTabStatuses((prev) =>
                               prev.get(tabId) === status ? prev : new Map(prev).set(tabId, status)
@@ -601,7 +611,7 @@ export default function MainPanel({
             />
           )}
           <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
-            <StatusPanel cluster={cluster} reachability={reachability} />
+            {!hidden && <StatusPanel cluster={cluster} reachability={reachability} />}
           </div>
         </div>
       ) : (

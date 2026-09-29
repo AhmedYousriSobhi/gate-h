@@ -25,7 +25,6 @@ interface ClusterRow {
   grafana_token: string | null
   jira: string | null
   jira_token: string | null
-  keep_alive: number
   active_monitoring: number
   azure_tunnel: string | null
   teleport: string | null
@@ -44,7 +43,6 @@ function rowToSummary(row: ClusterRow): ClusterSummary {
     jira: row.jira ? (JSON.parse(row.jira) as JiraProfile) : null,
     azureTunnel: row.azure_tunnel ? (JSON.parse(row.azure_tunnel) as AzureTunnelConfig) : null,
     teleport: row.teleport ? (JSON.parse(row.teleport) as TeleportConfig) : null,
-    keepAliveInBackground: Boolean(row.keep_alive),
     activeMonitoring: Boolean(row.active_monitoring),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -97,8 +95,8 @@ export function createCluster(input: ClusterInput): ClusterSummary {
   getDb()
     .prepare(
       `INSERT INTO clusters
-        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, azure_tunnel, teleport, keep_alive, active_monitoring, created_at, updated_at, profile_id)
-       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @azure_tunnel, @teleport, @keep_alive, @active_monitoring, @created_at, @updated_at, @profile_id)`
+        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, azure_tunnel, teleport, active_monitoring, created_at, updated_at, profile_id)
+       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @azure_tunnel, @teleport, @active_monitoring, @created_at, @updated_at, @profile_id)`
     )
     .run({
       id,
@@ -114,7 +112,6 @@ export function createCluster(input: ClusterInput): ClusterSummary {
       jira_token: input.jiraApiToken ? encryptSecret(input.jiraApiToken) : null,
       azure_tunnel: input.azureTunnel ? JSON.stringify(input.azureTunnel) : null,
       teleport: input.teleport ? JSON.stringify(input.teleport) : null,
-      keep_alive: 0,
       active_monitoring: 1,
       created_at: now,
       updated_at: now
@@ -234,21 +231,8 @@ export function setGrafanaPanelWidths(
   }))
 }
 
-/** Patches only the keep-alive flag, bypassing the full edit-cluster form - toggled from a pin
- *  button in the sidebar, same lightweight-patch pattern as the Grafana picker settings above. */
-export function setClusterKeepAlive(id: string, keepAlive: boolean): ClusterSummary {
-  const existing = getDb().prepare('SELECT id FROM clusters WHERE id = ?').get(id)
-  if (!existing) throw new Error(`Cluster ${id} not found`)
-
-  getDb()
-    .prepare('UPDATE clusters SET keep_alive = @keep_alive WHERE id = @id')
-    .run({ id, keep_alive: keepAlive ? 1 : 0 })
-
-  return getCluster(id) as ClusterSummary
-}
-
 /** Patches only the active-monitoring flag - the master Active/Standby switch toggled from the
- *  sidebar, same lightweight-patch pattern as setClusterKeepAlive above. Bumps updated_at so the
+ *  sidebar, same lightweight-patch pattern as the Grafana picker settings above. Bumps updated_at so the
  *  Terminal/Status panels' own effects (keyed on it) pick the change up and connect/disconnect
  *  immediately rather than waiting for some other trigger. */
 export function setClusterActiveMonitoring(id: string, active: boolean): ClusterSummary {

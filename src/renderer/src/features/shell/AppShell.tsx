@@ -24,6 +24,10 @@ export default function AppShell(): React.JSX.Element {
   const { layout: panelLayout, setLayout: setPanelLayout } = usePanelLayout()
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
   const [terminalStatuses, setTerminalStatuses] = useState<Record<string, SessionStatus>>({})
+  const [liveSessionCounts, setLiveSessionCounts] = useState<Record<string, number>>({})
+  // Every cluster selected since launch that hasn't been explicitly closed - switching away never
+  // ends its sessions. Only Close, standby, removal and a profile switch take a cluster out.
+  const [openClusterIds, setOpenClusterIds] = useState<string[]>([])
   const profilesState = useProfiles()
   const { notifications, markRead, markAllRead } = useNotifications()
   // Every mounted cluster's Terminal/Grafana get this raw, per-cluster reading straight through
@@ -34,20 +38,25 @@ export default function AppShell(): React.JSX.Element {
   // every push (roughly every 60s - see clusterMonitor's sweep interval), not just on a flip.
   const reachability = useReachability()
 
-  // Pinned clusters stay mounted (hidden when not selected) so their Terminal/Grafana connections
-  // keep running and auto-reconnecting in the background - see MainPanel's `hidden` prop and
-  // Cluster.keepAliveInBackground. A cluster in standby (activeMonitoring false) never counts as
-  // pinned here even if the flag is set - standby is a master "no connections at all" switch that
-  // overrides it, rather than something pinning fights with.
-  const pinnedClusterIds = useMemo(
-    () => clusters.filter((c) => c.keepAliveInBackground && c.activeMonitoring).map((c) => c.id),
-    [clusters]
+  // Open clusters stay mounted (hidden when not selected) so their sessions stay connected in the
+  // background - see MainPanel's `hidden` prop.
+  const activeClusterIds = useMemo(
+    () =>
+      selectedClusterId && !openClusterIds.includes(selectedClusterId)
+        ? [...openClusterIds, selectedClusterId]
+        : openClusterIds,
+    [openClusterIds, selectedClusterId]
   )
-  const activeClusterIds = useMemo(() => {
-    const ids = new Set(pinnedClusterIds)
-    if (selectedClusterId) ids.add(selectedClusterId)
-    return Array.from(ids)
-  }, [pinnedClusterIds, selectedClusterId])
+
+  function selectCluster(id: string | null): void {
+    setSelectedClusterId(id)
+    if (id) setOpenClusterIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+  }
+
+  function closeCluster(id: string): void {
+    setOpenClusterIds((prev) => prev.filter((openId) => openId !== id))
+    setSelectedClusterId((prev) => (prev === id ? null : prev))
+  }
 
   async function refresh(): Promise<ClusterSummary[]> {
     try {
@@ -81,7 +90,7 @@ export default function AppShell(): React.JSX.Element {
       await window.api.clusters.update(editing.id, input)
     } else {
       const created = await window.api.clusters.create(input)
-      setSelectedClusterId(created.id)
+      selectCluster(created.id)
     }
     setEditing(null)
     await refresh()
@@ -90,39 +99,38 @@ export default function AppShell(): React.JSX.Element {
   async function handleRemove(cluster: ClusterSummary): Promise<void> {
     if (!confirm(`Remove cluster "${cluster.name}"? This cannot be undone.`)) return
     await window.api.clusters.remove(cluster.id)
-    if (selectedClusterId === cluster.id) setSelectedClusterId(null)
+    closeCluster(cluster.id)
     await refresh()
   }
 
   function handleNotificationNavigate(clusterId: string, widget?: WidgetType): void {
-    setSelectedClusterId(clusterId)
+    selectCluster(clusterId)
     if (widget) setPanelLayout(withWidgetVisible(panelLayout, widget))
   }
 
   function handleConnect(cluster: ClusterSummary): void {
-    setSelectedClusterId(cluster.id)
+    selectCluster(cluster.id)
     setPanelLayout(withWidgetVisible(panelLayout, 'terminal'))
   }
 
   function handleViewStatus(cluster: ClusterSummary): void {
-    setSelectedClusterId(cluster.id)
+    selectCluster(cluster.id)
     setPanelLayout(withWidgetVisible(panelLayout, 'status'))
-  }
-
-  async function handleToggleKeepAlive(cluster: ClusterSummary): Promise<void> {
-    await window.api.clusters.setKeepAlive(cluster.id, !cluster.keepAliveInBackground)
-    await refresh()
   }
 
   async function handleToggleActiveMonitoring(cluster: ClusterSummary): Promise<void> {
     await window.api.clusters.setActiveMonitoring(cluster.id, !cluster.activeMonitoring)
+    // Standby ends every session anyway, so a background standby cluster needn't stay open.
+    if (cluster.activeMonitoring && cluster.id !== selectedClusterId) closeCluster(cluster.id)
     await refresh()
   }
 
   function handleProfileChanged(): void {
     // Clusters are scoped to the active profile server-side, so switching profiles means the
-    // previously selected cluster (if any) almost certainly doesn't belong to the new one.
+    // previously selected cluster (if any) almost certainly doesn't belong to the new one. Its
+    // open sessions end too: a profile is a separate context, often separate credentials.
     setSelectedClusterId(null)
+    setOpenClusterIds([])
     void refresh()
   }
 
@@ -136,8 +144,8 @@ export default function AppShell(): React.JSX.Element {
           clusters={clusters}
           reachability={reachability}
           selectedClusterId={selectedClusterId}
-          onSelect={(cluster) => setSelectedClusterId(cluster.id)}
-          onShowOverview={() => setSelectedClusterId(null)}
+          onSelect={(cluster) => selectCluster(cluster.id)}
+          onShowOverview={() => selectCluster(null)}
           onAdd={() => setEditing('new')}
           onEdit={(cluster) => setEditing(cluster)}
           onRemove={handleRemove}
@@ -148,7 +156,9 @@ export default function AppShell(): React.JSX.Element {
           profilesState={profilesState}
           onProfileChanged={handleProfileChanged}
           terminalStatuses={terminalStatuses}
-          onToggleKeepAlive={handleToggleKeepAlive}
+          openClusterIds={activeClusterIds}
+          liveSessionCounts={liveSessionCounts}
+          onCloseSessions={(cluster) => closeCluster(cluster.id)}
           onToggleActiveMonitoring={handleToggleActiveMonitoring}
         />
 
@@ -169,10 +179,10 @@ export default function AppShell(): React.JSX.Element {
                 onAdd={() => setEditing('new')}
               />
             )}
-            {/* One MainPanel per active (selected or pinned-to-stay-connected) cluster, all kept
-                mounted simultaneously - only the selected one is visible - so a pinned cluster's
-                Terminal/Grafana connections keep running and auto-reconnecting while the user is
-                looking at a different cluster (or the Overview), see MainPanel's `hidden` prop. */}
+            {/* One MainPanel per open cluster, all kept mounted simultaneously
+                - only the selected one is visible - so their sessions stay connected while the
+                user is looking at a different cluster (or the Overview), see MainPanel's `hidden`
+                prop. */}
             {activeClusterIds.map((id) => {
               const cluster = clusters.find((c) => c.id === id)
               if (!cluster) return null
@@ -189,6 +199,11 @@ export default function AppShell(): React.JSX.Element {
                   onTerminalStatusChange={(status) =>
                     setTerminalStatuses((prev) =>
                       prev[id] === status ? prev : { ...prev, [id]: status }
+                    )
+                  }
+                  onLiveSessionCountChange={(count) =>
+                    setLiveSessionCounts((prev) =>
+                      prev[id] === count ? prev : { ...prev, [id]: count }
                     )
                   }
                   onResumeMonitoring={() => handleToggleActiveMonitoring(cluster)}
