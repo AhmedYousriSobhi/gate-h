@@ -5,6 +5,7 @@
 
 import { live } from './resource-probe.checks'
 import {
+  fetchArrayTasks,
   refreshScheduler,
   setSchedulerBroadcaster,
   stopSchedulerMonitor,
@@ -129,6 +130,18 @@ async function main(): Promise<void> {
   const delay = failed?.nextRefreshAt ? Date.parse(failed.nextRefreshAt) - Date.now() : 0
   report(delay > 60_000, 'a failure backs off beyond the normal interval', `next in ${delay}ms`)
   unwatchScheduler('auto')
+
+  console.log('-- array tasks')
+  exitCode = 0
+  const before = runs
+  const [a, b] = await Promise.all([fetchArrayTasks('auto', '1'), fetchArrayTasks('auto', '1')])
+  await fetchArrayTasks('auto', '1')
+  report(
+    runs === before + 1 && a.length === 1 && b === a,
+    'expanding an array again within 30s reuses the result'
+  )
+  await fetchArrayTasks('auto', '2')
+  report(runs === before + 2, 'a different array runs its own query')
 
   console.log('-- idle cost')
   await sleep(50)
