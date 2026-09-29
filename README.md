@@ -173,6 +173,9 @@ connection attempts. Secrets are encrypted on disk.
   were drained. Runs `squeue`/`sinfo` on the session you already have open, only while you're
   looking at it. Your finished jobs from the last day or week, with exit codes, are one click
   away.
+- 🎛️ **GPU usage.** Utilization, memory and temperature of every GPU your running jobs are on,
+  from your cluster's DCGM metrics in Grafana, or sampled with `nvidia-smi` inside a job when you
+  ask.
 - 💾 **Storage quota.** Home and scratch usage per path: the whole filesystem, and your own quota
   on Lustre and GPFS, flagged when you're over the soft limit. Checked when you ask.
 - 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
@@ -192,8 +195,6 @@ connection attempts. Secrets are encrypted on disk.
 Next up is the rest of HPC orchestration: managing your jobs without leaving Gate-H. The Slurm
 job queue and node health are already in (see [Features](#features)); these aren't built yet.
 
-- 🎛️ **GPU usage.** Utilization, memory and temperature of the GPUs your jobs are running on, from
-  your cluster's Grafana, or sampled on demand.
 - 📁 **File transfer.** Browse, upload and download files over the connection you already have.
 - 📝 **Job templates.** Fill in a saved batch script, check it, and submit it with one confirmed
   click.

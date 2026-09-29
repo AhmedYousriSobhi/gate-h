@@ -42,7 +42,15 @@ export interface GrafanaProfile {
    *  'vertical' orientation. Missing or stale entries (a panel added/removed since last saved)
    *  fall back to an equal split - see normalizePanelWidths in src/main/grafana/client.ts. */
   panelWidths?: Record<string, Record<number, number>>
+  /** UID of the Prometheus datasource holding NVIDIA DCGM exporter metrics, for the Slurm
+   *  section's GPU usage. Unset: GPU usage is only available by sampling a job with nvidia-smi. */
+  gpuDatasourceUid?: string
+  /** The metric label naming the node, as Slurm names it. DCGM exporter's default is `Hostname`. */
+  gpuHostLabel?: string
 }
+
+/** A Prometheus label name - it goes into a PromQL selector. */
+export const PROMETHEUS_LABEL_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 export const DEFAULT_PANEL_EMBED_HEIGHT = 240
 export const MIN_PANEL_EMBED_HEIGHT = 120
@@ -347,6 +355,17 @@ export interface SchedulerSnapshot {
 
 export const MAX_SLURM_JOBS = 2000
 
+export interface GpuSample {
+  host: string
+  /** The GPU's index on its node. */
+  gpu: string
+  model: string
+  utilizationPct: number | null
+  memoryUsedMiB: number | null
+  memoryTotalMiB: number | null
+  temperatureC: number | null
+}
+
 /** The user's quota on a path's filesystem, in KiB. Limits are null when there's no limit. */
 export interface StorageQuota {
   source: 'lfs' | 'mmlsquota'
@@ -457,6 +476,9 @@ export interface GateHApi {
     /** Arms the embed session (Authorization header + frame-blocking header stripping) for this
      *  cluster's Grafana origin - call and await before pointing a <webview> at it. */
     prepareEmbed(clusterId: string): Promise<void>
+    /** DCGM GPU metrics for the nodes in these Slurm node lists (`gpu[07-08]`), from the
+     *  cluster's GPU datasource - see GrafanaProfile.gpuDatasourceUid. */
+    gpuUsage(clusterId: string, nodelists: string[]): Promise<GpuSample[]>
   }
   jira: {
     list(clusterId: string): Promise<JiraIssueSummary[]>
@@ -494,6 +516,8 @@ export interface GateHApi {
     arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
     /** The SSH user's jobs over the last `days` (1 or 7) days, newest first, run once on request. */
     history(clusterId: string, days: number): Promise<SlurmHistoryJob[]>
+    /** One nvidia-smi on each node of one of the user's own running jobs, run once on request. */
+    sampleGpus(clusterId: string, jobId: string, nodes: number): Promise<GpuSample[]>
   }
   storage: {
     /** Usage and quota for the cluster's configured paths, run once on request. */
