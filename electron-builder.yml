@@ -22,16 +22,33 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+# Built natively on each architecture (see .github/workflows/macos.yml): native modules are
+# installed for the host arch only (npmRebuild: false below). No Developer ID yet, so the app is
+# ad-hoc signed and not notarized - Gatekeeper asks before the first launch (see README).
 mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  # Ad-hoc ("-"): Apple Silicon won't run unsigned code, and electron-builder no longer falls back
+  # to ad-hoc by itself. With the hardened runtime this needs disable-library-validation in the
+  # entitlements, or the pre-signed Electron frameworks fail to load. A Developer ID replaces "-".
+  identity: '-'
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
+  # Replaces the top-level list, so resources/** is repeated. node-pty runs a separate spawn-helper
+  # executable on macOS, next to its pty.node - both have to live outside the asar archive, or
+  # every PTY session fails with "posix_spawnp failed".
+  asarUnpack:
+    - resources/**
+    - node_modules/node-pty/prebuilds/**
+    - node_modules/node-pty/build/Release/**
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}-${arch}.${ext}
+zip:
+  artifactName: ${productName}-${version}-${arch}-mac.${ext}
 linux:
   target:
     - AppImage

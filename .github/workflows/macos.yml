@@ -1,0 +1,65 @@
+# Builds and tests Gate-H on macOS, which it can't be on the Linux machines it's developed on:
+# typecheck, lint, the headless checks and script tests (the scripts under macOS's own bash 3.2
+# and BSD userland), then a packaged .app per architecture, smoke-tested and uploaded.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          # GitHub's last Intel macOS image, supported until August 2027.
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Also rebuilds the native modules for Electron (postinstall: electron-builder install-app-deps).
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: node scripts/test-pty-manager.mjs
+
+      # A Mac user's scripts run under /bin/bash 3.2 unless they've installed a newer bash, so the
+      # tests do too, whatever the runner image has on PATH.
+      - name: Script tests under /bin/bash 3.2
+        run: |
+          mkdir -p "$RUNNER_TEMP/bash32"
+          ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
+          export PATH="$RUNNER_TEMP/bash32:$PATH"
+          bash --version | head -1
+          ./scripts/test-teleport.sh
+          ./scripts/test-azure-tunnel.sh
+
+      - name: Package
+        run: npm run build:mac -- --publish never
+
+      - run: ./scripts/smoke-packaged-mac.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gate-H-macos-${{ matrix.arch }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
