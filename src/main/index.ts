@@ -19,6 +19,7 @@ import { startTeleportSessionMonitor, stopTeleportSessionMonitor } from './telep
 import { closeAllSessions } from './ssh/manager'
 import { registerSchedulerIpcHandlers } from './ipc/scheduler'
 import { registerStorageIpcHandlers } from './ipc/storage'
+import { registerFileIpcHandlers } from './ipc/files'
 import {
   setSchedulerBroadcaster,
   setSchedulerWindowFocused,
@@ -144,6 +145,7 @@ app.whenReady().then(() => {
   registerTeleportIpcHandlers()
   registerSchedulerIpcHandlers()
   registerStorageIpcHandlers()
+  registerFileIpcHandlers()
 
   createWindow()
 

@@ -6,6 +6,7 @@ import type {
   ClusterNotification,
   ClusterReachability,
   CreateJiraIssueInput,
+  FileTransferEvent,
   GateHApi,
   PanelLayout,
   PanelOrientation,
@@ -105,6 +106,19 @@ const api: GateHApi = {
       ipcRenderer.invoke('scheduler:history', clusterId, days),
     sampleGpus: (clusterId: string, jobId: string, nodes: number) =>
       ipcRenderer.invoke('scheduler:sampleGpus', clusterId, jobId, nodes)
+  },
+  files: {
+    list: (clusterId: string, path?: string) => ipcRenderer.invoke('files:list', clusterId, path),
+    download: (clusterId: string, remotePath: string) =>
+      ipcRenderer.invoke('files:download', clusterId, remotePath),
+    upload: (clusterId: string, remoteDir: string) =>
+      ipcRenderer.invoke('files:upload', clusterId, remoteDir),
+    onTransfer: (callback: (event: FileTransferEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: FileTransferEvent): void =>
+        callback(payload)
+      ipcRenderer.on('files:transfer', listener)
+      return () => ipcRenderer.removeListener('files:transfer', listener)
+    }
   },
   storage: {
     usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)
