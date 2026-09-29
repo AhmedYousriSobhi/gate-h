@@ -56,7 +56,7 @@ jobs:
         # signature invalid once the app is repackaged.
         env:
           CSC_FOR_PULL_REQUEST: 'true'
-        run: npm run build:mac -- --publish never
+        run: ./build-desktop.sh
 
       - run: ./scripts/smoke-packaged-mac.sh
 

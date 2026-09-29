@@ -40,8 +40,11 @@
 
   ```bash
   git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
-  npm ci && npm run build:mac && open dist/*.dmg
+  ./build-desktop.sh && open dist/*.dmg
   ```
+
+  On a Mac the script builds natively (Docker is Linux-only); it checks for Node.js and Xcode's
+  Command Line Tools first.
 
   The app isn't notarized yet, so the first launch is blocked. Go to **System Settings →
   Privacy & Security** and click **Open Anyway**, or run
