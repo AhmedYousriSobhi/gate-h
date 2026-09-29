@@ -175,8 +175,9 @@ connection attempts. Secrets are encrypted on disk.
   every cluster. Click one to jump to it.
 - 🗂️ **Profiles and an overview.** Group clusters into profiles such as "Work" and "Research".
   The home screen shows every cluster in the current profile.
-- ⏸️ **Pin or pause a cluster.** Keep a session alive in the background, or put a cluster in
-  standby so it makes no connections at all.
+- ⏸️ **Switch clusters without losing work.** Every cluster you open keeps its sessions connected
+  in the background, quietly, until you close it. Or put a cluster in standby so it makes no
+  connections at all.
 
 ## Preview
 
@@ -247,7 +248,8 @@ connection attempts. Secrets are encrypted on disk.
 | rearrange a cluster's widgets | Use the toolbar above them; the puzzle-piece icon shows or hides each one |
 | see what changed anywhere | Click the 🔔 bell; click an entry to jump to that cluster |
 | separate work and research clusters | Click the profile name at the top of the sidebar |
-| keep a session alive in the background | Hover the cluster in the sidebar → **pin** icon |
+| keep a session alive in the background | Nothing to do: switching clusters never closes sessions |
+| end a cluster's sessions | Hover it in the sidebar → **×** (click again to confirm if sessions are live) |
 | stop all connections to a cluster | Hover it → **power** icon (standby); select it → **Resume monitoring** to restart |
 | open another terminal session | Click **+** above the session tabs |
 | watch two sessions at once | Click the split icon next to **+**, or press **Ctrl+Shift+5** in a terminal |
@@ -268,12 +270,12 @@ sessions. **Ctrl+Shift+5** splits. On macOS, use **Cmd** instead of **Ctrl**.
 | Problem | Try |
 |---|---|
 | The light stays red | Check your VPN, and that you can reach the host (or Teleport proxy) from this machine. |
-| The terminal says *Paused* | Gate-H stopped retrying to spare the cluster. Click **Reconnect now**, or wait: it resumes by itself when the light turns green. |
+| The terminal says *Paused* | Gate-H stopped retrying to spare the cluster. Click **Reconnect now**, or wait: it resumes by itself when the light turns green. A session that dropped while its cluster was in the background reconnects when you select the cluster. |
 | *Host key … changed* notification | The server's key changed since your last connection. Ask your cluster admin before trusting it. |
 | Azure: a sign-in code appears | Your Azure login expired. Open the link and enter the code. |
 | Teleport: *unreachable* or *no route to host* | Your machine can't reach the proxy. Check the VPN and the proxy address. |
 | Teleport: *certificate signed by unknown authority* | Start Gate-H with `SSL_CERT_FILE` pointing at your organisation's CA file. |
-| Teleport: *login needed* on a cluster you didn't open | Pinned clusters never log in on their own. Log in from any cluster on that proxy; the rest reconnect. |
+| Teleport: *login needed* on a cluster in the background | Background clusters never log in on their own. Log in from any cluster on that proxy; the rest reconnect. |
 | Teleport: *access denied* | Your Teleport role doesn't allow that login or node. Run `tsh status` to see your logins. |
 
 ## For developers
