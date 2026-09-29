@@ -2,25 +2,10 @@ import { Fragment, useRef, useState } from 'react'
 import { Ellipsis, Plus, SquareSplitHorizontal, SquareSplitVertical, X } from 'lucide-react'
 import type { SessionStatus } from './TerminalPanel'
 import TerminalLayoutMenu from './TerminalLayoutMenu'
+import type { DropZone } from './useSessionDrag'
 
 // Matches .tab-context-menu's min-width plus a little slack, for keeping the menu on-screen.
 const LAYOUT_MENU_WIDTH = 190
-
-type DropZone = 'before' | 'after' | 'merge'
-export type PaneEdge = 'left' | 'right' | 'top' | 'bottom'
-const PANE_EDGES: PaneEdge[] = ['left', 'right', 'top', 'bottom']
-
-function nearestEdge(rect: DOMRect, point: { clientX: number; clientY: number }): PaneEdge {
-  const x = (point.clientX - rect.left) / rect.width
-  const y = (point.clientY - rect.top) / rect.height
-  const distances: Array<[PaneEdge, number]> = [
-    ['left', x],
-    ['right', 1 - x],
-    ['top', y],
-    ['bottom', 1 - y]
-  ]
-  return distances.reduce((best, d) => (d[1] < best[1] ? d : best))[0]
-}
 
 interface TerminalTabBarProps {
   /** Tabs the user has dragged together are "stacked" - shown split, simultaneously - while
@@ -48,15 +33,11 @@ interface TerminalTabBarProps {
   /** Adds a new session into the active tab's group (VS Code's "Split Terminal"). */
   onSplit: () => void
   onClose: (id: string) => void
-  /** `dropId` is null when the tab was dragged onto empty strip space rather than another tab
-   *  (zone is meaningless in that case) - see MainPanel's handleDropTab for the reorder/
-   *  merge/pop-out semantics this drives. `zone` is which third of dropId's tab the pointer was
-   *  over: the edge thirds reorder (dragId ends up in its own standalone group, positioned next
-   *  to dropId's), the middle third merges dragId into dropId's group instead. Drops onto a
-   *  session panel go to onPaneDrop instead. */
-  onDrop: (dragId: string, dropId: string | null, zone: DropZone) => void
-  /** Dropped onto a session panel: stack dragId on `edge`'s side of that panel's tab. */
-  onPaneDrop: (dragId: string, paneId: string, edge: PaneEdge) => void
+  /** Drag state and starter from MainPanel's useSessionDrag - shared with the session panels'
+   *  header bars, so a session can be dragged by either. */
+  draggingId: string | null
+  hover: { id: string; zone: DropZone } | null
+  onStartDrag: (id: string, event: React.PointerEvent) => void
   /** Rename editing is controlled from MainPanel (not owned here) so the context menu's
    *  "Rename" - which can be opened from a session panel, not just the strip - can start the
    *  same edit as double-clicking a tab. */
@@ -71,13 +52,6 @@ interface TerminalTabBarProps {
   onSplitOrientationChange: (orientation: 'horizontal' | 'vertical') => void
 }
 
-// Reordering/grouping uses plain pointer events (setPointerCapture + elementFromPoint
-// hit-testing, gated behind a small movement threshold so a plain click never misfires as a
-// drag), the same technique MainPanel's own pane-resize handle already uses, rather than native
-// HTML5 drag-and-drop - the native drag/drop event sequence turned out to be unreliable for a
-// real mouse gesture in this app (it only fired for synthetic/CDP-driven drags).
-const DRAG_THRESHOLD_PX = 4
-
 export default function TerminalTabBar({
   groups,
   tabNumbers,
@@ -91,8 +65,9 @@ export default function TerminalTabBar({
   onAdd,
   onSplit,
   onClose,
-  onDrop,
-  onPaneDrop,
+  draggingId,
+  hover,
+  onStartDrag,
   renamingId,
   renameValue,
   onStartRename,
@@ -103,29 +78,6 @@ export default function TerminalTabBar({
   onOrientationChange,
   onSplitOrientationChange
 }: TerminalTabBarProps): React.JSX.Element {
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [hover, setHover] = useState<{ id: string; zone: DropZone } | null>(null)
-  // Refs mirror the state above and are what move/up actually read from: a real mouse fires
-  // pointermove faster than React re-renders, so a fast drag's first move could still see a
-  // stale (pre-drag) value from state - refs are updated synchronously, in the same tick.
-  const draggingIdRef = useRef<string | null>(null)
-  const hoverRef = useRef<{ id: string; zone: DropZone } | null>(null)
-  const startPosRef = useRef<{ x: number; y: number } | null>(null)
-  const movedRef = useRef(false)
-  // The terminal-tab-pane element (rendered by MainPanel, well outside this component's own DOM)
-  // currently highlighted as a drop target, tracked and toggled imperatively rather than through
-  // React state - it's a transient visual during a drag, not app data, and elementFromPoint finds
-  // it either way regardless of component boundaries.
-  const paneHoverElRef = useRef<Element | null>(null)
-  const paneDropRef = useRef<{ id: string; edge: PaneEdge } | null>(null)
-
-  function clearPaneHighlight(): void {
-    paneHoverElRef.current?.classList.remove(
-      ...PANE_EDGES.map((e) => `terminal-tab-pane-drop-${e}`)
-    )
-    paneHoverElRef.current = null
-    paneDropRef.current = null
-  }
   const layoutButtonRef = useRef<HTMLButtonElement | null>(null)
   const [layoutMenu, setLayoutMenu] = useState<{ x: number; y: number } | null>(null)
 
@@ -208,83 +160,7 @@ export default function TerminalTabBar({
                       e.stopPropagation()
                       onContextMenu(id, e.clientX, e.clientY)
                     }}
-                    onPointerDown={(e) => {
-                      e.currentTarget.setPointerCapture(e.pointerId)
-                      draggingIdRef.current = id
-                      hoverRef.current = null
-                      startPosRef.current = { x: e.clientX, y: e.clientY }
-                      movedRef.current = false
-                    }}
-                    onPointerMove={(e) => {
-                      const dragId = draggingIdRef.current
-                      const start = startPosRef.current
-                      if (!dragId || !start) return
-                      if (!movedRef.current) {
-                        if (
-                          Math.hypot(e.clientX - start.x, e.clientY - start.y) < DRAG_THRESHOLD_PX
-                        ) {
-                          return
-                        }
-                        movedRef.current = true
-                        setDraggingId(dragId)
-                      }
-                      const hit = document.elementFromPoint(e.clientX, e.clientY)
-                      const overTab = hit?.closest('.terminal-tab')
-                      // Dragging past the tab strip onto a session panel itself always stacks -
-                      // VS Code-style, the panel's edge nearest the cursor decides where: left/
-                      // right splits side by side, top/bottom stacks, and dragId lands on that side
-                      // of the panel's tab.
-                      const overPane = !overTab ? hit?.closest('.terminal-tab-pane') : null
-                      clearPaneHighlight()
-                      let next: { id: string; zone: DropZone } | null = null
-                      if (overPane) {
-                        const paneId = overPane.getAttribute('data-tab-id')
-                        if (paneId && paneId !== dragId) {
-                          const edge = nearestEdge(overPane.getBoundingClientRect(), e)
-                          overPane.classList.add(`terminal-tab-pane-drop-${edge}`)
-                          paneHoverElRef.current = overPane
-                          paneDropRef.current = { id: paneId, edge }
-                          next = { id: paneId, zone: 'merge' }
-                        }
-                      } else {
-                        const overId = overTab?.getAttribute('data-tab-id')
-                        if (overTab && overId && overId !== dragId) {
-                          const rect = overTab.getBoundingClientRect()
-                          // The middle 60% of the target tab merges dragId into its group; only the
-                          // outer 20% strips (along the strip's own axis) reorder instead - without
-                          // this split, dropping anywhere on a tab always merged, so two standalone
-                          // tabs could never swap places without also getting stacked. The merge
-                          // band is kept wide on purpose: a stacked pill's members are small, and a
-                          // narrower band made it easy to miss and land a reorder by accident when
-                          // trying to add a third tab to an existing pair.
-                          const rel =
-                            orientation === 'vertical'
-                              ? (e.clientY - rect.top) / rect.height
-                              : (e.clientX - rect.left) / rect.width
-                          const zone: DropZone =
-                            rel < 0.2 ? 'before' : rel > 0.8 ? 'after' : 'merge'
-                          next = { id: overId, zone }
-                        }
-                      }
-                      hoverRef.current = next
-                      setHover(next)
-                    }}
-                    onPointerUp={(e) => {
-                      e.currentTarget.releasePointerCapture(e.pointerId)
-                      if (draggingIdRef.current && movedRef.current) {
-                        const paneDrop = paneDropRef.current
-                        const drop = hoverRef.current
-                        if (paneDrop) onPaneDrop(draggingIdRef.current, paneDrop.id, paneDrop.edge)
-                        else onDrop(draggingIdRef.current, drop?.id ?? null, drop?.zone ?? 'merge')
-                      }
-                      clearPaneHighlight()
-                      draggingIdRef.current = null
-                      hoverRef.current = null
-                      startPosRef.current = null
-                      movedRef.current = false
-                      setDraggingId(null)
-                      setHover(null)
-                    }}
+                    onPointerDown={(e) => onStartDrag(id, e)}
                   >
                     {status && <span className={`session-dot session-dot-${status}`} />}
                     {isRenaming ? (

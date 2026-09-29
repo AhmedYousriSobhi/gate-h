@@ -2,10 +2,13 @@ import { useCallback, useMemo, useState } from 'react'
 import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
-import TerminalTabBar, { type PaneEdge } from '../terminal/TerminalTabBar'
+import TerminalTabBar from '../terminal/TerminalTabBar'
+import { useSessionDrag } from '../terminal/useSessionDrag'
 import TabContextMenu from '../terminal/TabContextMenu'
 import {
+  dividers,
   insertBeside,
+  resizeSplit,
   layoutRects,
   leaf,
   leaves,
@@ -295,7 +298,7 @@ export default function MainPanel({
   // that one panel only, nesting a new split when needed - so a stack can become a grid, e.g.
   // two side by side above a third, without re-laying out anything else.
   const handlePaneDrop = useCallback(
-    (dragId: string, paneId: string, edge: PaneEdge): void => {
+    (dragId: string, paneId: string, edge: Edge): void => {
       if (dragId === paneId) return
       moveBeside(dragId, paneId, edge)
     },
@@ -325,6 +328,35 @@ export default function MainPanel({
     },
     [allTabs]
   )
+
+  const sessionDrag = useSessionDrag({
+    stripOrientation: tabOrientation,
+    onDrop: handleDropTab,
+    onPaneDrop: handlePaneDrop
+  })
+  const activeDividers = useMemo(() => dividers(activeGroup), [activeGroup])
+
+  // Dragging the border between two sessions in the visible stack - resizes live, trading space
+  // only between the two sessions either side of it.
+  function handleDividerMove(
+    e: React.PointerEvent<HTMLDivElement>,
+    divider: (typeof activeDividers)[number]
+  ): void {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+    const container = e.currentTarget.parentElement
+    if (!container) return
+    const box = container.getBoundingClientRect()
+    const { rect } = divider
+    const fraction =
+      divider.dir === 'row'
+        ? ((e.clientX - box.left) / box.width - rect.x) / rect.w
+        : ((e.clientY - box.top) / box.height - rect.y) / rect.h
+    setGroups((prev) =>
+      prev.map((g, i) =>
+        i === activeGroupIndex ? resizeSplit(g, divider.path, divider.index, fraction) : g
+      )
+    )
+  }
 
   function handleResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -419,8 +451,9 @@ export default function MainPanel({
                 onAdd={handleAddTab}
                 onSplit={() => handleSplitTab(activeTabId)}
                 onClose={handleCloseTab}
-                onDrop={handleDropTab}
-                onPaneDrop={handlePaneDrop}
+                draggingId={sessionDrag.draggingId}
+                hover={sessionDrag.hover}
+                onStartDrag={sessionDrag.startDrag}
                 onStartRename={startRename}
                 onRenameValueChange={setRenameValue}
                 onRenameCommit={commitRename}
@@ -447,7 +480,7 @@ export default function MainPanel({
                           activeIsSplit && tabId === activeTabId ? ' terminal-tab-pane-focused' : ''
                         }${rect && rect.x + rect.w < 0.999 ? ' terminal-tab-pane-border-right' : ''}${
                           rect && rect.y + rect.h < 0.999 ? ' terminal-tab-pane-border-bottom' : ''
-                        }`}
+                        }${sessionDrag.draggingId === tabId ? ' terminal-tab-pane-dragging' : ''}`}
                         style={
                           rect
                             ? {
@@ -475,8 +508,35 @@ export default function MainPanel({
                           }}
                           onCycleTab={handleCycleTab}
                           onSplit={() => handleSplitTab(tabId)}
+                          onHeaderPointerDown={(e) => sessionDrag.startDrag(tabId, e)}
                         />
                       </div>
+                    )
+                  })}
+                {!hidden &&
+                  activeDividers.map((d) => {
+                    const row = d.dir === 'row'
+                    return (
+                      <div
+                        key={`${d.path.join('.')}:${d.index}`}
+                        className={`terminal-tab-divider terminal-tab-divider-${d.dir}`}
+                        style={
+                          row
+                            ? {
+                                left: `${d.at * 100}%`,
+                                top: `${d.rect.y * 100}%`,
+                                height: `${d.rect.h * 100}%`
+                              }
+                            : {
+                                top: `${d.at * 100}%`,
+                                left: `${d.rect.x * 100}%`,
+                                width: `${d.rect.w * 100}%`
+                              }
+                        }
+                        onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+                        onPointerMove={(e) => handleDividerMove(e, d)}
+                        onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
+                      />
                     )
                   })}
               </div>
