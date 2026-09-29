@@ -28,6 +28,8 @@ interface TerminalPanelProps {
   onCycleTab?: (direction: 1 | -1) => void
   /** Ctrl/Cmd+Shift+5 - splits this session, forwarded up for the same reason as onCycleTab. */
   onSplit?: () => void
+  /** Pressing on the header bar - lets the session be dragged by it, like its tab. */
+  onHeaderPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -62,7 +64,8 @@ export default function TerminalPanel({
   reachability,
   onStatusChange,
   onCycleTab,
-  onSplit
+  onSplit,
+  onHeaderPointerDown
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
@@ -358,7 +361,10 @@ export default function TerminalPanel({
 
   return (
     <div className="terminal-panel">
-      <div className="terminal-statusbar">
+      <div
+        className={`terminal-statusbar${onHeaderPointerDown ? ' terminal-statusbar-draggable' : ''}`}
+        onPointerDown={onHeaderPointerDown}
+      >
         <span className="terminal-statusbar-label">
           <span className={`session-dot session-dot-${status}`} />
           <span className="mono">

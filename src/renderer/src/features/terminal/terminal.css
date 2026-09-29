@@ -29,6 +29,65 @@
   overflow: hidden;
 }
 
+/* The border between two sessions in a stack, draggable to resize them. A 7px invisible grab
+   area centred on the 1px pane border, with an accent line while hovered or dragged. */
+.terminal-tab-divider {
+  position: absolute;
+  z-index: 5;
+  touch-action: none;
+}
+
+.terminal-tab-divider-row {
+  width: 7px;
+  margin-left: -3px;
+  cursor: col-resize;
+}
+
+.terminal-tab-divider-column {
+  height: 7px;
+  margin-top: -3px;
+  cursor: row-resize;
+}
+
+.terminal-tab-divider::after {
+  content: '';
+  position: absolute;
+  background-color: var(--color-accent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.terminal-tab-divider-row::after {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
+}
+
+.terminal-tab-divider-column::after {
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 3px;
+}
+
+.terminal-tab-divider:hover::after,
+.terminal-tab-divider:active::after {
+  opacity: 1;
+}
+
+.terminal-tab-pane-dragging {
+  opacity: 0.5;
+}
+
+/* Set on <body> once a session drag passes the movement threshold - keeps the grabbing cursor and
+   stops text selection wherever the pointer wanders. */
+body.session-dragging,
+body.session-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 .terminal-tab-pane-border-right {
   border-right: 1px solid var(--color-border);
 }
@@ -300,6 +359,11 @@
   font-size: 12.5px;
   color: var(--color-text-2);
   border-bottom: 1px solid var(--color-border);
+}
+
+.terminal-statusbar-draggable {
+  cursor: grab;
+  user-select: none;
 }
 
 .terminal-statusbar-label {
