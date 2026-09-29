@@ -120,6 +120,10 @@ never the plaintext or ciphertext.
 - Status refreshes automatically on a fixed interval and whenever the cluster's reachability
   reading changes, with backoff on repeated failures, rather than only ever fetching once per
   view.
+- Switching back to a cluster shows its last status (and scroll position) at once while a fresh
+  one loads, and a failed refresh keeps the last good dashboards on screen. Live panel embeds do
+  reload, since a background cluster keeps none running (§3.6), but never flash white while
+  they do.
 
 ### 3.5 Jira integration
 - Per cluster with a Jira profile configured: list issues matching a saved JQL/project filter, and

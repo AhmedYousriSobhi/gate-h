@@ -17,6 +17,7 @@ import {
   type GrafanaStatusResult,
   type PanelOrientation
 } from '../../../../shared/types'
+import { cachedStatus, isEmbedArmed, markEmbedArmed, rememberStatus } from './statusCache'
 
 interface GrafanaStatusSectionProps {
   cluster: ClusterSummary
@@ -41,11 +42,14 @@ function trimBaseUrl(baseUrl: string): string {
 // (confirmed via direct devtools inspection - the click reaches the real button with no errors,
 // but no menu populates) - a control that looks clickable but silently does nothing is worse than
 // none at all, so hide it once the guest page has loaded. Verified selector, not a guess.
-function hidePanelMenu(el: HTMLElement | null): void {
+// The guest also stays transparent until then: a <webview> paints white before its page does,
+// which flashed on every cluster switch against the dark UI (see .panel-embed-loaded).
+function prepareWebview(el: HTMLElement | null): void {
   if (!el) return
   const webview = el as Electron.WebviewTag
   const onDomReady = (): void => {
     webview.insertCSS('[data-testid*="Panel menu"] { display: none !important; }')
+    webview.classList.add('panel-embed-loaded')
     webview.removeEventListener('dom-ready', onDomReady)
   }
   webview.addEventListener('dom-ready', onDomReady)
@@ -55,16 +59,26 @@ export default function GrafanaStatusSection({
   cluster,
   reachability
 }: GrafanaStatusSectionProps): React.JSX.Element {
-  const [status, setStatus] = useState<GrafanaStatusResult | null>(null)
+  const baseUrl = cluster.grafana?.baseUrl ?? ''
+  // Starts from the last result for this cluster, if any, so switching back to it renders at
+  // once - see statusCache.ts. The effect below still fetches a fresh one straight away.
+  const [status, setStatusState] = useState<GrafanaStatusResult | null>(() =>
+    cachedStatus(cluster.id, baseUrl)
+  )
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const hasLoadedOnceRef = useRef(false)
+  const [loading, setLoading] = useState(() => cachedStatus(cluster.id, baseUrl) === null)
+  const hasLoadedOnceRef = useRef(!loading)
+  const setStatus = (result: GrafanaStatusResult): void => {
+    rememberStatus(cluster.id, baseUrl, result)
+    setStatusState(result)
+  }
   const consecutiveFailuresRef = useRef(0)
   const [pickerUid, setPickerUid] = useState<string | null>(null)
   // Panels can't be embedded until the main process has armed the embed session (Authorization
   // header + frame-blocking header stripping) for this cluster's Grafana origin - see
   // grafana:prepareEmbed / grafana/embed.ts.
-  const [embedReady, setEmbedReady] = useState(false)
+  const embedKey = `${cluster.id}:${cluster.updatedAt}`
+  const [embedReady, setEmbedReady] = useState(() => isEmbedArmed(embedKey))
 
   function togglePanel(dashboardUid: string, panelId: number, current: number[]): void {
     const next = current.includes(panelId)
@@ -243,7 +257,8 @@ export default function GrafanaStatusSection({
         .then((result) => {
           if (cancelled) return
           consecutiveFailuresRef.current = 0
-          setStatus(result)
+          rememberStatus(cluster.id, baseUrl, result)
+          setStatusState(result)
           setError(null)
           scheduleNext(GRAFANA_REFRESH_INTERVAL_MS)
         })
@@ -277,13 +292,16 @@ export default function GrafanaStatusSection({
     // just when a different cluster is selected - `cluster.id` alone doesn't change on edit -
     // and whenever this cluster's reachability status value changes (e.g. recovers), resetting
     // the backoff state above.
-  }, [cluster.id, cluster.updatedAt, reachability?.status])
+  }, [cluster.id, cluster.updatedAt, reachability?.status, baseUrl])
 
   useEffect(() => {
     if (!cluster.grafana) return
     window.api.grafana
       .prepareEmbed(cluster.id)
-      .then(() => setEmbedReady(true))
+      .then(() => {
+        markEmbedArmed(`${cluster.id}:${cluster.updatedAt}`)
+        setEmbedReady(true)
+      })
       .catch((err: Error) => setError(err.message))
   }, [cluster.id, cluster.updatedAt, cluster.grafana])
 
@@ -292,13 +310,14 @@ export default function GrafanaStatusSection({
   }
 
   if (loading) return <p className="hint">Loading Grafana status...</p>
-  if (error) return <div className="error-banner">{error}</div>
-  if (!status) return <></>
+  if (!status) return error ? <div className="error-banner">{error}</div> : <></>
 
   const grafanaBaseUrl = trimBaseUrl(cluster.grafana.baseUrl)
 
   return (
     <div className="status-section">
+      {/* A failed refresh keeps the last good dashboards on screen rather than blanking them. */}
+      {error && <div className="error-banner">{error}</div>}
       <div className={`health-badge ${status.health.ok ? 'health-ok' : 'health-down'}`}>
         {status.health.ok ? (
           <CircleCheck size={14} strokeWidth={2} />
@@ -416,7 +435,7 @@ export default function GrafanaStatusSection({
                             }
                           >
                             <webview
-                              ref={hidePanelMenu}
+                              ref={prepareWebview}
                               src={embedUrl}
                               partition={GRAFANA_EMBED_PARTITION}
                               allowpopups
