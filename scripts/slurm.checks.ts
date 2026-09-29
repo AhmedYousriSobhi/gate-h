@@ -11,9 +11,11 @@ import {
   parseNodeIssues,
   parsePartitions,
   parseSnapshot,
-  snapshotCommand
+  snapshotCommand,
+  type SlurmData
 } from '../src/main/scheduler/slurm'
-import { MAX_SLURM_JOBS, type SchedulerConfig } from '../src/shared/types'
+import { describeChanges } from '../src/main/scheduler/changes'
+import { MAX_SLURM_JOBS, type SchedulerConfig, type SlurmJob } from '../src/shared/types'
 
 let failures = 0
 function report(ok: boolean, desc: string, detail = ''): void {
@@ -165,6 +167,71 @@ report(
 report(
   history[1].state === 'CANCELLED by 1234' && history[1].name === 'a|b',
   'keeps the state suffix and a name containing |'
+)
+
+console.log('-- changes')
+const job = (id: string, state = 'RUNNING', user?: string): SlurmJob => ({
+  id,
+  partition: 'cpu',
+  ...(user && { user }),
+  state,
+  elapsed: '1:00',
+  timeLimit: '2:00',
+  nodes: 1,
+  start: null,
+  reason: 'cpu01',
+  name: `j${id}`
+})
+const data = (jobs: SlurmJob[], extra: Partial<SlurmData> = {}): SlurmData => ({
+  jobs,
+  truncated: false,
+  partitions: [],
+  nodeIssues: [],
+  ...extra
+})
+const burst = describeChanges(
+  data(['1', '2', '3', '4', '5'].map((id) => job(id))),
+  data([]),
+  new Map([
+    ['1', { state: 'COMPLETED', exitCode: '0:0' }],
+    ['2', { state: 'COMPLETED', exitCode: '0:0' }],
+    ['3', { state: 'FAILED', exitCode: '1:0' }]
+  ])
+)
+report(
+  burst.length === 1 &&
+    burst[0].severity === 'warning' &&
+    burst[0].message === '5 jobs finished: 2 completed, 1 failed, 2 left the queue',
+  'a burst of finished jobs becomes one summary',
+  JSON.stringify(burst)
+)
+report(
+  describeChanges(data([job('1')]), data([], { truncated: true }), null).length === 0,
+  'a truncated snapshot never reports jobs as finished'
+)
+report(
+  describeChanges(data([job('9_[2-50]', 'PENDING')]), data([job('9_[3-50]', 'PENDING')]), null)
+    .length === 0,
+  'collapsed array rows changing id are not reported'
+)
+report(
+  describeChanges(
+    data([job('7', 'PENDING', 'alice')]),
+    data([job('7', 'RUNNING', 'alice')]),
+    null,
+    'me'
+  ).length === 0,
+  "other users' jobs (partition scope) are never reported"
+)
+const cancelled = describeChanges(
+  data([job('8')]),
+  data([]),
+  new Map([['8', { state: 'CANCELLED by 1234', exitCode: '0:15' }]])
+)
+report(
+  cancelled[0]?.message === 'Job 8 (j8) was cancelled (exit code 0:15)',
+  'a cancelled job',
+  cancelled[0]?.message
 )
 
 console.log('-- failures')

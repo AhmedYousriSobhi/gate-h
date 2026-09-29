@@ -74,6 +74,25 @@ export function historyCommand(days: number): string {
   )
 }
 
+/** Final states of jobs that just left the queue, for notifications. */
+export function finalStatesCommand(jobIds: string[]): string {
+  const bad = jobIds.find((id) => !/^\d+(_\d+)?$/.test(id))
+  if (bad !== undefined) throw new Error(`Invalid job id: ${bad}`)
+  return (
+    `LC_ALL=C sacct --jobs=${jobIds.join(',')} --allocations --noheader --parsable2 ` +
+    `'--format=JobID,State,ExitCode'`
+  )
+}
+
+export function parseFinalStates(text: string): Map<string, { state: string; exitCode: string }> {
+  const states = new Map<string, { state: string; exitCode: string }>()
+  for (const row of lines(text)) {
+    const f = splitFields(row, 3)
+    if (f) states.set(f[0], { state: f[1], exitCode: f[2] })
+  }
+  return states
+}
+
 function splitFields(line: string, count: number): string[] | null {
   const fields: string[] = []
   let rest = line

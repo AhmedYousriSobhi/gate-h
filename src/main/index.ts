@@ -21,6 +21,7 @@ import { registerSchedulerIpcHandlers } from './ipc/scheduler'
 import {
   setSchedulerBroadcaster,
   setSchedulerWindowFocused,
+  startSchedulerMonitor,
   stopSchedulerMonitor
 } from './scheduler/monitor'
 import {
@@ -166,6 +167,7 @@ app.whenReady().then(() => {
       mainWindow.webContents.send('scheduler:snapshot', snapshot)
     }
   })
+  startSchedulerMonitor()
   startTeleportSessionMonitor((sessions: Record<string, TeleportSessionInfo>) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('teleport:sessions', sessions)
