@@ -6,7 +6,7 @@ import type { PtySpawnOptions } from '../pty/manager'
 // a usable tsh session, then execs `tsh ssh`, which carries the shell for the rest of the
 // session. The terminal never logs in by itself (`--no-login`): with no usable session it exits
 // with EXIT_NO_SESSION, and the renderer shows a "Log in" action instead. Logging in is its own,
-// user-started PTY (teleportLoginCommand), so a pinned cluster in the background, or a reconnect
+// user-started PTY (teleportLoginCommand), so a cluster in the background, or a reconnect
 // nobody is watching, can't open SSO browser tabs or sit on a password prompt out of sight.
 
 /** teleport.sh's exit code for "no usable session and --no-login was given". */

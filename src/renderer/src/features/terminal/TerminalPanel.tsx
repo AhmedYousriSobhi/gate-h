@@ -51,12 +51,10 @@ interface TerminalPanelProps {
   onClose?: () => void
   /** True while this session's cluster isn't the selected one. The session stays connected and
    *  keeps receiving output, but stops resizing the remote pty (the pane is `display: none`, so a
-   *  fit would only measure nothing) and refits once when it comes back. */
+   *  fit would only measure nothing) and refits once when it comes back. A suspended session that
+   *  drops pauses instead of retrying, and reconnects when its cluster is selected again - so a
+   *  pile of open background clusters can't all be retrying against their login nodes at once. */
   suspended?: boolean
-  /** The cluster is pinned ("Keep alive"). Without it, a suspended session that drops pauses
-   *  instead of retrying, and reconnects when its cluster is selected again - so a pile of open
-   *  background clusters can't all be retrying against their login nodes at once. */
-  keepAlive?: boolean
 }
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
@@ -98,8 +96,7 @@ export default function TerminalPanel({
   maximized = false,
   onToggleMaximize,
   onClose,
-  suspended = false,
-  keepAlive = false
+  suspended = false
 }: TerminalPanelProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   // The connect effect below only re-runs on cluster.id/connectNonce changes, so it captures
@@ -149,7 +146,6 @@ export default function TerminalPanel({
   const attemptsRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Read from the connect effect's callbacks, which only re-run on reconnect.
-  const quietRef = useRef(suspended && !keepAlive)
   const suspendedRef = useRef(suspended)
   // Set when a drop was paused only because the cluster was in the background - the one pause
   // that selecting the cluster again resumes. A pause from an exhausted retry budget still waits
@@ -167,7 +163,7 @@ export default function TerminalPanel({
   /** Called whenever a connection attempt fails or an established session drops. Schedules a
    *  backed-off retry if the rolling window still has attempts left, otherwise pauses. */
   const scheduleReconnectOrPause = useCallback((): void => {
-    if (quietRef.current) {
+    if (suspendedRef.current) {
       pausedInBackgroundRef.current = true
       setStatus('paused')
       return
@@ -211,16 +207,18 @@ export default function TerminalPanel({
     // enough not to look like abuse), not just on a detected offline -> online flip - only worth
     // acting on when the session is actually sitting paused; a connecting/connected/retrying
     // session has nothing to nudge.
-    if (reachability?.status === 'online' && statusRef.current === 'paused' && !quietRef.current) {
+    if (
+      reachability?.status === 'online' &&
+      statusRef.current === 'paused' &&
+      !suspendedRef.current
+    ) {
       resetAndReconnectNow()
     }
   }, [reachability, resetAndReconnectNow])
 
   useEffect(() => {
-    const quiet = suspended && !keepAlive
-    quietRef.current = quiet
     suspendedRef.current = suspended
-    if (quiet) {
+    if (suspended) {
       // A retry already scheduled when the cluster went to the background would otherwise still
       // fire there.
       if (retryTimerRef.current) {
@@ -230,9 +228,9 @@ export default function TerminalPanel({
       }
       return
     }
-    if (!suspended) refitRef.current?.()
+    refitRef.current?.()
     if (pausedInBackgroundRef.current) resetAndReconnectNow()
-  }, [suspended, keepAlive, resetAndReconnectNow])
+  }, [suspended, resetAndReconnectNow])
 
   useEffect(
     () =>

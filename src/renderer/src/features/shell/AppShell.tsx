@@ -38,21 +38,15 @@ export default function AppShell(): React.JSX.Element {
   // every push (roughly every 60s - see clusterMonitor's sweep interval), not just on a flip.
   const reachability = useReachability()
 
-  // Open and pinned clusters stay mounted (hidden when not selected) so their sessions stay
-  // connected in the background - see MainPanel's `hidden` prop. Pinned ones are mounted from
-  // launch and keep reconnecting/polling there (Cluster.keepAliveInBackground). A cluster in
-  // standby (activeMonitoring false) never counts as pinned here even if the flag is set -
-  // standby is a master "no connections at all" switch that overrides it, rather than something
-  // pinning fights with.
-  const pinnedClusterIds = useMemo(
-    () => clusters.filter((c) => c.keepAliveInBackground && c.activeMonitoring).map((c) => c.id),
-    [clusters]
+  // Open clusters stay mounted (hidden when not selected) so their sessions stay connected in the
+  // background - see MainPanel's `hidden` prop.
+  const activeClusterIds = useMemo(
+    () =>
+      selectedClusterId && !openClusterIds.includes(selectedClusterId)
+        ? [...openClusterIds, selectedClusterId]
+        : openClusterIds,
+    [openClusterIds, selectedClusterId]
   )
-  const activeClusterIds = useMemo(() => {
-    const ids = new Set([...pinnedClusterIds, ...openClusterIds])
-    if (selectedClusterId) ids.add(selectedClusterId)
-    return Array.from(ids)
-  }, [pinnedClusterIds, openClusterIds, selectedClusterId])
 
   function selectCluster(id: string | null): void {
     setSelectedClusterId(id)
@@ -124,11 +118,6 @@ export default function AppShell(): React.JSX.Element {
     setPanelLayout(withWidgetVisible(panelLayout, 'status'))
   }
 
-  async function handleToggleKeepAlive(cluster: ClusterSummary): Promise<void> {
-    await window.api.clusters.setKeepAlive(cluster.id, !cluster.keepAliveInBackground)
-    await refresh()
-  }
-
   async function handleToggleActiveMonitoring(cluster: ClusterSummary): Promise<void> {
     await window.api.clusters.setActiveMonitoring(cluster.id, !cluster.activeMonitoring)
     // Standby ends every session anyway, so a background standby cluster needn't stay open.
@@ -170,7 +159,6 @@ export default function AppShell(): React.JSX.Element {
           openClusterIds={activeClusterIds}
           liveSessionCounts={liveSessionCounts}
           onCloseSessions={(cluster) => closeCluster(cluster.id)}
-          onToggleKeepAlive={handleToggleKeepAlive}
           onToggleActiveMonitoring={handleToggleActiveMonitoring}
         />
 
@@ -191,7 +179,7 @@ export default function AppShell(): React.JSX.Element {
                 onAdd={() => setEditing('new')}
               />
             )}
-            {/* One MainPanel per open, pinned or selected cluster, all kept mounted simultaneously
+            {/* One MainPanel per open cluster, all kept mounted simultaneously
                 - only the selected one is visible - so their sessions stay connected while the
                 user is looking at a different cluster (or the Overview), see MainPanel's `hidden`
                 prop. */}

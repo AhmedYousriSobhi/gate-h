@@ -53,7 +53,7 @@ the terminal.
 
 ## Code Rules
 - Follow existing patterns; find a similar file first (e.g. a new per-cluster setting almost
-  always mirrors `keepAliveInBackground`/`setClusterKeepAlive` end to end).
+  always mirrors `activeMonitoring`/`setClusterActiveMonitoring` end to end).
 - No new dependencies without asking.
 - No speculative abstractions, extra config, or unused code.
 - Only comment the "why", not the "what".

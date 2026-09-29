@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LayoutDashboard, Pencil, Pin, Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
+import { LayoutDashboard, Pencil, Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
@@ -31,15 +31,14 @@ interface SidebarProps {
   /** Primary Terminal connection status by cluster id - may hold stale entries for clusters no
    *  longer open, so only read for ids in openClusterIds. */
   terminalStatuses: Record<string, SessionStatus>
-  /** Clusters whose sessions are currently mounted: open, pinned or selected. */
+  /** Clusters whose sessions are currently mounted (open or selected). */
   openClusterIds: string[]
   liveSessionCounts: Record<string, number>
   onCloseSessions: (cluster: ClusterSummary) => void
-  onToggleKeepAlive: (cluster: ClusterSummary) => void
   onToggleActiveMonitoring: (cluster: ClusterSummary) => void
 }
 
-const KEEP_ALIVE_STATUS_LABEL: Record<SessionStatus, string> = {
+const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
   connecting: 'Connecting',
   connected: 'Connected',
   reconnecting: 'Reconnecting',
@@ -66,7 +65,6 @@ export default function Sidebar({
   openClusterIds,
   liveSessionCounts,
   onCloseSessions,
-  onToggleKeepAlive,
   onToggleActiveMonitoring
 }: SidebarProps): React.JSX.Element {
   // Closing a cluster with connected sessions takes a second click on the same button rather
@@ -131,10 +129,8 @@ export default function Sidebar({
               {cluster.activeMonitoring &&
                 openClusterIds.includes(cluster.id) &&
                 terminalStatuses[cluster.id] && (
-                  <div
-                    className={`keep-alive-badge keep-alive-badge-${terminalStatuses[cluster.id]}`}
-                  >
-                    {KEEP_ALIVE_STATUS_LABEL[terminalStatuses[cluster.id]]}
+                  <div className={`session-badge session-badge-${terminalStatuses[cluster.id]}`}>
+                    {SESSION_STATUS_LABEL[terminalStatuses[cluster.id]]}
                   </div>
                 )}
             </div>
@@ -157,28 +153,7 @@ export default function Sidebar({
                   <PowerOff size={13} strokeWidth={2} />
                 )}
               </button>
-              <button
-                className={`icon-btn${cluster.keepAliveInBackground ? ' icon-btn-active' : ''}`}
-                aria-pressed={cluster.keepAliveInBackground}
-                title={
-                  cluster.keepAliveInBackground
-                    ? 'Kept alive: reconnects and refreshes in the background, connects at launch'
-                    : 'Keep alive: reconnect and refresh in the background, connect at launch'
-                }
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onToggleKeepAlive(cluster)
-                }}
-              >
-                <Pin
-                  size={13}
-                  strokeWidth={2}
-                  fill={cluster.keepAliveInBackground ? 'currentColor' : 'none'}
-                />
-              </button>
-              {/* Pinned clusters stay open by definition - releasing the pin never ends a
-                  session, so Close is offered once it's released. */}
-              {openClusterIds.includes(cluster.id) && !cluster.keepAliveInBackground && (
+              {openClusterIds.includes(cluster.id) && (
                 <button
                   className={`icon-btn icon-btn-danger${
                     confirmCloseId === cluster.id ? ' close-confirm' : ''

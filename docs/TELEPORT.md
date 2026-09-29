@@ -116,7 +116,7 @@ xterm ──ssh:write/resize──▶ main: ptyManager (src/main/pty/manager.ts)
 - **A terminal never logs in by itself.** It runs `teleport.sh ssh --no-login`. With no usable
   session, the wrapper exits 4 at once and the terminal shows **Teleport login needed** with a
   **Log in** button. That state is never resumed automatically: reachability going green
-  doesn't make a login happen. A pinned cluster in the background, or a reconnect nobody is
+  doesn't make a login happen. A cluster in the background, or a reconnect nobody is
   watching, therefore can't open SSO browser tabs or sit on a hidden password prompt.
 - **Logging in is its own dialog.** **Log in** (and **Renew**, below) opens a small terminal
   running `teleport.sh login` on its own PTY. The password and OTP prompts are answered there,
