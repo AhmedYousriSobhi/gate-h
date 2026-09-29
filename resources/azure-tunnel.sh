@@ -242,8 +242,8 @@ prompt_subscription() {
 resolve_target_id() {
   [[ "$MODE" == bastion && -z "$TARGET_ID" ]] || return 0
   status tunnel "Resolving VM '$VM_NAME' to its resource ID"
-  TARGET_ID=$(az vm show --only-show-errors -g "$RESOURCE_GROUP" -n "$VM_NAME" \
-    --query id --output tsv) ||
+  TARGET_ID=$(az vm show --only-show-errors --subscription "$SUBSCRIPTION" \
+    -g "$RESOURCE_GROUP" -n "$VM_NAME" --query id --output tsv) ||
     die "$EXIT_TUNNEL" "Could not resolve VM '$VM_NAME' in resource group '$RESOURCE_GROUP' to a resource ID"
   [[ -n "$TARGET_ID" ]] ||
     die "$EXIT_TUNNEL" "VM '$VM_NAME' not found in resource group '$RESOURCE_GROUP'"
@@ -273,9 +273,15 @@ select_subscription() {
     esac
   fi
 
-  az account set --only-show-errors --subscription "$wanted" ||
-    die "$EXIT_SUBSCRIPTION" "Could not select subscription '$wanted'"
-  status subscription "Using subscription '$(az account show --query name --output tsv)'"
+  # Scoped via --subscription on each later az call instead of `az account set`, which would
+  # mutate the CLI's shared, machine-wide default subscription - surprising for anything else
+  # using `az` (another terminal, another cluster's tunnel opening at the same time) and racy if
+  # two tunnels for different subscriptions start concurrently.
+  local name
+  name=$(az account show --only-show-errors --subscription "$wanted" --query name --output tsv) ||
+    die "$EXIT_SUBSCRIPTION" "Could not use subscription '$wanted'"
+  SUBSCRIPTION=$wanted
+  status subscription "Using subscription '$name'"
 }
 
 # ---------------------------------------------------------------------------
@@ -334,14 +340,14 @@ stop_tunnel() {
 build_tunnel_cmd() {
   case "$MODE" in
     bastion)
-      TUNNEL_CMD=(az network bastion tunnel --only-show-errors
+      TUNNEL_CMD=(az network bastion tunnel --only-show-errors --subscription "$SUBSCRIPTION"
         --name "$BASTION_NAME" --resource-group "$RESOURCE_GROUP"
         --target-resource-id "$TARGET_ID"
         --resource-port "$REMOTE_PORT" --port "$LOCAL_PORT")
       TUNNEL_DESC="127.0.0.1:$LOCAL_PORT -> ${TARGET_ID##*/}:$REMOTE_PORT via bastion $BASTION_NAME"
       ;;
     az-ssh)
-      TUNNEL_CMD=(az ssh vm --only-show-errors
+      TUNNEL_CMD=(az ssh vm --only-show-errors --subscription "$SUBSCRIPTION"
         --resource-group "$RESOURCE_GROUP" --name "$VM_NAME")
       if [[ -n "$LOCAL_USER" ]]; then TUNNEL_CMD+=(--local-user "$LOCAL_USER"); fi
       # ExitOnForwardFailure makes ssh die (instead of idling uselessly) if the

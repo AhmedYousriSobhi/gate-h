@@ -9,7 +9,7 @@ prerequisites and form fields), see "Through Azure" in the README's
 ```
 Gate-H terminal ──ssh2──▶ 127.0.0.1:<local port> ══ Azure tunnel ══▶ login node :22
                                     ▲
-       resources/azure-tunnel.sh up ┘  (az login → az account set → bastion tunnel | az ssh vm -L)
+       resources/azure-tunnel.sh up ┘  (az login → select subscription → bastion tunnel | az ssh vm -L)
 ```
 
 - **Connecting** (`src/main/ssh/manager.ts`): before a cluster with an Azure tunnel connects,
