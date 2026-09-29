@@ -30,6 +30,46 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     exit 1
   fi
   cd "$ROOT_DIR"
+
+  # The build downloads Node headers, Electron and native-module prebuilds. Behind a network that
+  # re-signs HTTPS with its own certificate Node fails on the first one, minutes in, so check now.
+  # Node ignores the macOS keychain unless told otherwise, so retry once with it before giving up.
+  tls_ok() {
+    node -e '
+      const hosts = ["nodejs.org", "github.com", "registry.npmjs.org"]
+      let pending = hosts.length
+      for (const host of hosts) {
+        const req = require("https").request({ host, method: "HEAD", path: "/", timeout: 10000 },
+          () => --pending || process.exit(0))
+        req.on("error", (e) => { console.error(host + ": " + e.message); process.exit(1) })
+        req.on("timeout", () => { console.error(host + ": timed out"); process.exit(1) })
+        req.end()
+      }
+    '
+  }
+  echo "==> Checking that Node can reach nodejs.org, github.com and npm over HTTPS"
+  if ! tls_ok; then
+    echo "    Failed. Retrying with the macOS keychain's certificates (NODE_USE_SYSTEM_CA=1)"
+    if NODE_USE_SYSTEM_CA=1 tls_ok; then
+      export NODE_USE_SYSTEM_CA=1
+      echo "    That works, so this build uses it."
+    else
+      cat >&2 <<'MSG'
+
+error: Node can't make HTTPS connections from this machine (see the host and reason above).
+If the reason is a certificate error, your network re-signs HTTPS with its own certificate.
+Export your organisation's CA file, then run this again:
+  NODE_EXTRA_CA_CERTS=/path/to/ca.pem ./build-desktop.sh
+To export the CAs the Mac trusts (works on any Node version), then use that file:
+  security find-certificate -a -p /Library/Keychains/System.keychain \
+    /System/Library/Keychains/SystemRootCertificates.keychain > ~/macos-ca.pem
+  NODE_EXTRA_CA_CERTS=~/macos-ca.pem ./build-desktop.sh
+Otherwise check your VPN/proxy, or that Node is 22.15+ / 24 for the keychain option.
+MSG
+      exit 1
+    fi
+  fi
+
   echo "==> Building Gate-H for macOS (npm ci && npm run typecheck && npm run build:mac)"
   # Not `a && b && c` on its own line: set -e ignores a failure that isn't the last in an && list.
   if ! { npm ci && npm run typecheck && npm run build:mac; }; then
