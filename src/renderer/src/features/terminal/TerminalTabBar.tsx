@@ -3,6 +3,7 @@ import { Ellipsis, Plus, SquareSplitHorizontal, SquareSplitVertical, X } from 'l
 import type { SessionStatus } from './TerminalPanel'
 import TerminalLayoutMenu from './TerminalLayoutMenu'
 import type { DropZone } from './useSessionDrag'
+import { SPLIT_SHORTCUT_LABEL } from '../../lib/platform'
 
 const STATUS_WORDS: Record<SessionStatus, string> = {
   connecting: 'connecting',
@@ -106,7 +107,11 @@ export default function TerminalTabBar({
         >
           <Plus size={14} strokeWidth={2} />
         </button>
-        <button className="btn-icon" title="Split session (Ctrl+Shift+5)" onClick={onSplit}>
+        <button
+          className="btn-icon"
+          title={`Split session (${SPLIT_SHORTCUT_LABEL})`}
+          onClick={onSplit}
+        >
           {splitOrientation === 'horizontal' ? (
             <SquareSplitHorizontal size={14} strokeWidth={2} />
           ) : (

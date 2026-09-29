@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -35,6 +35,7 @@ import {
 import { startJiraMonitor, stopJiraMonitor } from './monitor/jiraMonitor'
 import { setNotificationBroadcaster } from './notifications/store'
 import { initUserDataDir } from './userData'
+import { adoptLoginShellPath } from './shellPath'
 import type {
   AzureTunnelStatusEvent,
   ClusterNotification,
@@ -45,6 +46,10 @@ import type {
 
 // Must run before anything (including app.whenReady()) touches the userData path.
 initUserDataDir()
+// Before anything spawns tsh/az/bash - see shellPath.ts.
+adoptLoginShellPath()
+
+const isMac = process.platform === 'darwin'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -53,13 +58,17 @@ function createWindow(): void {
   // src/renderer/src/features/shell/TitleBar.tsx) rather than the OS-native one - double-click-to-
   // maximize on a native title bar is a window-manager behavior Electron doesn't control on Linux,
   // and it's inconsistent across WMs/compositors. A custom title bar makes it work everywhere.
+  // macOS keeps its own traffic-light controls instead, inset into the same 32px bar, with the
+  // system's own double-click and zoom behavior.
   const win = new BrowserWindow({
     width: 900,
     height: 670,
     minWidth: 640,
     minHeight: 480,
     show: false,
-    frame: false,
+    ...(isMac
+      ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 12, y: 9 } }
+      : { frame: false }),
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -119,6 +128,28 @@ app.whenReady().then(() => {
   })
 
   setupGrafanaEmbedSession()
+
+  // macOS shows an app menu whether or not the app sets one; an explicit one names the app and
+  // keeps Cmd+C/V/A/Z working in every input (those shortcuts come from the Edit menu's roles).
+  if (isMac) {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        { role: 'editMenu' },
+        {
+          label: 'View',
+          submenu: [
+            { role: 'resetZoom' },
+            { role: 'zoomIn' },
+            { role: 'zoomOut' },
+            { type: 'separator' },
+            { role: 'togglefullscreen' }
+          ]
+        },
+        { role: 'windowMenu' }
+      ])
+    )
+  }
 
   // Grafana's own panel-hover menu (View/Explore/...) opens via window.open() - webview guests
   // block that outright unless allowed (see the `allowpopups` attribute on the <webview> in
@@ -189,17 +220,22 @@ app.whenReady().then(() => {
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// explicitly with Cmd + Q. The sessions belonged to the closed window, so they
+// end with it either way; the background monitors keep running until the app
+// actually quits, so a window reopened from the Dock (see 'activate') is live.
 app.on('window-all-closed', () => {
+  closeAllSessions()
+  stopAllTunnels()
+  if (!isMac) app.quit()
+})
+
+app.on('before-quit', () => {
   closeAllSessions()
   stopAllTunnels()
   stopClusterMonitor()
   stopJiraMonitor()
   stopTeleportSessionMonitor()
   stopSchedulerMonitor()
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
 })
 
 // In this file you can include the rest of your app's specific main process
