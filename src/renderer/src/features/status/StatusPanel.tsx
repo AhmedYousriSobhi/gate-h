@@ -1,17 +1,21 @@
-import { BarChart3, Ticket } from 'lucide-react'
+import { BarChart3, ListChecks, Ticket } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import GrafanaStatusSection from './GrafanaStatusSection'
 import JiraSection from './JiraSection'
+import SlurmSection from './SlurmSection'
 import './status.css'
 
 interface StatusPanelProps {
   cluster: ClusterSummary
   reachability?: ClusterReachability
+  /** The Status widget is showing in the layout, rather than toggled off. */
+  active: boolean
 }
 
 export default function StatusPanel({
   cluster,
-  reachability
+  reachability,
+  active
 }: StatusPanelProps): React.JSX.Element {
   return (
     <div className="status-body">
@@ -21,6 +25,13 @@ export default function StatusPanel({
           Grafana
         </h2>
         <GrafanaStatusSection cluster={cluster} reachability={reachability} />
+      </section>
+      <section>
+        <h2>
+          <ListChecks size={15} strokeWidth={2} />
+          Slurm
+        </h2>
+        <SlurmSection cluster={cluster} active={active} />
       </section>
       <section>
         <h2>
