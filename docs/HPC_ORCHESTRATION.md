@@ -273,9 +273,14 @@ metrics pipeline.
 
 ## 8. File transfer and job submission (outline)
 
-- **SFTP panel.** `ssh2`'s `client.sftp()` on the same shared `Client`, so no new login, as in §3.
-  It covers browsing, upload, download and transfer progress. Teleport clusters would need
-  `tsh scp` and are out of the first version.
+- **File transfer (built).** The *Files* dialog (the folder icon in a cluster's panel toolbar)
+  browses the cluster over SFTP. It opens `ssh2`'s `client.sftp()` on the terminal's existing
+  `Client`, so there's no new login, as in §3. There's one channel per connection, reopened if it
+  closes, and it covers download, upload and progress. The renderer passes remote paths only.
+  Where a download is saved, and which local files are uploaded, is always chosen in a native
+  dialog opened by the main process. An upload that would overwrite remote files asks first.
+  Symlinks can be opened as folders. Teleport clusters would need `tsh scp` and aren't supported
+  yet.
 - **Batch script templates.** A local library of `#SBATCH` templates, stored in SQLite and
   scoped per profile, with placeholders filled in through a form. Submitting uploads the script
   over SFTP, shows the full rendered script and the exact `sbatch <path>` command, and runs it

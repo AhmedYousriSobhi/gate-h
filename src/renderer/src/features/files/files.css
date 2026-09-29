@@ -1,0 +1,117 @@
+.files-modal {
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.files-header h2 {
+  margin: 0;
+}
+
+.files-pathbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.files-pathbar input {
+  flex: 1;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--color-text-1);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.files-pathbar input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.files-list {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.files-list .hint {
+  padding: var(--space-3);
+}
+
+.files-row {
+  display: grid;
+  grid-template-columns: 16px 1fr 90px 170px 28px;
+  align-items: center;
+  min-height: 36px;
+  gap: var(--space-3);
+  padding: 4px var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text-2);
+}
+
+.files-row:first-child {
+  border-top: none;
+}
+
+.files-row:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.files-name {
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-1);
+  font: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-row-dir .files-name {
+  cursor: pointer;
+}
+
+.files-name:disabled {
+  cursor: default;
+}
+
+.files-meta {
+  font-size: 12px;
+  color: var(--color-text-3);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.files-action-spacer {
+  width: 28px;
+}
+
+.files-transfers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.files-transfer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px var(--space-3);
+  font-size: 12px;
+}
+
+.files-transfer-bar {
+  grid-column: 1 / -1;
+}

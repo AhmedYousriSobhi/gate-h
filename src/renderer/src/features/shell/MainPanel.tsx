@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, Columns2, Power, Puzzle, Rows2 } from 'lucide-react'
+import { ArrowLeftRight, Columns2, FolderOpen, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import TerminalTabBar from '../terminal/TerminalTabBar'
@@ -21,6 +21,7 @@ import {
 } from '../terminal/splitLayout'
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
+import FilesDialog from '../files/FilesDialog'
 import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
 
 interface MainPanelProps {
@@ -68,6 +69,8 @@ export default function MainPanel({
   onResumeMonitoring
 }: MainPanelProps): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [filesOpen, setFilesOpen] = useState(false)
+  const closeFiles = useCallback(() => setFilesOpen(false), [])
   const [dragRatio, setDragRatio] = useState<number | null>(null)
   // The primary tab is the session whose status the sidebar shows - identified by a stable id
   // rather than position, so it can be dragged anywhere like any other tab; it just can't be
@@ -420,9 +423,22 @@ export default function MainPanel({
 
   return (
     <div className={`main-panel${hidden ? ' main-panel-hidden' : ''}`}>
+      {filesOpen && !hidden && <FilesDialog cluster={cluster} onClose={closeFiles} />}
       <div className="panel-toolbar">
         <span className="panel-toolbar-title">{cluster.name}</span>
         <div className="panel-toolbar-actions">
+          <button
+            className="btn-icon"
+            title={
+              cluster.teleport
+                ? "File transfer isn't available for Teleport clusters yet"
+                : 'Browse and transfer files'
+            }
+            disabled={Boolean(cluster.teleport) || !cluster.activeMonitoring}
+            onClick={() => setFilesOpen(true)}
+          >
+            <FolderOpen size={15} strokeWidth={2} />
+          </button>
           <button
             className="btn-icon"
             title="Swap pane order"

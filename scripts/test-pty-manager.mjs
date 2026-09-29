@@ -14,7 +14,8 @@
 //   - scripts/storage.checks.ts: the storage usage command, run in a local bash, and the
 //     lfs/mmlsquota parsers;
 //   - scripts/gpu.checks.ts: hostlist expansion, the nvidia-smi sampler, and the Grafana DCGM
-//     query and its response parsing.
+//     query and its response parsing;
+//   - scripts/sftp.checks.ts: file listing and transfers over a fake ssh2 SFTP channel.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -147,6 +148,25 @@ const stubStorageDeps = {
   }
 }
 
+// The SFTP module looks up clusters and their live connection; the checks supply both.
+const stubSftpDeps = {
+  name: 'stub-sftp-deps',
+  setup(b) {
+    b.onResolve({ filter: /^\.\.\/(clusters|ssh\/manager)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-sftp'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-sftp' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /manager$/, namespace: 'stub-sftp' }, () => ({
+      contents: 'module.exports = { getLiveClient: (id) => globalThis.__clients[id] ?? null }',
+      loader: 'js'
+    }))
+  }
+}
+
 try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
@@ -170,7 +190,8 @@ try {
     { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} },
     { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} },
     { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} },
-    { entry: 'gpu.checks.ts', plugins: [], env: {} }
+    { entry: 'gpu.checks.ts', plugins: [], env: {} },
+    { entry: 'sftp.checks.ts', plugins: [stubSftpDeps], env: {} }
   ]
   let failed = false
   for (const job of jobs) {
