@@ -42,7 +42,8 @@ never the plaintext or ciphertext.
 - Register any number of clusters, each fully self-contained (its own SSH/Grafana/Jira config) —
   nothing about one cluster's setup constrains another's.
 - Create, rename, delete, and switch between profiles; switching profiles clears the current
-  selection (a cluster from the old profile can't stay "selected" under the new one).
+  selection (a cluster from the old profile can't stay "selected" under the new one) and closes
+  every open cluster (§3.6) — a profile is a separate context, often with separate credentials.
 - Background monitors (reachability, Jira polling) watch every cluster in every profile
   regardless of which is active — only the sidebar/dashboard *view* is scoped to the active
   profile.
@@ -125,12 +126,17 @@ never the plaintext or ciphertext.
   which auth scheme that entails.
 
 ### 3.6 Connection lifecycle: pinning and standby
-- **Default**: a cluster's Terminal session and Grafana polling exist only while it's the
-  currently selected cluster; switching away tears them down cleanly.
-- **Pinned** (`keepAliveInBackground`): the user can mark specific clusters to keep their Terminal
-  session and Grafana polling alive continuously in the background, regardless of which cluster
-  is currently selected/viewed, so switching between clusters doesn't mean re-establishing a
-  session each time. Reconnect-on-failure (§3.3) applies identically whether pinned or selected.
+- **Open**: selecting a cluster opens it. Switching away never ends its sessions — every
+  terminal tab and split stays connected in the background until the user closes the cluster
+  explicitly (or it goes into standby, is removed, or the profile is switched; §3.1). Closing a
+  cluster with connected sessions asks for a second click on the same control, not a dialog.
+- **Background**: an open, unpinned cluster that isn't selected stays quiet — its terminals keep
+  receiving output but stop resizing, and no Grafana/Jira polling or live panel embeds run. A
+  session that drops there pauses instead of retrying and reconnects when the cluster is
+  selected again, so many open clusters can't all be retrying against their login nodes at once.
+- **Pinned** (`keepAliveInBackground`, "Keep alive"): the cluster connects at launch and, in the
+  background, keeps its Grafana polling and reconnect-on-failure (§3.3) running exactly as when
+  selected. Pinning or unpinning never ends a session; it only changes the background policy.
 - **Standby** (`activeMonitoring: false`): a master per-cluster switch that overrides pinning — no
   SSH session, no Grafana polling, and no reconnect/backoff loop exist for that cluster at all,
   even if it's pinned or currently selected. Selecting a standby cluster shows a placeholder
