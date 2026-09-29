@@ -256,6 +256,7 @@ connection attempts. Secrets are encrypted on disk.
 | put a session beside, above or below another | Drag its tab or its header bar onto that edge of the other session; the highlighted half shows where it lands |
 | resize sessions shown together | Drag the border between them |
 | reorder tabs, or stack two into one view | Drag a tab onto the edge of another tab to reorder, or onto its middle to stack them |
+| widen or narrow the side list of sessions | Drag the line between the list and the sessions; double-click it to reset |
 | move tabs between the side and the top | Click **⋯** above the tabs → **Tabs position** |
 | rename, split, unstack or close a session | Right-click its tab or the session itself (or double-click the tab to rename) |
 | focus on one session in a stack for a while | Click **Maximize** in its header; **Restore** brings the layout back |
