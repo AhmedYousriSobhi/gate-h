@@ -31,6 +31,13 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   fi
   cd "$ROOT_DIR"
 
+  # CI builds and tests on Node 22 (.nvmrc). Other versions can lack prebuilt native modules and
+  # compile them from source, which is many times slower.
+  node_major=$(node -p 'process.versions.node.split(".")[0]')
+  if [[ "$node_major" != "$(tr -d '[:space:]' < .nvmrc)" ]]; then
+    echo "warning: Node $(node -v) found; Node $(cat .nvmrc) (see .nvmrc, 'nvm use') is what CI tests and is much faster to install." >&2
+  fi
+
   # The build downloads Node headers, Electron and native-module prebuilds. Behind a network that
   # re-signs HTTPS with its own certificate Node fails on the first one, minutes in, so check now.
   # Node ignores the macOS keychain unless told otherwise, so retry once with it before giving up.
@@ -70,12 +77,19 @@ MSG
     fi
   fi
 
-  echo "==> Building Gate-H for macOS (npm ci && npm run typecheck && npm run build:mac)"
+  echo "==> Building Gate-H for macOS"
   # Not `a && b && c` on its own line: set -e ignores a failure that isn't the last in an && list.
-  if ! { npm ci && npm run typecheck; }; then
-    echo "error: install or typecheck failed - see the log above." >&2
-    exit 1
+  # npm ci wipes node_modules and rebuilds the native modules, which is the slowest step by far, so
+  # skip it when the lockfile, Node and CPU are the same as the install that's already there.
+  install_stamp="$(shasum -a 256 package-lock.json | cut -d' ' -f1) node-$(node -v) $(uname -m)"
+  stamp_file=node_modules/.gateh-install-stamp
+  if [[ -f "$stamp_file" && "$(cat "$stamp_file")" == "$install_stamp" ]]; then
+    echo "==> Dependencies unchanged since the last build; skipping npm ci"
+  else
+    npm ci || { echo "error: npm ci failed - see the log above." >&2; exit 1; }
+    echo "$install_stamp" > "$stamp_file"
   fi
+  npm run typecheck || { echo "error: typecheck failed - see the log above." >&2; exit 1; }
 
   # hdiutil sometimes can't unmount the dmg's temporary volume ("Resource busy") because Spotlight,
   # Finder or a security agent holds it. The failed attempt then leaves that volume mounted, so
@@ -88,7 +102,8 @@ MSG
   }
   attempt=1
   detach_stale_volumes
-  until npm run build:mac; do
+  # --publish never: a build must never try to upload anything by itself; releases are CI's job.
+  until npm run build:mac -- --publish never; do
     detach_stale_volumes
     if (( attempt >= 3 )); then
       echo "error: the build failed - see the log above." >&2
