@@ -52,6 +52,10 @@ jobs:
           ./scripts/test-azure-tunnel.sh
 
       - name: Package
+        # electron-builder skips signing on pull_request builds, which leaves Electron's own
+        # signature invalid once the app is repackaged.
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
         run: npm run build:mac -- --publish never
 
       - run: ./scripts/smoke-packaged-mac.sh
