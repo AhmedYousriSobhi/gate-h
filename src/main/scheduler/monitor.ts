@@ -190,7 +190,12 @@ export function setSchedulerWindowFocused(focused: boolean): void {
   }
 }
 
-export async function fetchArrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]> {
+// Expanding and collapsing an array row repeatedly shouldn't cost a run each time - on Teleport
+// every run is an audited session. Keyed by cluster id and array id.
+const ARRAY_TASKS_TTL_MS = 30_000
+const arrayTasks = new Map<string, { at: number; tasks: Promise<SlurmJob[]> }>()
+
+async function runArrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]> {
   const cluster = getCluster(clusterId)
   const config = cluster?.scheduler
   if (!cluster || !config) throw new Error('This cluster has no scheduler configured.')
@@ -201,7 +206,21 @@ export async function fetchArrayTasks(clusterId: string, arrayJobId: string): Pr
   return parseJobs(result.stdout, config.scope).jobs
 }
 
+export function fetchArrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]> {
+  const key = `${clusterId}:${arrayJobId}`
+  const hit = arrayTasks.get(key)
+  if (hit && Date.now() - hit.at < ARRAY_TASKS_TTL_MS) return hit.tasks
+  const tasks = runArrayTasks(clusterId, arrayJobId)
+  arrayTasks.set(key, { at: Date.now(), tasks })
+  // A failure isn't worth remembering - the next click should try again.
+  tasks.catch(() => {
+    if (arrayTasks.get(key)?.tasks === tasks) arrayTasks.delete(key)
+  })
+  return tasks
+}
+
 export function stopSchedulerMonitor(): void {
   for (const watch of watches.values()) if (watch.timer) clearTimeout(watch.timer)
   watches.clear()
+  arrayTasks.clear()
 }
