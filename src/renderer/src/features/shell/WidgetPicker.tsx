@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Activity, Check, Cpu, ClipboardList, Terminal as TerminalIcon } from 'lucide-react'
+import { Activity, Check, FileCode2, FolderOpen, Terminal as TerminalIcon } from 'lucide-react'
 import type { WidgetType } from './panelLayout'
 
 interface WidgetPickerProps {
@@ -25,19 +25,19 @@ const AVAILABLE_WIDGETS: Array<{
 
 // Ideas for future per-cluster widgets, based on what HPC-specific monitoring stacks (Slurm-web,
 // Grafana Slurm dashboards, XDMoD) surface that Gate-H doesn't yet - shown disabled here so the
-// picker doubles as a visible roadmap, not just a control. None of these exist yet: each needs a
-// real backend (either a scheduler command over the existing SSH session, or its own API). The job
-// queue, node health and storage quota shipped as sections of the Status widget instead.
+// picker doubles as a visible roadmap, not just a control. None of these exist yet - see
+// docs/HPC_ORCHESTRATION.md. The job queue, node health, job history, GPU usage and storage quota
+// shipped as sections of the Status widget instead.
 const ROADMAP_WIDGETS: Array<{ label: string; description: string; icon: typeof TerminalIcon }> = [
   {
-    label: 'GPU usage',
-    description: 'Per-node GPU utilization, memory, and temperature',
-    icon: Cpu
+    label: 'File transfer',
+    description: 'Browse, upload and download over the existing SSH connection (SFTP)',
+    icon: FolderOpen
   },
   {
-    label: 'Job history',
-    description: 'Completed job accounting - runtime, exit code (sacct)',
-    icon: ClipboardList
+    label: 'Job templates',
+    description: 'Saved batch scripts, submitted with sbatch after you confirm',
+    icon: FileCode2
   }
 ]
 

@@ -42,7 +42,9 @@ const api: GateHApi = {
       ipcRenderer.invoke('grafana:setPanelEmbedHeight', clusterId, dashboardUid, height),
     setPanelWidths: (clusterId: string, dashboardUid: string, widths: Record<number, number>) =>
       ipcRenderer.invoke('grafana:setPanelWidths', clusterId, dashboardUid, widths),
-    prepareEmbed: (clusterId: string) => ipcRenderer.invoke('grafana:prepareEmbed', clusterId)
+    prepareEmbed: (clusterId: string) => ipcRenderer.invoke('grafana:prepareEmbed', clusterId),
+    gpuUsage: (clusterId: string, nodelists: string[]) =>
+      ipcRenderer.invoke('grafana:gpuUsage', clusterId, nodelists)
   },
   jira: {
     list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),
@@ -100,7 +102,9 @@ const api: GateHApi = {
     arrayTasks: (clusterId: string, arrayJobId: string) =>
       ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId),
     history: (clusterId: string, days: number) =>
-      ipcRenderer.invoke('scheduler:history', clusterId, days)
+      ipcRenderer.invoke('scheduler:history', clusterId, days),
+    sampleGpus: (clusterId: string, jobId: string, nodes: number) =>
+      ipcRenderer.invoke('scheduler:sampleGpus', clusterId, jobId, nodes)
   },
   storage: {
     usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)

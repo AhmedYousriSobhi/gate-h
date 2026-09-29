@@ -3,6 +3,7 @@ import { addNotification } from '../notifications/store'
 import { hasLiveConnection, NoSessionError, runOnCluster } from './exec'
 import { describeChanges, finishedJobs, type FinalStates } from './changes'
 import { clearRecent, reuseRecent } from './reuse'
+import { nvidiaSmiCommand, parseNvidiaSmi } from './gpu'
 import {
   arrayTasksCommand,
   classifyFailure,
@@ -18,6 +19,7 @@ import {
 import {
   MIN_SCHEDULER_INTERVAL_SEC,
   type ClusterSummary,
+  type GpuSample,
   type SchedulerConfig,
   type SchedulerSnapshot,
   type SlurmHistoryJob,
@@ -323,6 +325,16 @@ export function fetchArrayTasks(clusterId: string, arrayJobId: string): Promise<
 export function fetchJobHistory(clusterId: string, days: number): Promise<SlurmHistoryJob[]> {
   return reuseRecent(`${clusterId}:history:${days}`, () =>
     runOnDemand(clusterId, () => historyCommand(days), parseHistory)
+  )
+}
+
+export function sampleJobGpus(
+  clusterId: string,
+  jobId: string,
+  nodes: number
+): Promise<GpuSample[]> {
+  return reuseRecent(`${clusterId}:gpus:${jobId}`, () =>
+    runOnDemand(clusterId, () => nvidiaSmiCommand(jobId, nodes), parseNvidiaSmi)
   )
 }
 

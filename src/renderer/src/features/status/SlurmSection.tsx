@@ -6,6 +6,7 @@ import {
   type SchedulerSnapshot,
   type SlurmJob
 } from '../../../../shared/types'
+import GpuUsage from './GpuUsage'
 import SlurmHistory from './SlurmHistory'
 import { shortTime, stateClass } from './slurmState'
 
@@ -234,6 +235,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
               cluster settings to see the rest.
             </p>
           )}
+
+          <GpuUsage cluster={cluster} snapshot={snapshot} />
 
           <h3 className="slurm-subheading">Nodes</h3>
           {snapshot.partitions.length === 0 ? (
