@@ -6,6 +6,18 @@
 //     optional Teleport lab run);
 //   - scripts/teleport-sessions.checks.ts: the Teleport session monitor, against a fake `tsh`, a
 //     scratch HOME, and stubbed cluster/notification stores.
+//   - scripts/slurm.checks.ts: the Slurm command builders and output parsers;
+//   - scripts/scheduler-monitor.checks.ts: when the scheduler monitor polls, against a fake
+//     command runner and a stubbed cluster store;
+//   - scripts/scheduler-exec.checks.ts: the scheduler command runner's limits and queueing,
+//     against a fake ssh2 client and a local `bash` standing in for `tsh ssh`;
+//   - scripts/storage.checks.ts: the storage usage command, run in a local bash, and the
+//     lfs/mmlsquota parsers;
+//   - scripts/gpu.checks.ts: hostlist expansion, the nvidia-smi sampler, and the Grafana DCGM
+//     query and its response parsing;
+//   - scripts/sftp.checks.ts: file listing and transfers over a fake ssh2 SFTP channel;
+//   - scripts/submit.checks.ts: template placeholders, and sbatch/scancel only after the native
+//     confirmation, with a stubbed dialog, cluster store and command runner.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -56,6 +68,135 @@ const stubStores = {
   }
 }
 
+// The scheduler monitor reads clusters, runs commands through ./exec (which needs a live SSH
+// session) and raises notifications; the checks supply all three through globals instead.
+const stubScheduler = {
+  name: 'stub-scheduler',
+  setup(b) {
+    b.onResolve({ filter: /^(\.\.\/clusters|\.\/exec|\.\.\/notifications\/store)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-scheduler'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-scheduler' }, () => ({
+      contents:
+        'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null, ' +
+        'listClusters: () => Object.values(globalThis.__clusters) }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /exec$/, namespace: 'stub-scheduler' }, () => ({
+      contents:
+        'class NoSessionError extends Error {}\n' +
+        'module.exports = { NoSessionError, ' +
+        'hasLiveConnection: (id) => globalThis.__live.has(id), ' +
+        'runOnCluster: (c, cmd) => globalThis.__run(c, cmd, NoSessionError) }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /store$/, namespace: 'stub-scheduler' }, () => ({
+      contents: 'module.exports = { addNotification: (n) => globalThis.__notifications.push(n) }',
+      loader: 'js'
+    }))
+  }
+}
+
+// The command runner looks up live sessions and Teleport state; the checks supply both, and
+// run "Teleport" commands with a local bash instead of teleport.sh.
+const stubExecDeps = {
+  name: 'stub-exec-deps',
+  setup(b) {
+    b.onResolve(
+      { filter: /^\.\.\/(ssh\/manager|teleport\/sessionState|teleport\/session)$/ },
+      (args) => ({
+        path: args.path,
+        namespace: 'stub-exec'
+      })
+    )
+    b.onLoad({ filter: /manager$/, namespace: 'stub-exec' }, () => ({
+      contents: 'module.exports = { getLiveClient: (id) => globalThis.__clients[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /sessionState$/, namespace: 'stub-exec' }, () => ({
+      contents: 'module.exports = { getTeleportSessions: () => globalThis.__teleport }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /session$/, namespace: 'stub-exec' }, () => ({
+      contents:
+        'module.exports = { EXIT_NO_SESSION: 4, ' +
+        "teleportExecCommand: (_c, command) => ({ file: 'bash', args: ['-c', command] }) }",
+      loader: 'js'
+    }))
+  }
+}
+
+// Storage usage reads the cluster store and runs its command through the scheduler runner; the
+// checks supply clusters through a global and run the command in a local bash.
+const stubStorageDeps = {
+  name: 'stub-storage-deps',
+  setup(b) {
+    b.onResolve({ filter: /^\.\.\/(clusters|scheduler\/exec)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-storage'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-storage' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /exec$/, namespace: 'stub-storage' }, () => ({
+      contents:
+        "const { execFileSync } = require('child_process')\n" +
+        'module.exports = { runOnCluster: async (_c, command) => { globalThis.__commands.push(command); ' +
+        "return { exitCode: 0, stdout: execFileSync('bash', ['-c', command], { encoding: 'utf8' }), stderr: '' } } }",
+      loader: 'js'
+    }))
+  }
+}
+
+// The SFTP module looks up clusters and their live connection; the checks supply both.
+const stubSftpDeps = {
+  name: 'stub-sftp-deps',
+  setup(b) {
+    b.onResolve({ filter: /^\.\.\/(clusters|ssh\/manager)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-sftp'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-sftp' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /manager$/, namespace: 'stub-sftp' }, () => ({
+      contents: 'module.exports = { getLiveClient: (id) => globalThis.__clients[id] ?? null }',
+      loader: 'js'
+    }))
+  }
+}
+
+// Submitting asks for confirmation in a native dialog and runs sbatch/scancel through the
+// scheduler runner; the checks stub electron's dialog, the cluster store and the runner.
+const stubSubmitDeps = {
+  name: 'stub-submit-deps',
+  setup(b) {
+    b.onResolve({ filter: /^(electron|\.\.\/clusters|\.\/exec)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-submit'
+    }))
+    b.onLoad({ filter: /electron$/, namespace: 'stub-submit' }, () => ({
+      contents:
+        'module.exports = { BrowserWindow: { fromWebContents: () => null }, dialog: { ' +
+        'showMessageBox: async (o) => { globalThis.__dialogs.push(o); return { response: globalThis.__answer } } } }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-submit' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /exec$/, namespace: 'stub-submit' }, () => ({
+      contents:
+        'module.exports = { runOnCluster: async (c, command, stdin) => { ' +
+        'globalThis.__runs.push({ command, stdin }); return globalThis.__result } }',
+      loader: 'js'
+    }))
+  }
+}
+
 try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
@@ -74,7 +215,14 @@ try {
       entry: 'teleport-sessions.checks.ts',
       plugins: [assetPath, stubStores],
       env: { HOME: home, PATH: `${bin}:${process.env.PATH}` }
-    }
+    },
+    { entry: 'slurm.checks.ts', plugins: [], env: {} },
+    { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} },
+    { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} },
+    { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} },
+    { entry: 'gpu.checks.ts', plugins: [], env: {} },
+    { entry: 'sftp.checks.ts', plugins: [stubSftpDeps], env: {} },
+    { entry: 'submit.checks.ts', plugins: [stubSubmitDeps], env: {} }
   ]
   let failed = false
   for (const job of jobs) {

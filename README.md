@@ -20,7 +20,7 @@
 
 ---
 
-**Jump to:** [🚀 Quick start](#-quick-start) · [Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) · [Features](#features) · [For developers](#for-developers) · [Documentation](#documentation)
+**Jump to:** [🚀 Quick start](#-quick-start) · [Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) · [Features](#features) · [Roadmap](#roadmap) · [For developers](#for-developers) · [Documentation](#documentation)
 
 ## 🚀 Quick start
 
@@ -168,16 +168,46 @@ connection attempts. Secrets are encrypted on disk.
 - 🛡️ **Teleport clusters.** For clusters behind a Teleport proxy, Gate-H checks your `tsh`
   session and connects with `tsh ssh`. If you need to log in, you do it right in the terminal.
 - 📊 **Grafana status.** Health checks plus live panels you choose, stacked or side by side.
+- 📋 **Slurm jobs and nodes.** Your jobs (or everyone's in the partitions you name), with state,
+  time used and why a pending job is waiting, plus each partition's node states and why nodes
+  were drained. Runs `squeue`/`sinfo` on the session you already have open, only while you're
+  looking at it. Your finished jobs from the last day or week, with exit codes, are one click
+  away.
+- 🎛️ **GPU usage.** Utilization, memory and temperature of every GPU your running jobs are on,
+  from your cluster's DCGM metrics in Grafana, or sampled with `nvidia-smi` inside a job when you
+  ask.
+- 📝 **Job templates.** Keep batch scripts with `{{placeholders}}`, fill them in, review the
+  result, and submit it with `sbatch`. Cancel your own jobs from the queue. Both ask you to confirm
+  first.
+- 📁 **File transfer.** Browse a cluster's files, and download or upload them with progress, over
+  the connection your terminal already has. Click the folder icon above the cluster's panes.
+- 💾 **Storage quota.** Home and scratch usage per path: the whole filesystem, and your own quota
+  on Lustre and GPFS, flagged when you're over the soft limit. Checked when you ask.
 - 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
 - 🧩 **Widgets side by side.** Show, hide, swap, stack and resize the terminal and status views.
   Your layout is remembered.
 - 🔔 **One notification feed.** Reachability changes, Jira activity and dropped sessions from
-  every cluster. Click one to jump to it.
+  every cluster, plus, if you turn it on, your Slurm jobs finishing or starting and nodes going
+  down. Click one to jump to it.
 - 🗂️ **Profiles and an overview.** Group clusters into profiles such as "Work" and "Research".
   The home screen shows every cluster in the current profile.
 - ⏸️ **Switch clusters without losing work.** Every cluster you open keeps its sessions connected
   in the background, quietly, until you close it. Or put a cluster in standby so it makes no
   connections at all.
+
+## Roadmap
+
+The HPC features are in: Slurm jobs and nodes, job history, notifications, GPU usage, storage
+quota, file transfer and job templates. They haven't yet been tried against real Slurm, Lustre,
+GPFS or DCGM installations, so feedback from real clusters is the next step. After that:
+
+- 🛡️ **File transfer on Teleport clusters**, through `tsh scp`.
+- 🧮 **PBS and LSF**, if someone needs them. Only Slurm is supported today.
+
+All of these features share the same rules: they never open a connection of their own, and never
+log in for you. They only poll while you're looking at them (or, if you turn on notifications,
+every few minutes for a cluster you have open), so they add almost no load to the cluster. Details:
+[docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 
 ## Preview
 
@@ -216,6 +246,32 @@ connection attempts. Secrets are encrypted on disk.
 </tr>
 </table>
 
+<p align="center">
+  <img src="docs/assets/screenshots/slurm-status.png" alt="Slurm section of a cluster's Status: job queue with an expanded job array, GPU usage cards, and node health" width="720"><br/>
+  <sub>A cluster's Slurm jobs, with a job array expanded, the GPUs its running jobs are on (from
+  DCGM metrics in Grafana), and each partition's node states.</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/job-templates.png" alt="Job templates dialog with a batch script and its placeholder fields" width="360"><br/>
+  <sub>Job templates: fill in the placeholders, review, and submit with sbatch</sub>
+</td>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/file-transfer.png" alt="Files dialog listing a remote home directory with transfers in progress" width="360"><br/>
+  <sub>Browse and transfer files over the terminal's connection</sub>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="center">
+  <img src="docs/assets/screenshots/storage-quota.png" alt="Job history and storage quota for home, Lustre scratch and GPFS project paths" width="720"><br/>
+  <sub>Job history from sacct, and storage usage with your Lustre and GPFS quotas</sub>
+</td>
+</tr>
+</table>
+
+
 ### Procedures
 
 <table>
@@ -245,6 +301,10 @@ connection attempts. Secrets are encrypted on disk.
 | I want to… | Do this |
 |---|---|
 | see all clusters at a glance | Open **Overview** at the top of the sidebar |
+| see my Slurm jobs and node states | Edit the cluster → tick **Slurm jobs and nodes**; they show in its Status. Click ▸ on a job array to list its tasks |
+| copy files to or from a cluster | Click the folder icon above its panes: open folders, **↓** to download, **Upload here** to upload |
+| submit a batch job | Click the code icon above the cluster's panes, pick or write a template, fill it in, **Review**, then **Submit** and confirm |
+| cancel one of my jobs | Click **×** on its row in the Slurm queue and confirm |
 | rearrange a cluster's widgets | Use the toolbar above them; the puzzle-piece icon shows or hides each one |
 | see what changed anywhere | Click the 🔔 bell; click an entry to jump to that cluster |
 | separate work and research clusters | Click the profile name at the top of the sidebar |
@@ -256,6 +316,7 @@ connection attempts. Secrets are encrypted on disk.
 | put a session beside, above or below another | Drag its tab or its header bar onto that edge of the other session; the highlighted half shows where it lands |
 | resize sessions shown together | Drag the border between them |
 | reorder tabs, or stack two into one view | Drag a tab onto the edge of another tab to reorder, or onto its middle to stack them |
+| widen or narrow the side list of sessions | Drag the line between the list and the sessions; double-click it to reset |
 | move tabs between the side and the top | Click **⋯** above the tabs → **Tabs position** |
 | rename, split, unstack or close a session | Right-click its tab or the session itself (or double-click the tab to rename) |
 | focus on one session in a stack for a while | Click **Maximize** in its header; **Restore** brings the layout back |
@@ -327,6 +388,7 @@ has the commands, the code map, the conventions and the known gotchas.
 | [docs/TELEPORT.md](docs/TELEPORT.md) | Teleport clusters: the session check, login, routing, and testing. |
 | [docs/AZURE.md](docs/AZURE.md) | Azure tunnels: how they stay alive, investigating drops, the script on its own, and testing. |
 | [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) | Jira setup, and keeping several clusters' tickets apart in one project. |
+| [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md) | Planned Slurm job queue, node health, GPU telemetry, file transfer and job submission: design and phases. |
 | [docs/STATUS.md](docs/STATUS.md) | What's shipped, how each feature was verified, known limitations, and the roadmap. |
 | [SPEC.md](SPEC.md) | The functional spec, written as requirements. |
 | [docs/ANALYSIS.md](docs/ANALYSIS.md) | Prior art (Open OnDemand, ColdFront/XDMoD, Slurm-web, …) and the reasons behind the design. |

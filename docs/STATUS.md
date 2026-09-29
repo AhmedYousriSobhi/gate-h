@@ -53,22 +53,35 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
    Vite dev server, opening it in a headless Chromium browser (Playwright), and exercising it
    against a mocked `window.api` (the same interface the real Electron preload bridge exposes)
    with realistic sample data. This is how the screenshots and GIFs in the README were produced.
+   The HPC orchestration screenshots (`slurm-status.png`, `storage-quota.png`,
+   `file-transfer.png`, `job-templates.png`) were made the same way. The Status panel and the
+   dialogs were rendered alone in headless Chromium at 1440×900, with sample Slurm, DCGM, Lustre
+   and GPFS data.
 3. **Not yet verified against real infrastructure**: an actual SSH server, a real Grafana
    instance, or a real Jira instance. If you have access to any of those, running `npm run dev`
    on a normal desktop and pointing Gate-H at them is the natural next verification step.
 
 ## Known limitations / near-term roadmap
 
-- **Planned per-cluster widgets** — the widget picker (puzzle-piece icon on a cluster's panel)
-  already lists these as disabled "coming soon" entries; none exist yet, and each needs a real
-  backend (either a scheduler client run over the existing SSH session, or its own API), not just
-  a UI addition. Roughly in order of expected value, based on what HPC-specific monitoring stacks
-  (Slurm-web, Grafana's Slurm dashboards, XDMoD) surface that Gate-H doesn't yet:
-  - **Job queue** — pending/running jobs and wait times (`squeue`/`qstat`/`bjobs`).
-  - **GPU usage** — per-node GPU utilization, memory, and temperature.
-  - **Storage quota** — home/scratch usage vs. quota (`lfs quota`, `df`, GPFS `mmlsquota`).
-  - **Node health** — partition/node up, down, and drained state (`sinfo`/`pbsnodes`).
-  - **Job history** — completed job accounting, runtime, exit code (`sacct`).
+- **HPC orchestration: built, not yet run against real infrastructure.** The design is in
+  [HPC_ORCHESTRATION.md](./HPC_ORCHESTRATION.md) and the requirements in
+  [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned). The widget picker's old
+  "coming soon" entries are gone: everything they previewed has shipped.
+  Phases, each its own issue, branch and PR (1 to 3 shipped together):
+
+  | # | Feature | Status | Approach |
+  |---|---|---|---|
+  | 1 | Scheduler config + safe command runner | ✅ Done | `SchedulerConfig` per cluster; fixed commands on the terminal's existing `ssh2` connection (`client.exec()`), or a non-interactive `tsh ssh` for Teleport; timeout, output cap, one command in flight per cluster; unit-tested parsers |
+  | 2 | **Job queue** (Slurm) | ✅ Done | Slurm section of the Status widget (`features/status/SlurmSection.tsx`). One chained `squeue`+`sinfo` run per refresh; polls only while the cluster is selected and Status is showing (60 s default, 30 s floor, backoff to 5 min); manual refresh on Teleport by default; job arrays collapsed, expandable on demand. Verified by `scripts/slurm.checks.ts` and `scripts/scheduler-monitor.checks.ts`; **not yet run against a real Slurm cluster** |
+  | 3 | **Node health** (Slurm) | ✅ Done | `sinfo` per-partition state counts plus `sinfo --list-reasons` for down/drained nodes, from the same poll |
+  | 4 | **GPU usage** | ✅ Done | Per-GPU cards in the Slurm section for running jobs' nodes. Grafana `/api/ds/query` on DCGM exporter metrics with the existing token (new optional Grafana settings: datasource UID, node label), or an on-demand `srun --overlap --whole … nvidia-smi` sample inside the user's own job. Covered by `gpu.checks.ts` (hostlists, parsers, an HTTP round trip to a stand-in Grafana); **not yet run against real DCGM metrics or `srun`** |
+  | 5 | **File transfer** (SFTP) | ✅ Done | *Files* dialog from the cluster panel's toolbar (`features/files/FilesDialog.tsx`): browse, download, upload with progress. One `client.sftp()` channel per existing connection; local paths only from native dialogs in main; confirms before overwriting. Not for Teleport clusters yet (`tsh scp`). Covered by `sftp.checks.ts` against a fake SFTP channel; **not yet run against a real SFTP server** |
+  | 6 | **Job templates + submit/cancel** | ✅ Done | *Job templates* dialog (`features/templates/`): per-profile `job_templates` table, `{{name:default}}` placeholders, a review of the rendered script, then `sbatch --parsable` with the script on stdin (works on Teleport too). A cancel button on the user's own jobs runs `scancel --user="$(id -un)"`. Both are confirmed in a native dialog by the main process. Covered by `submit.checks.ts` and `scheduler-exec.checks.ts` (stdin over both paths) |
+  | — | **Slurm notifications** | ✅ Done | Opt-in per cluster; snapshot diffs (`scheduler/changes.ts`) plus one `sacct` for final states; background check every 5 min on the open cluster's existing connection, never on Teleport. Covered by `slurm.checks.ts` and `scheduler-monitor.checks.ts` |
+  | — | **Job history** | ✅ Done | `sacct` for the user's own allocations over 24 h or 7 days, on request only (`SlurmHistory.tsx`); reuses the phase 1 runner |
+  | — | **Storage quota** | ✅ Done | Per-cluster `storage.paths`; on request, one command per refresh: `df` per path plus `lfs quota` (Lustre) or `mmlsquota -Y` (GPFS), picked by `stat -f`. Reuses the phase 1 runner. Covered by `storage.checks.ts`, which runs the real command in a local bash; the Lustre/GPFS parsers are checked against recorded output only |
+  | — | PBS/LSF | 💡 Idea | `SchedulerConfig.kind` leaves room; not designed |
+
 - **No drag-to-resize between panes** — the side-by-side/stacked split is a fixed 50/50 today
   (`src/renderer/src/features/shell/shell.css`, `.panel-pane`); a draggable divider is a natural
   follow-up once there's demand for uneven splits.
@@ -80,14 +93,11 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 - **Can't move a cluster between profiles** — a cluster is assigned to whichever profile was
   active when it was created, and there's no "move to another profile" action yet; the only way is
   to delete it and re-add it under the target profile (re-entering its SSH/Grafana/Jira details).
-- **No scheduler-level event detection (e.g. Slurm node drains)** — deliberately not implemented
-  yet, rather than faked. The notification bell's signals (`src/main/monitor/clusterMonitor.ts`,
-  `jiraMonitor.ts`, `src/main/ssh/manager.ts`) are all things H-Gate can observe generically across
-  any cluster: is the SSH port up, did a Jira ticket change, did an open session drop. Detecting
-  "node X went into drain state" would mean H-Gate itself periodically running a non-interactive
-  command like `sinfo`/`pbsnodes`/`bhosts` over SSH and parsing scheduler-specific output - a
-  real, separate feature (and one that varies by scheduler: Slurm/PBS/LSF each report this
-  differently) rather than a small addition to the existing monitors.
+- **Scheduler event detection is Slurm-only and opt-in**. Job finished/started and node
+  down/drained notifications exist for Slurm (see
+  [HPC_ORCHESTRATION.md §5.1](./HPC_ORCHESTRATION.md#51-notifications)), but not for PBS/LSF. They
+  only fire while the cluster is open, since the background check reuses its terminal's
+  connection rather than opening one, and never on Teleport clusters.
 - **Reachability is an SSH-banner probe, not a real health check** — `src/main/monitor/reachability.ts`
   checks every 60 seconds (plus an on-refocus catch-up, throttled to at most once per 15s) whether
   the SSH port opens *and* actually speaks SSH (see the "fixed" entry in `CHANGELOG.md` for why

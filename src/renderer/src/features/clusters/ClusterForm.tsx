@@ -1,12 +1,28 @@
 import { useState } from 'react'
-import { BarChart3, Cloud, KeyRound, ShieldCheck, Ticket } from 'lucide-react'
+import {
+  BarChart3,
+  Cloud,
+  HardDrive,
+  KeyRound,
+  ListChecks,
+  ShieldCheck,
+  Ticket
+} from 'lucide-react'
 import type {
   AzureSubscription,
   AzureTunnelMode,
   ClusterInput,
   ClusterSummary,
   JiraAuthMode,
+  SchedulerScope,
   SshAuthMethod
+} from '../../../../shared/types'
+import {
+  DEFAULT_SCHEDULER_INTERVAL_SEC,
+  MIN_SCHEDULER_INTERVAL_SEC,
+  PROMETHEUS_LABEL_PATTERN,
+  SLURM_PARTITION_PATTERN,
+  STORAGE_PATH_PATTERN
 } from '../../../../shared/types'
 import { toClusterSlug } from '../../../../shared/clusterSlug'
 import './clusters.css'
@@ -37,6 +53,8 @@ interface FormState {
   grafanaBaseUrl: string
   grafanaDashboardUids: string
   grafanaApiToken: string
+  grafanaGpuDatasourceUid: string
+  grafanaGpuHostLabel: string
   useJira: boolean
   jiraBaseUrl: string
   jiraAuthMode: JiraAuthMode
@@ -59,6 +77,14 @@ interface FormState {
   teleportCluster: string
   teleportUser: string
   teleportAuthConnector: string
+  useScheduler: boolean
+  schedulerScope: SchedulerScope
+  schedulerPartitions: string
+  schedulerInterval: string
+  schedulerAutoRefresh: boolean
+  schedulerNotify: boolean
+  useStorage: boolean
+  storagePaths: string
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -82,6 +108,8 @@ function toFormState(c?: ClusterSummary): FormState {
     grafanaBaseUrl: c?.grafana?.baseUrl ?? '',
     grafanaDashboardUids: c?.grafana?.dashboardUids.join(', ') ?? '',
     grafanaApiToken: '',
+    grafanaGpuDatasourceUid: c?.grafana?.gpuDatasourceUid ?? '',
+    grafanaGpuHostLabel: c?.grafana?.gpuHostLabel ?? '',
     useJira: Boolean(c?.jira),
     jiraBaseUrl: c?.jira?.baseUrl ?? '',
     jiraAuthMode: c?.jira?.authMode ?? 'cloud',
@@ -103,8 +131,50 @@ function toFormState(c?: ClusterSummary): FormState {
     teleportProxy: c?.teleport?.proxy ?? '',
     teleportCluster: c?.teleport?.cluster ?? '',
     teleportUser: c?.teleport?.user ?? '',
-    teleportAuthConnector: c?.teleport?.authConnector ?? ''
+    teleportAuthConnector: c?.teleport?.authConnector ?? '',
+    useScheduler: Boolean(c?.scheduler),
+    schedulerScope: c?.scheduler?.scope ?? 'mine',
+    schedulerPartitions: c?.scheduler?.partitions.join(', ') ?? '',
+    schedulerInterval: String(c?.scheduler?.intervalSec ?? DEFAULT_SCHEDULER_INTERVAL_SEC),
+    schedulerAutoRefresh: c?.scheduler?.autoRefresh ?? !c?.teleport,
+    schedulerNotify: c?.scheduler?.notify ?? false,
+    useStorage: Boolean(c?.storage),
+    storagePaths: c?.storage?.paths.join(', ') ?? '~'
   }
+}
+
+/** Returns why the GPU metrics settings can't be saved, or null if they can. */
+function gpuError(form: FormState): string | null {
+  const label = form.grafanaGpuHostLabel.trim()
+  if (!form.useGrafana || !label || PROMETHEUS_LABEL_PATTERN.test(label)) return null
+  return `GPU host label must be a Prometheus label name ("${label}").`
+}
+
+/** Returns why the storage paths can't be saved, or null if they can. */
+function storageError(form: FormState): string | null {
+  if (!form.useStorage) return null
+  const paths = splitList(form.storagePaths)
+  if (paths.length === 0) return 'Storage quota needs at least one path.'
+  const bad = paths.find((path) => !STORAGE_PATH_PATTERN.test(path.replace(/\$(USER|HOME)/g, '')))
+  if (bad)
+    return `Storage paths may only use letters, digits, _ . / ~ - and $USER/$HOME ("${bad}").`
+  return null
+}
+
+/** Returns why the Slurm settings can't be saved, or null if they can. */
+function schedulerError(form: FormState): string | null {
+  if (!form.useScheduler) return null
+  const partitions = splitList(form.schedulerPartitions)
+  const bad = partitions.find((name) => !SLURM_PARTITION_PATTERN.test(name))
+  if (bad) return `Partition names may only use letters, digits, _ . and - ("${bad}").`
+  if (form.schedulerScope === 'partitions' && partitions.length === 0) {
+    return "Showing everyone's jobs needs at least one partition."
+  }
+  const interval = Number(form.schedulerInterval)
+  if (!Number.isInteger(interval) || interval < MIN_SCHEDULER_INTERVAL_SEC) {
+    return `Slurm refresh interval must be a whole number of seconds, at least ${MIN_SCHEDULER_INTERVAL_SEC}.`
+  }
+  return null
 }
 
 /** Returns why the Teleport settings can't be saved, or null if they can. */
@@ -187,7 +257,12 @@ export default function ClusterForm({
       setError('Name, host, and username are required.')
       return
     }
-    const tunnelError = teleportError(form) ?? azureTunnelError(form)
+    const tunnelError =
+      teleportError(form) ??
+      azureTunnelError(form) ??
+      schedulerError(form) ??
+      storageError(form) ??
+      gpuError(form)
     if (tunnelError) {
       setError(tunnelError)
       return
@@ -220,7 +295,9 @@ export default function ClusterForm({
       grafana: form.useGrafana
         ? {
             baseUrl: form.grafanaBaseUrl.trim(),
-            dashboardUids: splitList(form.grafanaDashboardUids)
+            dashboardUids: splitList(form.grafanaDashboardUids),
+            gpuDatasourceUid: form.grafanaGpuDatasourceUid.trim() || undefined,
+            gpuHostLabel: form.grafanaGpuHostLabel.trim() || undefined
           }
         : null,
       grafanaApiToken: form.grafanaApiToken.trim() || undefined,
@@ -256,7 +333,18 @@ export default function ClusterForm({
             user: form.teleportUser.trim() || undefined,
             authConnector: form.teleportAuthConnector.trim() || undefined
           }
-        : null
+        : null,
+      scheduler: form.useScheduler
+        ? {
+            kind: 'slurm',
+            scope: form.schedulerScope,
+            partitions: splitList(form.schedulerPartitions),
+            intervalSec: Number(form.schedulerInterval),
+            autoRefresh: form.schedulerAutoRefresh,
+            notify: form.schedulerNotify && !form.useTeleport
+          }
+        : null,
+      storage: form.useStorage ? { paths: splitList(form.storagePaths) } : null
     }
 
     setSaving(true)
@@ -670,6 +758,162 @@ export default function ClusterForm({
                     placeholder={initial?.hasGrafanaToken ? 'Unchanged - leave blank to keep' : ''}
                   />
                 </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="grafanaGpuDatasourceUid">
+                      GPU metrics datasource UID (optional)
+                    </label>
+                    <input
+                      id="grafanaGpuDatasourceUid"
+                      placeholder="Prometheus datasource with DCGM metrics"
+                      value={form.grafanaGpuDatasourceUid}
+                      onChange={(e) => set('grafanaGpuDatasourceUid', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="grafanaGpuHostLabel">Node label</label>
+                    <input
+                      id="grafanaGpuHostLabel"
+                      placeholder="Hostname"
+                      value={form.grafanaGpuHostLabel}
+                      onChange={(e) => set('grafanaGpuHostLabel', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <p className="hint">
+                  With a datasource set, the Slurm section shows GPU utilization, memory and
+                  temperature for your running jobs&apos; nodes from NVIDIA&apos;s DCGM exporter
+                  metrics. The node label must hold the node name as Slurm prints it.
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="form-section">
+            <label className="form-field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.useScheduler}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    useScheduler: e.target.checked,
+                    // Each run on a Teleport cluster is an audited session - opt in explicitly.
+                    schedulerAutoRefresh: e.target.checked
+                      ? !prev.useTeleport
+                      : prev.schedulerAutoRefresh
+                  }))
+                }
+              />
+              <h4 style={{ margin: 0 }}>
+                <ListChecks size={13} strokeWidth={2} />
+                Slurm jobs and nodes
+              </h4>
+            </label>
+            {form.useScheduler && (
+              <>
+                <p className="hint">
+                  Runs squeue and sinfo on the terminal&apos;s open session - never a new login -
+                  and only while this cluster&apos;s Status is showing. See
+                  docs/HPC_ORCHESTRATION.md.
+                </p>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="schedulerScope">Show</label>
+                    <select
+                      id="schedulerScope"
+                      value={form.schedulerScope}
+                      onChange={(e) => set('schedulerScope', e.target.value as SchedulerScope)}
+                    >
+                      <option value="mine">My jobs</option>
+                      <option value="partitions">Everyone&apos;s jobs in these partitions</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="schedulerPartitions">
+                      Partitions{form.schedulerScope === 'mine' ? ' (optional)' : ''}
+                    </label>
+                    <input
+                      id="schedulerPartitions"
+                      placeholder="gpu, cpu"
+                      value={form.schedulerPartitions}
+                      onChange={(e) => set('schedulerPartitions', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="schedulerInterval">Refresh every (seconds)</label>
+                    <input
+                      id="schedulerInterval"
+                      type="number"
+                      min={MIN_SCHEDULER_INTERVAL_SEC}
+                      value={form.schedulerInterval}
+                      onChange={(e) => set('schedulerInterval', e.target.value)}
+                    />
+                  </div>
+                  <label className="form-field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={form.schedulerAutoRefresh}
+                      onChange={(e) => set('schedulerAutoRefresh', e.target.checked)}
+                    />
+                    Refresh automatically
+                  </label>
+                </div>
+                {!form.useTeleport && (
+                  <label className="form-field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={form.schedulerNotify}
+                      onChange={(e) => set('schedulerNotify', e.target.checked)}
+                    />
+                    Notify me when my jobs finish or start, and when nodes go down
+                  </label>
+                )}
+                {!form.useTeleport && form.schedulerNotify && (
+                  <p className="hint">
+                    While this cluster is open in the background, Gate-H keeps checking every 5
+                    minutes on its terminal&apos;s connection. Closed or in standby, nothing runs.
+                  </p>
+                )}
+                {form.useTeleport && form.schedulerAutoRefresh && (
+                  <p className="hint">
+                    Every refresh is a new Teleport session in your site&apos;s audit log.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="form-section">
+            <label className="form-field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.useStorage}
+                onChange={(e) => set('useStorage', e.target.checked)}
+              />
+              <h4 style={{ margin: 0 }}>
+                <HardDrive size={13} strokeWidth={2} />
+                Storage quota
+              </h4>
+            </label>
+            {form.useStorage && (
+              <>
+                <div className="form-field">
+                  <label htmlFor="storagePaths">Paths (comma separated)</label>
+                  <input
+                    id="storagePaths"
+                    placeholder="~, /scratch/$USER"
+                    value={form.storagePaths}
+                    onChange={(e) => set('storagePaths', e.target.value)}
+                  />
+                </div>
+                <p className="hint">
+                  Checked on request from the cluster&apos;s Status, on the terminal&apos;s open
+                  session: df for each filesystem, plus your quota on Lustre (lfs quota) and GPFS
+                  (mmlsquota).
+                </p>
               </>
             )}
           </div>

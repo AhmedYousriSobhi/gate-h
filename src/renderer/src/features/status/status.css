@@ -304,3 +304,194 @@
   outline: none;
   border-color: var(--color-accent);
 }
+
+.slurm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.slurm-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.slurm-dim {
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+
+.slurm-error {
+  color: var(--color-offline);
+  font-size: 12px;
+}
+
+.slurm-state-failed {
+  background-color: rgba(240, 85, 95, 0.12);
+  color: var(--color-offline);
+}
+
+.slurm-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.slurm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.slurm-table th {
+  text-align: left;
+  font-weight: 560;
+  color: var(--color-text-2);
+  background-color: var(--color-surface);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+}
+
+.slurm-table td {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-1);
+  white-space: nowrap;
+}
+
+.slurm-subrow td,
+.slurm-table tr:has(.slurm-indent) td {
+  background-color: var(--color-surface);
+}
+
+.slurm-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.slurm-table td.slurm-wrap {
+  white-space: normal;
+  word-break: break-all;
+  min-width: 140px;
+}
+
+.slurm-block {
+  display: block;
+}
+
+.slurm-table td.slurm-action {
+  padding: 0 var(--space-2);
+  width: 32px;
+}
+
+.slurm-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slurm-expander {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-text-2);
+  cursor: pointer;
+}
+
+.slurm-indent {
+  display: inline-block;
+  width: 16px;
+}
+
+.slurm-grow {
+  flex: 1;
+}
+
+.slurm-subheading {
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--color-text-2);
+  margin-top: var(--space-2);
+}
+
+.slurm-spin {
+  animation: slurm-spin 1s linear infinite;
+}
+
+@keyframes slurm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.storage-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background-color: var(--color-surface);
+}
+
+.storage-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.storage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.storage-meter-label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-2);
+}
+
+.storage-meter-value {
+  white-space: nowrap;
+}
+
+.storage-bar {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface-active);
+  overflow: hidden;
+}
+
+.storage-bar-fill {
+  height: 100%;
+  background-color: var(--color-accent);
+}
+
+.storage-bar-fill.storage-high {
+  background-color: var(--color-warning);
+}
+
+.storage-bar-fill.storage-full {
+  background-color: var(--color-offline);
+}
+
+.gpu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+
+.gpu-sample {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
