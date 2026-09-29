@@ -173,6 +173,8 @@ connection attempts. Secrets are encrypted on disk.
   were drained. Runs `squeue`/`sinfo` on the session you already have open, only while you're
   looking at it. Your finished jobs from the last day or week, with exit codes, are one click
   away.
+- 💾 **Storage quota.** Home and scratch usage per path: the whole filesystem, and your own quota
+  on Lustre and GPFS, flagged when you're over the soft limit. Checked when you ask.
 - 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
 - 🧩 **Widgets side by side.** Show, hide, swap, stack and resize the terminal and status views.
   Your layout is remembered.

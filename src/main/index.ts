@@ -18,6 +18,7 @@ import { registerTeleportIpcHandlers } from './ipc/teleport'
 import { startTeleportSessionMonitor, stopTeleportSessionMonitor } from './teleport/sessionState'
 import { closeAllSessions } from './ssh/manager'
 import { registerSchedulerIpcHandlers } from './ipc/scheduler'
+import { registerStorageIpcHandlers } from './ipc/storage'
 import {
   setSchedulerBroadcaster,
   setSchedulerWindowFocused,
@@ -142,6 +143,7 @@ app.whenReady().then(() => {
   registerAzureIpcHandlers()
   registerTeleportIpcHandlers()
   registerSchedulerIpcHandlers()
+  registerStorageIpcHandlers()
 
   createWindow()
 

@@ -1,12 +1,5 @@
 import { useEffect, useRef } from 'react'
-import {
-  Activity,
-  Check,
-  Cpu,
-  HardDrive,
-  ClipboardList,
-  Terminal as TerminalIcon
-} from 'lucide-react'
+import { Activity, Check, Cpu, ClipboardList, Terminal as TerminalIcon } from 'lucide-react'
 import type { WidgetType } from './panelLayout'
 
 interface WidgetPickerProps {
@@ -25,7 +18,7 @@ const AVAILABLE_WIDGETS: Array<{
   {
     type: 'status',
     label: 'Status',
-    description: 'Grafana health/dashboards, Slurm jobs and nodes, Jira issues',
+    description: 'Grafana, Slurm jobs and nodes, storage quota, Jira issues',
     icon: Activity
   }
 ]
@@ -34,17 +27,12 @@ const AVAILABLE_WIDGETS: Array<{
 // Grafana Slurm dashboards, XDMoD) surface that Gate-H doesn't yet - shown disabled here so the
 // picker doubles as a visible roadmap, not just a control. None of these exist yet: each needs a
 // real backend (either a scheduler command over the existing SSH session, or its own API). The job
-// queue and node health shipped as the Status widget's Slurm section instead.
+// queue, node health and storage quota shipped as sections of the Status widget instead.
 const ROADMAP_WIDGETS: Array<{ label: string; description: string; icon: typeof TerminalIcon }> = [
   {
     label: 'GPU usage',
     description: 'Per-node GPU utilization, memory, and temperature',
     icon: Cpu
-  },
-  {
-    label: 'Storage quota',
-    description: 'Home/scratch usage vs. quota (lfs quota, df)',
-    icon: HardDrive
   },
   {
     label: 'Job history',

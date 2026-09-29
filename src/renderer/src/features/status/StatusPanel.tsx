@@ -1,8 +1,9 @@
-import { BarChart3, ListChecks, Ticket } from 'lucide-react'
+import { BarChart3, HardDrive, ListChecks, Ticket } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import GrafanaStatusSection from './GrafanaStatusSection'
 import JiraSection from './JiraSection'
 import SlurmSection from './SlurmSection'
+import StorageSection from './StorageSection'
 import './status.css'
 
 interface StatusPanelProps {
@@ -32,6 +33,13 @@ export default function StatusPanel({
           Slurm
         </h2>
         <SlurmSection cluster={cluster} active={active} />
+      </section>
+      <section>
+        <h2>
+          <HardDrive size={15} strokeWidth={2} />
+          Storage
+        </h2>
+        <StorageSection cluster={cluster} />
       </section>
       <section>
         <h2>
