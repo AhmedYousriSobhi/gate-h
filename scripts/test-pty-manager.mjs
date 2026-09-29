@@ -15,7 +15,9 @@
 //     lfs/mmlsquota parsers;
 //   - scripts/gpu.checks.ts: hostlist expansion, the nvidia-smi sampler, and the Grafana DCGM
 //     query and its response parsing;
-//   - scripts/sftp.checks.ts: file listing and transfers over a fake ssh2 SFTP channel.
+//   - scripts/sftp.checks.ts: file listing and transfers over a fake ssh2 SFTP channel;
+//   - scripts/submit.checks.ts: template placeholders, and sbatch/scancel only after the native
+//     confirmation, with a stubbed dialog, cluster store and command runner.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -167,6 +169,34 @@ const stubSftpDeps = {
   }
 }
 
+// Submitting asks for confirmation in a native dialog and runs sbatch/scancel through the
+// scheduler runner; the checks stub electron's dialog, the cluster store and the runner.
+const stubSubmitDeps = {
+  name: 'stub-submit-deps',
+  setup(b) {
+    b.onResolve({ filter: /^(electron|\.\.\/clusters|\.\/exec)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-submit'
+    }))
+    b.onLoad({ filter: /electron$/, namespace: 'stub-submit' }, () => ({
+      contents:
+        'module.exports = { BrowserWindow: { fromWebContents: () => null }, dialog: { ' +
+        'showMessageBox: async (o) => { globalThis.__dialogs.push(o); return { response: globalThis.__answer } } } }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-submit' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /exec$/, namespace: 'stub-submit' }, () => ({
+      contents:
+        'module.exports = { runOnCluster: async (c, command, stdin) => { ' +
+        'globalThis.__runs.push({ command, stdin }); return globalThis.__result } }',
+      loader: 'js'
+    }))
+  }
+}
+
 try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
@@ -191,7 +221,8 @@ try {
     { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} },
     { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} },
     { entry: 'gpu.checks.ts', plugins: [], env: {} },
-    { entry: 'sftp.checks.ts', plugins: [stubSftpDeps], env: {} }
+    { entry: 'sftp.checks.ts', plugins: [stubSftpDeps], env: {} },
+    { entry: 'submit.checks.ts', plugins: [stubSubmitDeps], env: {} }
   ]
   let failed = false
   for (const job of jobs) {

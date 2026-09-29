@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, Columns2, FolderOpen, Power, Puzzle, Rows2 } from 'lucide-react'
+import { ArrowLeftRight, Columns2, FileCode2, FolderOpen, Power, Puzzle, Rows2 } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import TerminalTabBar from '../terminal/TerminalTabBar'
@@ -22,6 +22,7 @@ import {
 import StatusPanel from '../status/StatusPanel'
 import WidgetPicker from './WidgetPicker'
 import FilesDialog from '../files/FilesDialog'
+import TemplatesDialog from '../templates/TemplatesDialog'
 import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
 
 interface MainPanelProps {
@@ -71,6 +72,8 @@ export default function MainPanel({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [filesOpen, setFilesOpen] = useState(false)
   const closeFiles = useCallback(() => setFilesOpen(false), [])
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const closeTemplates = useCallback(() => setTemplatesOpen(false), [])
   const [dragRatio, setDragRatio] = useState<number | null>(null)
   // The primary tab is the session whose status the sidebar shows - identified by a stable id
   // rather than position, so it can be dragged anywhere like any other tab; it just can't be
@@ -424,6 +427,7 @@ export default function MainPanel({
   return (
     <div className={`main-panel${hidden ? ' main-panel-hidden' : ''}`}>
       {filesOpen && !hidden && <FilesDialog cluster={cluster} onClose={closeFiles} />}
+      {templatesOpen && !hidden && <TemplatesDialog cluster={cluster} onClose={closeTemplates} />}
       <div className="panel-toolbar">
         <span className="panel-toolbar-title">{cluster.name}</span>
         <div className="panel-toolbar-actions">
@@ -438,6 +442,18 @@ export default function MainPanel({
             onClick={() => setFilesOpen(true)}
           >
             <FolderOpen size={15} strokeWidth={2} />
+          </button>
+          <button
+            className="btn-icon"
+            title={
+              cluster.scheduler
+                ? 'Job templates: review and submit batch scripts'
+                : 'Job templates (turn on Slurm for this cluster to submit)'
+            }
+            disabled={!cluster.activeMonitoring}
+            onClick={() => setTemplatesOpen(true)}
+          >
+            <FileCode2 size={15} strokeWidth={2} />
           </button>
           <button
             className="btn-icon"

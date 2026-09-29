@@ -176,6 +176,9 @@ connection attempts. Secrets are encrypted on disk.
 - 🎛️ **GPU usage.** Utilization, memory and temperature of every GPU your running jobs are on,
   from your cluster's DCGM metrics in Grafana, or sampled with `nvidia-smi` inside a job when you
   ask.
+- 📝 **Job templates.** Keep batch scripts with `{{placeholders}}`, fill them in, review the
+  result, and submit it with `sbatch`. Cancel your own jobs from the queue. Both ask you to confirm
+  first.
 - 📁 **File transfer.** Browse a cluster's files, and download or upload them with progress, over
   the connection your terminal already has. Click the folder icon above the cluster's panes.
 - 💾 **Storage quota.** Home and scratch usage per path: the whole filesystem, and your own quota
@@ -194,14 +197,16 @@ connection attempts. Secrets are encrypted on disk.
 
 ## Roadmap
 
-Next up is the rest of HPC orchestration: managing your jobs without leaving Gate-H. The Slurm
-job queue and node health are already in (see [Features](#features)); these aren't built yet.
+The HPC features are in: Slurm jobs and nodes, job history, notifications, GPU usage, storage
+quota, file transfer and job templates. They haven't yet been tried against real Slurm, Lustre,
+GPFS or DCGM installations, so feedback from real clusters is the next step. After that:
 
-- 📝 **Job templates.** Fill in a saved batch script, check it, and submit it with one confirmed
-  click.
+- 🛡️ **File transfer on Teleport clusters**, through `tsh scp`.
+- 🧮 **PBS and LSF**, if someone needs them. Only Slurm is supported today.
 
-These features never open a connection of their own, and never log in for you. They only refresh
-while you're looking at them, so they add almost no load to the cluster. Details:
+All of these features share the same rules: they never open a connection of their own, and never
+log in for you. They only poll while you're looking at them (or, if you turn on notifications,
+every few minutes for a cluster you have open), so they add almost no load to the cluster. Details:
 [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 
 ## Preview
@@ -272,6 +277,8 @@ while you're looking at them, so they add almost no load to the cluster. Details
 | see all clusters at a glance | Open **Overview** at the top of the sidebar |
 | see my Slurm jobs and node states | Edit the cluster → tick **Slurm jobs and nodes**; they show in its Status. Click ▸ on a job array to list its tasks |
 | copy files to or from a cluster | Click the folder icon above its panes: open folders, **↓** to download, **Upload here** to upload |
+| submit a batch job | Click the code icon above the cluster's panes, pick or write a template, fill it in, **Review**, then **Submit** and confirm |
+| cancel one of my jobs | Click **×** on its row in the Slurm queue and confirm |
 | rearrange a cluster's widgets | Use the toolbar above them; the puzzle-piece icon shows or hides each one |
 | see what changed anywhere | Click the 🔔 bell; click an entry to jump to that cluster |
 | separate work and research clusters | Click the profile name at the top of the sidebar |

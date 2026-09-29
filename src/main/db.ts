@@ -128,6 +128,17 @@ export function getDb(): Database.Database {
   }
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS job_templates (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,
       fingerprint TEXT NOT NULL,

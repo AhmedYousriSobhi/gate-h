@@ -22,6 +22,10 @@ type Script = (stream: FakeChannel) => void
 class FakeChannel extends EventEmitter {
   stderr = new EventEmitter()
   closed = false
+  stdin: string | null = null
+  end(data?: string): void {
+    this.stdin = data ?? ''
+  }
   close(): void {
     this.closed = true
     this.emit('close')
@@ -107,6 +111,17 @@ async function main(): Promise<void> {
     'never more than one scheduler channel open per cluster',
     `max ${client.maxOpen}`
   )
+  const withInput = fakeClient([finish('4242\n')])
+  g.__clients = { c2: withInput }
+  await runOnCluster(ssh('c2'), 'sbatch --parsable', '#!/bin/bash\necho hi\n')
+  report(
+    withInput.channels[0].stdin === '#!/bin/bash\necho hi\n',
+    'stdin is written to the channel and closed'
+  )
+  report(
+    client.channels.every((c) => c.stdin === null),
+    'without stdin, nothing is written'
+  )
 
   console.log('-- no session')
   g.__clients = {}
@@ -127,6 +142,13 @@ async function main(): Promise<void> {
   report(
     tp.exitCode === 3 && tp.stdout === 'hello\n' && tp.stderr === 'oops\n',
     'runs the command, with output and exit code'
+  )
+  const piped = await runOnCluster(teleport('tp'), 'cat', 'script body\n')
+  report(piped.stdout === 'script body\n', 'stdin reaches the Teleport process')
+  const noInput = await runOnCluster(teleport('tp'), 'cat')
+  report(
+    noInput.stdout === '' && noInput.exitCode === 0,
+    'without stdin, it reads end-of-file at once'
   )
   const noLogin = await rejection(runOnCluster(teleport('tp'), 'exit 4'))
   report(

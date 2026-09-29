@@ -8,6 +8,7 @@ import type {
   CreateJiraIssueInput,
   FileTransferEvent,
   GateHApi,
+  JobTemplateInput,
   PanelLayout,
   PanelOrientation,
   SchedulerSnapshot,
@@ -104,6 +105,10 @@ const api: GateHApi = {
       ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId),
     history: (clusterId: string, days: number) =>
       ipcRenderer.invoke('scheduler:history', clusterId, days),
+    submit: (clusterId: string, script: string, label: string) =>
+      ipcRenderer.invoke('scheduler:submit', clusterId, script, label),
+    cancel: (clusterId: string, jobId: string) =>
+      ipcRenderer.invoke('scheduler:cancel', clusterId, jobId),
     sampleGpus: (clusterId: string, jobId: string, nodes: number) =>
       ipcRenderer.invoke('scheduler:sampleGpus', clusterId, jobId, nodes)
   },
@@ -119,6 +124,11 @@ const api: GateHApi = {
       ipcRenderer.on('files:transfer', listener)
       return () => ipcRenderer.removeListener('files:transfer', listener)
     }
+  },
+  templates: {
+    list: () => ipcRenderer.invoke('templates:list'),
+    save: (input: JobTemplateInput) => ipcRenderer.invoke('templates:save', input),
+    remove: (id: string) => ipcRenderer.invoke('templates:remove', id)
   },
   storage: {
     usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)

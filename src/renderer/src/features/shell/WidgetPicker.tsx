@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Activity, Check, FileCode2, Terminal as TerminalIcon } from 'lucide-react'
+import { Activity, Check, Terminal as TerminalIcon } from 'lucide-react'
 import type { WidgetType } from './panelLayout'
 
 interface WidgetPickerProps {
@@ -23,23 +23,9 @@ const AVAILABLE_WIDGETS: Array<{
   }
 ]
 
-// Ideas for future per-cluster widgets, based on what HPC-specific monitoring stacks (Slurm-web,
-// Grafana Slurm dashboards, XDMoD) surface that Gate-H doesn't yet - shown disabled here so the
-// picker doubles as a visible roadmap, not just a control. None of these exist yet - see
-// docs/HPC_ORCHESTRATION.md. The job queue, node health, job history, GPU usage and storage quota
-// shipped as sections of the Status widget
-// instead, and file transfer as the panel toolbar's Files dialog.
-const ROADMAP_WIDGETS: Array<{ label: string; description: string; icon: typeof TerminalIcon }> = [
-  {
-    label: 'Job templates',
-    description: 'Saved batch scripts, submitted with sbatch after you confirm',
-    icon: FileCode2
-  }
-]
-
 /** The "add a tool" panel for a cluster's main view - a small popover listing every widget type
- *  that can be toggled on/off (Terminal, Status today), plus a disabled preview of widgets planned
- *  for later so the list of "current available tools to add" also communicates what's coming. */
+ *  that can be toggled on/off (Terminal, Status). The HPC features that once previewed here as
+ *  "coming soon" shipped as sections of Status and the toolbar's Files and Job templates dialogs. */
 export default function WidgetPicker({
   visible,
   onToggle,
@@ -77,18 +63,6 @@ export default function WidgetPicker({
             </button>
           )
         })}
-      </div>
-      <div className="widget-picker-heading widget-picker-heading-roadmap">Coming soon</div>
-      <div className="widget-picker-list">
-        {ROADMAP_WIDGETS.map(({ label, description, icon: Icon }) => (
-          <div key={label} className="widget-picker-item widget-picker-item-disabled">
-            <Icon size={15} strokeWidth={2} />
-            <span className="widget-picker-item-text">
-              <span className="widget-picker-item-label">{label}</span>
-              <span className="widget-picker-item-description">{description}</span>
-            </span>
-          </div>
-        ))}
       </div>
     </div>
   )
