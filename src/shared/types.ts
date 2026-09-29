@@ -386,6 +386,31 @@ export interface StorageUsage {
   error?: string
 }
 
+export interface RemoteEntry {
+  name: string
+  type: 'dir' | 'file' | 'link'
+  size: number
+  modifiedAt: string
+}
+
+export interface RemoteDirectory {
+  /** Absolute, as the server resolved it. */
+  path: string
+  entries: RemoteEntry[]
+}
+
+/** Progress of one download or upload - sent when it starts, periodically, and once when done. */
+export interface FileTransferEvent {
+  id: string
+  clusterId: string
+  direction: 'download' | 'upload'
+  name: string
+  transferred: number
+  total: number
+  done: boolean
+  error?: string
+}
+
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
 export interface ClusterReachability {
@@ -522,6 +547,16 @@ export interface GateHApi {
   storage: {
     /** Usage and quota for the cluster's configured paths, run once on request. */
     usage(clusterId: string): Promise<StorageUsage[]>
+  }
+  files: {
+    /** A remote directory over SFTP on the terminal's connection; defaults to the home directory. */
+    list(clusterId: string, path?: string): Promise<RemoteDirectory>
+    /** Asks where to save (a native dialog), then downloads. Resolves false if cancelled. */
+    download(clusterId: string, remotePath: string): Promise<boolean>
+    /** Asks which local files to upload (a native dialog) into `remoteDir`, confirming before
+     *  overwriting. Resolves with how many were uploaded. */
+    upload(clusterId: string, remoteDir: string): Promise<number>
+    onTransfer(callback: (event: FileTransferEvent) => void): () => void
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
