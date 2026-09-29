@@ -31,11 +31,17 @@ vm_name_arg() { # prints the value right after a bare "-n"
     prev=$a
   done
 }
+sub_arg() { # prints the value right after "--subscription"
+  local prev=""
+  for a in "$@"; do
+    [[ "$prev" == "--subscription" ]] && { printf '%s\n' "$a"; return; }
+    prev=$a
+  done
+}
 case "$1 $2" in
   "account get-access-token") [[ -f "$MOCK/logged-in" ]] ;;
   "account list") cat "$MOCK/subscriptions" ;;
-  "account set") echo "${@: -1}" >"$MOCK/selected" ;;
-  "account show") cat "$MOCK/selected" ;;
+  "account show") awk -F'\t' -v s="$(sub_arg "$@")" '$1==s{print $2; f=1} END{exit !f}' "$MOCK/subscriptions" ;;
   "login "*) touch "$MOCK/logged-in" ;;
   "vm show")
     name=$(vm_name_arg "$@")
@@ -93,7 +99,7 @@ echo "-- pre-flight"
 expect 5 "several subscriptions + non-interactive refuses to guess" up "${AZSSH[@]}"
 check "logged in via az login when there was no session" test -f "$WORK/logged-in"
 expect 0 "up with --subscription" up "${AZSSH[@]}" -s sub-a
-check "selected the requested subscription" grep -qx sub-a "$WORK/selected"
+check "used the requested subscription (not az account set)" grep -q "Using subscription 'Prod HPC'" "$WORK/out"
 check "tunnel is listening" listening "$PORT"
 
 echo "-- lifecycle"
