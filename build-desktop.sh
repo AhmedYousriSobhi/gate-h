@@ -72,19 +72,36 @@ MSG
 
   echo "==> Building Gate-H for macOS (npm ci && npm run typecheck && npm run build:mac)"
   # Not `a && b && c` on its own line: set -e ignores a failure that isn't the last in an && list.
-  if ! { npm ci && npm run typecheck && npm run build:mac; }; then
-    cat >&2 <<'MSG'
-
-error: the build failed - see the log above.
-If it says "unable to get local issuer certificate" (or another TLS error), your network re-signs
-HTTPS traffic with its own certificate, which Node doesn't trust by default. Either let Node use
-the macOS keychain:
-  NODE_USE_SYSTEM_CA=1 ./build-desktop.sh        (Node 22.15+ / 24)
-or point it at your organisation's CA file:
-  NODE_EXTRA_CA_CERTS=/path/to/ca.pem ./build-desktop.sh
-MSG
+  if ! { npm ci && npm run typecheck; }; then
+    echo "error: install or typecheck failed - see the log above." >&2
     exit 1
   fi
+
+  # hdiutil sometimes can't unmount the dmg's temporary volume ("Resource busy") because Spotlight,
+  # Finder or a security agent holds it. The failed attempt then leaves that volume mounted, so
+  # detach it before trying again; the rest of the build is cached and repeats in about a minute.
+  detach_stale_volumes() {
+    local vol
+    for vol in /Volumes/Gate-H*; do
+      [[ -d "$vol" ]] && hdiutil detach -force "$vol" >/dev/null 2>&1 || true
+    done
+  }
+  attempt=1
+  detach_stale_volumes
+  until npm run build:mac; do
+    detach_stale_volumes
+    if (( attempt >= 3 )); then
+      echo "error: the build failed - see the log above." >&2
+      if ls dist/*.zip >/dev/null 2>&1; then
+        echo "The zip in dist/ is complete and can be used; only the dmg failed. Close Finder windows" >&2
+        echo "showing Gate-H, or add dist/ to Spotlight's privacy list, and run this again." >&2
+      fi
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    echo "==> Build failed; retrying ($attempt of 3)"
+    sleep 5
+  done
   echo
   echo "==> Done. Build artifacts:"
   ls -1 dist/*.dmg dist/*.zip 2>/dev/null || echo "(no dmg/zip found under dist/ - check the build log above)"
