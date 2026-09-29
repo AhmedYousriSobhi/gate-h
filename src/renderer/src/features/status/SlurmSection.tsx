@@ -6,6 +6,8 @@ import {
   type SchedulerSnapshot,
   type SlurmJob
 } from '../../../../shared/types'
+import SlurmHistory from './SlurmHistory'
+import { shortTime, stateClass } from './slurmState'
 
 interface SlurmSectionProps {
   cluster: ClusterSummary
@@ -14,15 +16,6 @@ interface SlurmSectionProps {
 }
 
 type ArrayTasks = SlurmJob[] | 'loading' | { error: string }
-
-const FAILED_STATES = ['FAILED', 'TIMEOUT', 'NODE_FAIL', 'OUT_OF_MEMORY', 'BOOT_FAIL', 'DEADLINE']
-
-function stateClass(state: string): string {
-  if (state === 'RUNNING' || state === 'COMPLETING') return 'issue-status-active'
-  if (state === 'COMPLETED') return 'issue-status-done'
-  if (FAILED_STATES.includes(state)) return 'slurm-state-failed'
-  return 'issue-status-todo'
-}
 
 function age(fetchedAt: string, now: number): string {
   const seconds = Math.max(0, Math.round((now - Date.parse(fetchedAt)) / 1000))
@@ -62,9 +55,11 @@ function JobRow({
         {job.elapsed} / {job.timeLimit}
       </td>
       <td>{job.nodes}</td>
-      <td className="slurm-mono">
+      <td className="slurm-mono slurm-wrap">
         {job.reason}
-        {pending && job.start && <span className="slurm-dim"> · est. {job.start}</span>}
+        {pending && job.start && (
+          <span className="slurm-dim slurm-block">est. start {shortTime(job.start)}</span>
+        )}
       </td>
       <td className="slurm-name" title={job.name}>
         {job.name}
@@ -285,6 +280,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
           )}
         </>
       )}
+
+      <SlurmHistory clusterId={cluster.id} />
     </div>
   )
 }

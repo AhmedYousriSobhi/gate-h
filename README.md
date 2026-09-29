@@ -171,7 +171,8 @@ connection attempts. Secrets are encrypted on disk.
 - 📋 **Slurm jobs and nodes.** Your jobs (or everyone's in the partitions you name), with state,
   time used and why a pending job is waiting, plus each partition's node states and why nodes
   were drained. Runs `squeue`/`sinfo` on the session you already have open, only while you're
-  looking at it.
+  looking at it. Your finished jobs from the last day or week, with exit codes, are one click
+  away.
 - 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
 - 🧩 **Widgets side by side.** Show, hide, swap, stack and resize the terminal and status views.
   Your layout is remembered.
