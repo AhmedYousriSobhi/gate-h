@@ -1,4 +1,5 @@
-import { LayoutDashboard, Pencil, Pin, PinOff, Plus, Power, PowerOff, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { LayoutDashboard, Pencil, Pin, Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
@@ -27,9 +28,13 @@ interface SidebarProps {
   onNotificationNavigate: (clusterId: string, widget?: WidgetType) => void
   profilesState: ReturnType<typeof useProfiles>
   onProfileChanged: () => void
-  /** Live Terminal connection status for every currently-mounted cluster (selected, or pinned to
-   *  stay connected in the background) - keyed by cluster id, absent for anything not mounted. */
+  /** Primary Terminal connection status by cluster id - may hold stale entries for clusters no
+   *  longer open, so only read for ids in openClusterIds. */
   terminalStatuses: Record<string, SessionStatus>
+  /** Clusters whose sessions are currently mounted: open, pinned or selected. */
+  openClusterIds: string[]
+  liveSessionCounts: Record<string, number>
+  onCloseSessions: (cluster: ClusterSummary) => void
   onToggleKeepAlive: (cluster: ClusterSummary) => void
   onToggleActiveMonitoring: (cluster: ClusterSummary) => void
 }
@@ -58,9 +63,15 @@ export default function Sidebar({
   profilesState,
   onProfileChanged,
   terminalStatuses,
+  openClusterIds,
+  liveSessionCounts,
+  onCloseSessions,
   onToggleKeepAlive,
   onToggleActiveMonitoring
 }: SidebarProps): React.JSX.Element {
+  // Closing a cluster with connected sessions takes a second click on the same button rather
+  // than a modal - ended SSH sessions can't be brought back, but a dialog for it gets in the way.
+  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null)
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -102,6 +113,7 @@ export default function Sidebar({
             key={cluster.id}
             className={`cluster-row${cluster.id === selectedClusterId ? ' cluster-row-active' : ''}`}
             onClick={() => onSelect(cluster)}
+            onMouseLeave={() => setConfirmCloseId((id) => (id === cluster.id ? null : id))}
           >
             <span
               className="cluster-avatar"
@@ -117,7 +129,7 @@ export default function Sidebar({
               </div>
               <div className="cluster-row-host mono">{cluster.connection.host}</div>
               {cluster.activeMonitoring &&
-                cluster.keepAliveInBackground &&
+                openClusterIds.includes(cluster.id) &&
                 terminalStatuses[cluster.id] && (
                   <div
                     className={`keep-alive-badge keep-alive-badge-${terminalStatuses[cluster.id]}`}
@@ -147,22 +159,49 @@ export default function Sidebar({
               </button>
               <button
                 className={`icon-btn${cluster.keepAliveInBackground ? ' icon-btn-active' : ''}`}
+                aria-pressed={cluster.keepAliveInBackground}
                 title={
                   cluster.keepAliveInBackground
-                    ? 'Stop keeping connected in the background'
-                    : 'Keep connected in the background'
+                    ? 'Kept alive: reconnects and refreshes in the background, connects at launch'
+                    : 'Keep alive: reconnect and refresh in the background, connect at launch'
                 }
                 onClick={(e) => {
                   e.stopPropagation()
                   onToggleKeepAlive(cluster)
                 }}
               >
-                {cluster.keepAliveInBackground ? (
-                  <Pin size={13} strokeWidth={2} />
-                ) : (
-                  <PinOff size={13} strokeWidth={2} />
-                )}
+                <Pin
+                  size={13}
+                  strokeWidth={2}
+                  fill={cluster.keepAliveInBackground ? 'currentColor' : 'none'}
+                />
               </button>
+              {/* Pinned clusters stay open by definition - releasing the pin never ends a
+                  session, so Close is offered once it's released. */}
+              {openClusterIds.includes(cluster.id) && !cluster.keepAliveInBackground && (
+                <button
+                  className={`icon-btn icon-btn-danger${
+                    confirmCloseId === cluster.id ? ' close-confirm' : ''
+                  }`}
+                  title="Close sessions"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const live = liveSessionCounts[cluster.id] ?? 0
+                    if (live > 0 && confirmCloseId !== cluster.id) {
+                      setConfirmCloseId(cluster.id)
+                      return
+                    }
+                    setConfirmCloseId(null)
+                    onCloseSessions(cluster)
+                  }}
+                >
+                  {confirmCloseId === cluster.id ? (
+                    `Close ${liveSessionCounts[cluster.id]} live?`
+                  ) : (
+                    <X size={13} strokeWidth={2} />
+                  )}
+                </button>
+              )}
               <button
                 className="icon-btn"
                 title="Edit"

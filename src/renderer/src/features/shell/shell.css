@@ -175,6 +175,15 @@
   color: var(--color-accent);
 }
 
+.icon-btn.close-confirm {
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 510;
+  color: var(--color-offline);
+  white-space: nowrap;
+}
+
 .keep-alive-badge {
   display: inline-flex;
   width: fit-content;
