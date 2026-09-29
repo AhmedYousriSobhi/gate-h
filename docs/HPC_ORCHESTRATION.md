@@ -223,6 +223,23 @@ state, exit code, elapsed time and end time. `sacct` reads `slurmdbd`, not `slur
 no reason to poll it, so it only runs when a range button is clicked. Like array tasks, a repeat
 within 30 s reuses the last result. Sites without accounting storage show `sacct`'s own error.
 
+### 6.2 Storage quota
+
+A cluster can list paths (`storage.paths`, e.g. `~`, `/scratch/$USER`), and the Status widget's
+**Storage** section checks them on request. One command covers every path. For each one it reads
+the filesystem type with `stat -f -c %T`, the whole filesystem's usage with `df -Pk`, and the user's
+own quota:
+
+- on Lustre, `lfs quota -q -u "$(id -un)" <path>`;
+- on GPFS/Spectrum Scale, `mmlsquota -u … -Y --block-size 1K`, a machine-readable format that is
+  read by header name.
+
+Other filesystems get `df` only. Paths are validated against `[A-Za-z0-9_./~-]` plus `$USER` and
+`$HOME`, then double-quoted, with a leading `~` rewritten to `$HOME`. Quota tools hit the
+filesystem's metadata servers and nothing there changes minute to minute, so this never polls, and a
+repeat within 30 s reuses the result. Usage over the soft limit (the start of the grace period) is
+flagged, not just usage near the hard limit.
+
 ## 7. GPU and node telemetry (outline)
 
 The **preferred source is Grafana**, because many GPU sites already run NVIDIA's

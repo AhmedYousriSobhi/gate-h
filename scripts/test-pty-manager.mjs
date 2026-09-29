@@ -10,7 +10,9 @@
 //   - scripts/scheduler-monitor.checks.ts: when the scheduler monitor polls, against a fake
 //     command runner and a stubbed cluster store;
 //   - scripts/scheduler-exec.checks.ts: the scheduler command runner's limits and queueing,
-//     against a fake ssh2 client and a local `bash` standing in for `tsh ssh`.
+//     against a fake ssh2 client and a local `bash` standing in for `tsh ssh`;
+//   - scripts/storage.checks.ts: the storage usage command, run in a local bash, and the
+//     lfs/mmlsquota parsers.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -120,6 +122,29 @@ const stubExecDeps = {
   }
 }
 
+// Storage usage reads the cluster store and runs its command through the scheduler runner; the
+// checks supply clusters through a global and run the command in a local bash.
+const stubStorageDeps = {
+  name: 'stub-storage-deps',
+  setup(b) {
+    b.onResolve({ filter: /^\.\.\/(clusters|scheduler\/exec)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-storage'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-storage' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /exec$/, namespace: 'stub-storage' }, () => ({
+      contents:
+        "const { execFileSync } = require('child_process')\n" +
+        'module.exports = { runOnCluster: async (_c, command) => { globalThis.__commands.push(command); ' +
+        "return { exitCode: 0, stdout: execFileSync('bash', ['-c', command], { encoding: 'utf8' }), stderr: '' } } }",
+      loader: 'js'
+    }))
+  }
+}
+
 try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
@@ -141,7 +166,8 @@ try {
     },
     { entry: 'slurm.checks.ts', plugins: [], env: {} },
     { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} },
-    { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} }
+    { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} },
+    { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} }
   ]
   let failed = false
   for (const job of jobs) {

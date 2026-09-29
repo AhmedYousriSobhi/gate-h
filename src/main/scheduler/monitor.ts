@@ -2,6 +2,7 @@ import { getCluster, listClusters } from '../clusters'
 import { addNotification } from '../notifications/store'
 import { hasLiveConnection, NoSessionError, runOnCluster } from './exec'
 import { describeChanges, finishedJobs, type FinalStates } from './changes'
+import { clearRecent, reuseRecent } from './reuse'
 import {
   arrayTasksCommand,
   classifyFailure,
@@ -293,24 +294,6 @@ export function setSchedulerWindowFocused(focused: boolean): void {
   }
 }
 
-// On-demand lookups - an array's tasks, the job history. Repeating one within 30s (expanding and
-// collapsing a row, switching history ranges back and forth) reuses the last result rather than
-// running again: on Teleport every run is an audited session. Keyed by cluster, kind and argument.
-const ON_DEMAND_TTL_MS = 30_000
-const onDemand = new Map<string, { at: number; result: Promise<unknown> }>()
-
-function reuseRecent<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const hit = onDemand.get(key)
-  if (hit && Date.now() - hit.at < ON_DEMAND_TTL_MS) return hit.result as Promise<T>
-  const result = run()
-  onDemand.set(key, { at: Date.now(), result })
-  // A failure isn't worth remembering - the next click should try again.
-  result.catch(() => {
-    if (onDemand.get(key)?.result === result) onDemand.delete(key)
-  })
-  return result
-}
-
 async function runOnDemand<T>(
   clusterId: string,
   command: (config: SchedulerConfig) => string,
@@ -346,7 +329,7 @@ export function fetchJobHistory(clusterId: string, days: number): Promise<SlurmH
 export function stopSchedulerMonitor(): void {
   for (const watch of watches.values()) if (watch.timer) clearTimeout(watch.timer)
   watches.clear()
-  onDemand.clear()
+  clearRecent()
   if (sweepTimer) clearInterval(sweepTimer)
   sweepTimer = null
   background.clear()

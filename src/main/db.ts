@@ -123,6 +123,10 @@ export function getDb(): Database.Database {
     db.exec('ALTER TABLE clusters ADD COLUMN scheduler TEXT')
   }
 
+  if (!columnExists(db, 'clusters', 'storage')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN storage TEXT')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS known_hosts (
       host_port TEXT PRIMARY KEY,
