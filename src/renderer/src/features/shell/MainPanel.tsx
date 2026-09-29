@@ -49,6 +49,9 @@ interface MainPanelProps {
 // instant. `order` (not DOM position) controls which side/row a pane appears on, so "swap" is a
 // pure CSS reorder with no remount either. Orders are 0/2 (not 0/1) to leave room for the resize
 // handle at order 1, always sitting between the two panes regardless of swap.
+const TAB_BAR_MIN_WIDTH = 120
+const TAB_BAR_MAX_WIDTH = 480
+
 function paneStyle(visible: WidgetType[], type: WidgetType, ratio: number): React.CSSProperties {
   const index = visible.indexOf(type)
   const flexGrow = index === 0 ? ratio : index === 1 ? 1 - ratio : 1
@@ -118,6 +121,8 @@ export default function MainPanel({
   // Vertical (a list down the side) matches VS Code's terminal tab default; horizontal (a row
   // above the terminal, like typical editor tabs) is the alternative, chosen in the layout menu.
   const [tabOrientation, setTabOrientation] = useState<'horizontal' | 'vertical'>('vertical')
+  // Null until the side tab list's divider is dragged - it then keeps the dragged width.
+  const [tabBarWidth, setTabBarWidth] = useState<number | null>(null)
   // Direction for splits that don't come with one of their own (the split button/shortcut, a
   // tab-strip merge). Dropping on a panel's edge picks its own direction instead.
   const [defaultSplit, setDefaultSplit] = useState<SplitDir>('column')
@@ -419,6 +424,18 @@ export default function MainPanel({
     setDragRatio(Math.min(0.85, Math.max(0.15, fraction)))
   }
 
+  // The side tab list's divider: its width follows the pointer from the list's left edge, within
+  // bounds that keep both titles and the terminal usable. Double-click returns it to auto width.
+  function handleTabBarResizeMove(e: React.PointerEvent<HTMLDivElement>): void {
+    if (e.buttons !== 1) return
+    const tabBar = e.currentTarget.previousElementSibling
+    if (!tabBar) return
+    const left = tabBar.getBoundingClientRect().left
+    setTabBarWidth(
+      Math.round(Math.min(TAB_BAR_MAX_WIDTH, Math.max(TAB_BAR_MIN_WIDTH, e.clientX - left)))
+    )
+  }
+
   function handleResizeEnd(): void {
     if (dragRatio !== null) onLayoutChange({ ...layout, splitRatio: dragRatio })
     setDragRatio(null)
@@ -532,7 +549,19 @@ export default function MainPanel({
                 onContextMenu={(id, x, y) => setContextMenu({ tabId: id, x, y })}
                 onOrientationChange={setTabOrientation}
                 onSplitOrientationChange={handleSplitOrientationChange}
+                width={tabBarWidth}
               />
+              {tabOrientation === 'vertical' && (
+                <div
+                  className="terminal-tabbar-resizer"
+                  role="separator"
+                  aria-orientation="vertical"
+                  title="Drag to resize, double-click to reset"
+                  onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+                  onPointerMove={handleTabBarResizeMove}
+                  onDoubleClick={() => setTabBarWidth(null)}
+                />
+              )}
               <div className="terminal-tab-panes">
                 {/* Creation order and one shared parent, never the tree's own nesting: panes are
                     absolutely positioned from layoutRects instead, so regrouping or re-splitting
