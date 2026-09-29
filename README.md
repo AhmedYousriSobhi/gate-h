@@ -37,8 +37,9 @@
   ./build-desktop.sh && ./dist/Gate-H-*.AppImage
   ```
 
-- **macOS** (Apple Silicon or Intel): you need [Node.js](https://nodejs.org) 20+ (`brew install
-  node`) and Xcode's Command Line Tools (`xcode-select --install`). Docker isn't used, because a
+- **macOS** (Apple Silicon or Intel): you need [Node.js](https://nodejs.org) 22 (`nvm install 22`
+  or `brew install node@22`; the repo's `.nvmrc` says 22, which CI tests) and Xcode's Command Line
+  Tools (`xcode-select --install`). Docker isn't used, because a
   Mac app can only be built on a Mac. The script builds for your Mac's own chip.
 
   ```bash
@@ -50,9 +51,12 @@
   launch: open **System Settings → Privacy & Security** and click **Open Anyway**, or run
   `xattr -dr com.apple.quarantine /Applications/Gate-H.app`.
 
-  Don't want to build? Signed-in GitHub users can download `Gate-H-macos-arm64` (Apple Silicon)
-  or `Gate-H-macos-x64` (Intel) from the latest
+  Don't want to build? Download the `.dmg` for your chip (`arm64` is Apple Silicon, `x64` is
+  Intel) from the [Releases page](https://github.com/AhmedYousriSobhi/gate-h/releases) once a
+  version is tagged. Until then, signed-in GitHub users can take `Gate-H-macos-arm64` or
+  `Gate-H-macos-x64` from the latest
   [macOS workflow run](https://github.com/AhmedYousriSobhi/gate-h/actions/workflows/macos.yml).
+  A later run of `./build-desktop.sh` skips the slow dependency install when nothing changed.
 
   `tsh` and `az` installed with Homebrew are found even when Gate-H is started from the Dock.
   Teleport login needs `python3`, which comes with the Command Line Tools.
