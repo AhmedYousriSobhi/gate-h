@@ -17,7 +17,8 @@
 //     query and its response parsing;
 //   - scripts/sftp.checks.ts: file listing and transfers over a fake ssh2 SFTP channel;
 //   - scripts/submit.checks.ts: template placeholders, and sbatch/scancel only after the native
-//     confirmation, with a stubbed dialog, cluster store and command runner.
+//     confirmation, with a stubbed dialog, cluster store and command runner;
+//   - scripts/shell-path.checks.ts: adopting the login shell's PATH (for macOS GUI launches).
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -222,7 +223,8 @@ try {
     { entry: 'storage.checks.ts', plugins: [stubStorageDeps], env: {} },
     { entry: 'gpu.checks.ts', plugins: [], env: {} },
     { entry: 'sftp.checks.ts', plugins: [stubSftpDeps], env: {} },
-    { entry: 'submit.checks.ts', plugins: [stubSubmitDeps], env: {} }
+    { entry: 'submit.checks.ts', plugins: [stubSubmitDeps], env: {} },
+    { entry: 'shell-path.checks.ts', plugins: [], env: {} }
   ]
   let failed = false
   for (const job of jobs) {

@@ -21,6 +21,7 @@ import type {
 // Custom APIs for renderer - a narrow, explicit surface over IPC. The renderer never gets
 // direct Node/Electron access, and secrets never travel back across this bridge.
 const api: GateHApi = {
+  platform: process.platform,
   clusters: {
     list: () => ipcRenderer.invoke('clusters:list'),
     get: (id: string) => ipcRenderer.invoke('clusters:get', id),
