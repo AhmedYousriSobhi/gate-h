@@ -73,7 +73,8 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   | 4 | **GPU usage** | 📝 Outlined | Grafana `/api/ds/query` on DCGM exporter metrics with the existing token; otherwise an on-demand `srun --overlap … nvidia-smi` sample inside the user's own job |
   | 5 | **File transfer** (SFTP) | 📝 Outlined | `client.sftp()` on the existing connection; Teleport (`tsh scp`) later |
   | 6 | **Job submission helper** | 📝 Outlined | Local `#SBATCH` template library; `sbatch`/`scancel` only after the user confirms the exact command |
-  | — | Storage quota, job history | 💡 Idea | `lfs quota`/`mmlsquota`/`df`, `sacct`; would reuse the phase 1 runner |
+  | — | **Job history** | ✅ Done | `sacct` for the user's own allocations over 24 h or 7 days, on request only (`SlurmHistory.tsx`); reuses the phase 1 runner |
+  | — | Storage quota | 💡 Idea | `lfs quota`/`mmlsquota`/`df`; would reuse the phase 1 runner |
   | — | PBS/LSF | 💡 Idea | `SchedulerConfig.kind` leaves room; not designed |
 
 - **No drag-to-resize between panes** — the side-by-side/stacked split is a fixed 50/50 today

@@ -279,6 +279,21 @@ export interface SlurmJob {
   name: string
 }
 
+/** A finished (or still running) allocation of the SSH user's, from `sacct`. */
+export interface SlurmHistoryJob {
+  id: string
+  partition: string
+  /** e.g. `COMPLETED`, `FAILED`, `TIMEOUT`, `CANCELLED by 1234`. */
+  state: string
+  /** `exit:signal`, e.g. `0:0` or `1:0`. */
+  exitCode: string
+  elapsed: string
+  start: string | null
+  /** Null while the job is still running. */
+  end: string | null
+  name: string
+}
+
 export interface SlurmPartition {
   name: string
   available: string
@@ -442,6 +457,8 @@ export interface GateHApi {
     onSnapshot(callback: (snapshot: SchedulerSnapshot) => void): () => void
     /** The tasks of a collapsed job array, run once on request. */
     arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
+    /** The SSH user's jobs over the last `days` (1 or 7) days, newest first, run once on request. */
+    history(clusterId: string, days: number): Promise<SlurmHistoryJob[]>
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */

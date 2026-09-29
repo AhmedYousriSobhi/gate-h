@@ -98,7 +98,9 @@ const api: GateHApi = {
       return () => ipcRenderer.removeListener('scheduler:snapshot', listener)
     },
     arrayTasks: (clusterId: string, arrayJobId: string) =>
-      ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId)
+      ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId),
+    history: (clusterId: string, days: number) =>
+      ipcRenderer.invoke('scheduler:history', clusterId, days)
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
