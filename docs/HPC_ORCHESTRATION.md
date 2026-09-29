@@ -121,7 +121,8 @@ LC_ALL=C sinfo --noheader --list-reasons --format='%N|%T|%E'
   always set. With `scope: 'mine'`, `--partition=` is added only when partitions are configured.
 - **Job arrays stay collapsed**, the way `squeue` shows them by default (`123_[1-500]` is one row),
   which keeps the table short. Expanding an array row runs one on-demand
-  `squeue --array --jobs=<id>` for that array's tasks. The ID is validated as digits only.
+  `squeue --array --jobs=<id>` for that array's tasks. The ID is validated as digits only, and
+  the result is reused for 30 s, so expanding and collapsing a row doesn't cost a run each time.
 - **At most 2,000 jobs are parsed** per refresh. Past that, the snapshot is marked truncated and
   the widget suggests narrowing the partitions.
 - **Free text goes last.** The job name (`%j`) and the drain reason (`%E`) can contain `|`, so the

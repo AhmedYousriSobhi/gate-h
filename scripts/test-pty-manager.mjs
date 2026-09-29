@@ -8,7 +8,9 @@
 //     scratch HOME, and stubbed cluster/notification stores.
 //   - scripts/slurm.checks.ts: the Slurm command builders and output parsers;
 //   - scripts/scheduler-monitor.checks.ts: when the scheduler monitor polls, against a fake
-//     command runner and a stubbed cluster store.
+//     command runner and a stubbed cluster store;
+//   - scripts/scheduler-exec.checks.ts: the scheduler command runner's limits and queueing,
+//     against a fake ssh2 client and a local `bash` standing in for `tsh ssh`.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -81,6 +83,35 @@ const stubScheduler = {
   }
 }
 
+// The command runner looks up live sessions and Teleport state; the checks supply both, and
+// run "Teleport" commands with a local bash instead of teleport.sh.
+const stubExecDeps = {
+  name: 'stub-exec-deps',
+  setup(b) {
+    b.onResolve(
+      { filter: /^\.\.\/(ssh\/manager|teleport\/sessionState|teleport\/session)$/ },
+      (args) => ({
+        path: args.path,
+        namespace: 'stub-exec'
+      })
+    )
+    b.onLoad({ filter: /manager$/, namespace: 'stub-exec' }, () => ({
+      contents: 'module.exports = { getLiveClient: (id) => globalThis.__clients[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /sessionState$/, namespace: 'stub-exec' }, () => ({
+      contents: 'module.exports = { getTeleportSessions: () => globalThis.__teleport }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /session$/, namespace: 'stub-exec' }, () => ({
+      contents:
+        'module.exports = { EXIT_NO_SESSION: 4, ' +
+        "teleportExecCommand: (_c, command) => ({ file: 'bash', args: ['-c', command] }) }",
+      loader: 'js'
+    }))
+  }
+}
+
 try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
@@ -101,7 +132,8 @@ try {
       env: { HOME: home, PATH: `${bin}:${process.env.PATH}` }
     },
     { entry: 'slurm.checks.ts', plugins: [], env: {} },
-    { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} }
+    { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} },
+    { entry: 'scheduler-exec.checks.ts', plugins: [stubExecDeps], env: {} }
   ]
   let failed = false
   for (const job of jobs) {
