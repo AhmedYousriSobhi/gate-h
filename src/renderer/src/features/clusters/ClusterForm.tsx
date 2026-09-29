@@ -245,13 +245,6 @@ export default function ClusterForm({
     try {
       const list = await window.api.azure.listSubscriptions()
       setSubscriptions(list)
-      // `isDefault` is the az CLI's current default subscription - but opening any cluster's
-      // tunnel changes that (`az account set --subscription ...`), so with more than one
-      // subscription in play it just reflects whichever cluster last connected, not this one.
-      // Only safe to auto-fill when there's no ambiguity to get wrong.
-      if (!form.azureSubscription && list.length === 1) {
-        set('azureSubscription', list[0].id)
-      }
     } catch (err) {
       setSubscriptionsError(err instanceof Error ? err.message : 'Failed to list subscriptions.')
     } finally {
@@ -649,7 +642,7 @@ export default function ClusterForm({
                   <div className="form-inline">
                     <input
                       id="azureSubscription"
-                      list="azureSubscriptionOptions"
+                      placeholder="Subscription ID or name"
                       value={form.azureSubscription}
                       onChange={(e) => set('azureSubscription', e.target.value)}
                     />
@@ -662,13 +655,25 @@ export default function ClusterForm({
                       {loadingSubscriptions ? 'Loading...' : 'Load from az'}
                     </button>
                   </div>
-                  <datalist id="azureSubscriptionOptions">
-                    {subscriptions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
+                  {subscriptions.length > 0 && (
+                    <select
+                      aria-label="Pick a subscription fetched from az"
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) set('azureSubscription', e.target.value)
+                      }}
+                    >
+                      <option value="">
+                        {subscriptions.length} subscription{subscriptions.length === 1 ? '' : 's'}{' '}
+                        found - pick one...
                       </option>
-                    ))}
-                  </datalist>
+                      {subscriptions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.id}){s.isDefault ? ' - az default' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {subscriptionsError && <p className="hint">{subscriptionsError}</p>}
                 </div>
                 <div className="form-row">
