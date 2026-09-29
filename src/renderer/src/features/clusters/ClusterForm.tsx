@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { BarChart3, Cloud, KeyRound, ListChecks, ShieldCheck, Ticket } from 'lucide-react'
+import {
+  BarChart3,
+  Cloud,
+  HardDrive,
+  KeyRound,
+  ListChecks,
+  ShieldCheck,
+  Ticket
+} from 'lucide-react'
 import type {
   AzureSubscription,
   AzureTunnelMode,
@@ -12,7 +20,8 @@ import type {
 import {
   DEFAULT_SCHEDULER_INTERVAL_SEC,
   MIN_SCHEDULER_INTERVAL_SEC,
-  SLURM_PARTITION_PATTERN
+  SLURM_PARTITION_PATTERN,
+  STORAGE_PATH_PATTERN
 } from '../../../../shared/types'
 import { toClusterSlug } from '../../../../shared/clusterSlug'
 import './clusters.css'
@@ -71,6 +80,8 @@ interface FormState {
   schedulerInterval: string
   schedulerAutoRefresh: boolean
   schedulerNotify: boolean
+  useStorage: boolean
+  storagePaths: string
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -121,8 +132,21 @@ function toFormState(c?: ClusterSummary): FormState {
     schedulerPartitions: c?.scheduler?.partitions.join(', ') ?? '',
     schedulerInterval: String(c?.scheduler?.intervalSec ?? DEFAULT_SCHEDULER_INTERVAL_SEC),
     schedulerAutoRefresh: c?.scheduler?.autoRefresh ?? !c?.teleport,
-    schedulerNotify: c?.scheduler?.notify ?? false
+    schedulerNotify: c?.scheduler?.notify ?? false,
+    useStorage: Boolean(c?.storage),
+    storagePaths: c?.storage?.paths.join(', ') ?? '~'
   }
+}
+
+/** Returns why the storage paths can't be saved, or null if they can. */
+function storageError(form: FormState): string | null {
+  if (!form.useStorage) return null
+  const paths = splitList(form.storagePaths)
+  if (paths.length === 0) return 'Storage quota needs at least one path.'
+  const bad = paths.find((path) => !STORAGE_PATH_PATTERN.test(path.replace(/\$(USER|HOME)/g, '')))
+  if (bad)
+    return `Storage paths may only use letters, digits, _ . / ~ - and $USER/$HOME ("${bad}").`
+  return null
 }
 
 /** Returns why the Slurm settings can't be saved, or null if they can. */
@@ -221,7 +245,8 @@ export default function ClusterForm({
       setError('Name, host, and username are required.')
       return
     }
-    const tunnelError = teleportError(form) ?? azureTunnelError(form) ?? schedulerError(form)
+    const tunnelError =
+      teleportError(form) ?? azureTunnelError(form) ?? schedulerError(form) ?? storageError(form)
     if (tunnelError) {
       setError(tunnelError)
       return
@@ -300,7 +325,8 @@ export default function ClusterForm({
             autoRefresh: form.schedulerAutoRefresh,
             notify: form.schedulerNotify && !form.useTeleport
           }
-        : null
+        : null,
+      storage: form.useStorage ? { paths: splitList(form.storagePaths) } : null
     }
 
     setSaving(true)
@@ -811,6 +837,38 @@ export default function ClusterForm({
                     Every refresh is a new Teleport session in your site&apos;s audit log.
                   </p>
                 )}
+              </>
+            )}
+          </div>
+
+          <div className="form-section">
+            <label className="form-field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.useStorage}
+                onChange={(e) => set('useStorage', e.target.checked)}
+              />
+              <h4 style={{ margin: 0 }}>
+                <HardDrive size={13} strokeWidth={2} />
+                Storage quota
+              </h4>
+            </label>
+            {form.useStorage && (
+              <>
+                <div className="form-field">
+                  <label htmlFor="storagePaths">Paths (comma separated)</label>
+                  <input
+                    id="storagePaths"
+                    placeholder="~, /scratch/$USER"
+                    value={form.storagePaths}
+                    onChange={(e) => set('storagePaths', e.target.value)}
+                  />
+                </div>
+                <p className="hint">
+                  Checked on request from the cluster&apos;s Status, on the terminal&apos;s open
+                  session: df for each filesystem, plus your quota on Lustre (lfs quota) and GPFS
+                  (mmlsquota).
+                </p>
               </>
             )}
           </div>
