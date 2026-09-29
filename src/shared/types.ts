@@ -115,6 +115,29 @@ export interface TeleportConfig {
   authConnector?: string
 }
 
+export type SchedulerScope = 'mine' | 'partitions'
+
+/** Slurm integration for a cluster's Status widget - see docs/HPC_ORCHESTRATION.md. Commands run
+ *  as the SSH user on a session that's already open, so there are no secrets here. `kind` is the
+ *  only scheduler supported; PBS/LSF would add their own kinds. */
+export interface SchedulerConfig {
+  kind: 'slurm'
+  /** 'mine': the SSH user's own jobs. 'partitions': every user's jobs, but only in `partitions` -
+   *  never the whole queue, which can run to tens of thousands of rows on a large site. */
+  scope: SchedulerScope
+  /** Required (non-empty) for scope 'partitions'; an optional filter for 'mine'. */
+  partitions: string[]
+  intervalSec: number
+  /** Off means refresh only on request. Defaults off for Teleport clusters, where every run is a
+   *  new, audited Teleport session. */
+  autoRefresh: boolean
+}
+
+export const MIN_SCHEDULER_INTERVAL_SEC = 30
+export const DEFAULT_SCHEDULER_INTERVAL_SEC = 60
+/** Partition names are passed to squeue/sinfo on the remote shell, so only these are accepted. */
+export const SLURM_PARTITION_PATTERN = /^[A-Za-z0-9_.-]+$/
+
 export interface Cluster {
   id: string
   name: string
@@ -125,6 +148,7 @@ export interface Cluster {
   jira: JiraProfile | null
   azureTunnel: AzureTunnelConfig | null
   teleport: TeleportConfig | null
+  scheduler: SchedulerConfig | null
   /** Master on/off switch for this cluster's Terminal/Grafana connections, independent of
    *  whether it's open or selected. False ("standby") means no SSH session and no Grafana
    *  polling exist for this cluster at all, even if it's selected. Defaults to true so existing
@@ -147,6 +171,7 @@ export interface ClusterInput {
   jiraApiToken?: string
   azureTunnel: AzureTunnelConfig | null
   teleport: TeleportConfig | null
+  scheduler: SchedulerConfig | null
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
@@ -236,6 +261,61 @@ export interface CreateJiraIssueInput {
   summary: string
   description?: string
 }
+
+export interface SlurmJob {
+  /** As squeue prints it: `123`, an array task `123_7`, or a collapsed array `123_[8-500]`. */
+  id: string
+  partition: string
+  /** Only for scope 'partitions' - with 'mine' every job is the SSH user's. */
+  user?: string
+  state: string
+  elapsed: string
+  timeLimit: string
+  nodes: number
+  /** Start time for a running job, expected start for a pending one; null when Slurm has none. */
+  start: string | null
+  /** Pending reason, e.g. `(Resources)`, or the node list of a running job. */
+  reason: string
+  name: string
+}
+
+export interface SlurmPartition {
+  name: string
+  available: string
+  totalNodes: number
+  /** Node count per state (`idle`, `mixed`, `allocated`, `drained`, ...). */
+  nodesByState: Record<string, number>
+}
+
+/** A down, drained or failing set of nodes, from `sinfo --list-reasons`. */
+export interface SlurmNodeIssue {
+  nodes: string
+  state: string
+  reason: string
+}
+
+/** 'waiting': no live session to run on yet (nothing ran). 'no-slurm': squeue isn't on the login
+ *  node's PATH. 'busy': slurmctld timed out or rate-limited the query. */
+export type SchedulerStatus = 'ok' | 'waiting' | 'no-slurm' | 'busy' | 'error'
+
+export interface SchedulerSnapshot {
+  clusterId: string
+  status: SchedulerStatus
+  message?: string
+  /** When the data below was fetched. A failed refresh keeps the last good data, so this can be
+   *  older than the status. Null until the first successful fetch. */
+  fetchedAt: string | null
+  refreshing: boolean
+  jobs: SlurmJob[]
+  /** More jobs matched than Gate-H parses per refresh (see MAX_SLURM_JOBS). */
+  truncated: boolean
+  partitions: SlurmPartition[]
+  nodeIssues: SlurmNodeIssue[]
+  /** Null when refresh is manual, or nothing is scheduled. */
+  nextRefreshAt: string | null
+}
+
+export const MAX_SLURM_JOBS = 2000
 
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
@@ -351,6 +431,17 @@ export interface GateHApi {
      *  and close use the ssh.* session calls and events. `renew` signs out first, so a still-valid
      *  session is replaced instead of reused. */
     login(clusterId: string, options: { renew: boolean }): Promise<{ sessionId: string }>
+  }
+  scheduler: {
+    /** Starts pushing this cluster's snapshots over onSnapshot (the cached one straight away) and
+     *  polls while at least one watcher remains - call unwatch when the section is hidden. */
+    watch(clusterId: string): void
+    unwatch(clusterId: string): void
+    /** Refreshes now; ignored within 10s of the last run. */
+    refresh(clusterId: string): void
+    onSnapshot(callback: (snapshot: SchedulerSnapshot) => void): () => void
+    /** The tasks of a collapsed job array, run once on request. */
+    arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */

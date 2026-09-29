@@ -9,6 +9,7 @@ import type {
   GateHApi,
   PanelLayout,
   PanelOrientation,
+  SchedulerSnapshot,
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent,
@@ -85,6 +86,19 @@ const api: GateHApi = {
     },
     login: (clusterId: string, options: { renew: boolean }) =>
       ipcRenderer.invoke('teleport:login', clusterId, options)
+  },
+  scheduler: {
+    watch: (clusterId: string) => ipcRenderer.send('scheduler:watch', clusterId),
+    unwatch: (clusterId: string) => ipcRenderer.send('scheduler:unwatch', clusterId),
+    refresh: (clusterId: string) => ipcRenderer.send('scheduler:refresh', clusterId),
+    onSnapshot: (callback: (snapshot: SchedulerSnapshot) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: SchedulerSnapshot): void =>
+        callback(payload)
+      ipcRenderer.on('scheduler:snapshot', listener)
+      return () => ipcRenderer.removeListener('scheduler:snapshot', listener)
+    },
+    arrayTasks: (clusterId: string, arrayJobId: string) =>
+      ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId)
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
