@@ -30,6 +30,8 @@ mac:
     - dmg
     - zip
   category: public.app-category.developer-tools
+  # The zip's name; the dmg's own artifactName below takes precedence for the dmg.
+  artifactName: ${productName}-${version}-${arch}-mac.${ext}
   # Ad-hoc ("-"): Apple Silicon won't run unsigned code, and electron-builder no longer falls back
   # to ad-hoc by itself. With the hardened runtime this needs disable-library-validation in the
   # entitlements, or the pre-signed Electron frameworks fail to load. A Developer ID replaces "-".
@@ -47,8 +49,6 @@ mac:
     - node_modules/node-pty/build/Release/**
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
-zip:
-  artifactName: ${productName}-${version}-${arch}-mac.${ext}
 linux:
   target:
     - AppImage
