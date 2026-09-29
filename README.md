@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/version-0.1.0-7db2ff" alt="Version 0.1.0">
   <img src="https://img.shields.io/badge/platform-Linux-0a0f1c?logo=linux&logoColor=white" alt="Platform: Linux">
   <br/>
-  <img src="https://img.shields.io/badge/Electron-39-47848F?logo=electron&logoColor=white" alt="Electron 39">
+  <img src="https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white" alt="Electron 41">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
   <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5">
   <img src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white" alt="SQLite via better-sqlite3">
