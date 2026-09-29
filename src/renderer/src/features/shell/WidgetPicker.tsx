@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Activity, Check, FileCode2, FolderOpen, Terminal as TerminalIcon } from 'lucide-react'
+import { Activity, Check, FileCode2, Terminal as TerminalIcon } from 'lucide-react'
 import type { WidgetType } from './panelLayout'
 
 interface WidgetPickerProps {
@@ -27,13 +27,9 @@ const AVAILABLE_WIDGETS: Array<{
 // Grafana Slurm dashboards, XDMoD) surface that Gate-H doesn't yet - shown disabled here so the
 // picker doubles as a visible roadmap, not just a control. None of these exist yet - see
 // docs/HPC_ORCHESTRATION.md. The job queue, node health, job history, GPU usage and storage quota
-// shipped as sections of the Status widget instead.
+// shipped as sections of the Status widget
+// instead, and file transfer as the panel toolbar's Files dialog.
 const ROADMAP_WIDGETS: Array<{ label: string; description: string; icon: typeof TerminalIcon }> = [
-  {
-    label: 'File transfer',
-    description: 'Browse, upload and download over the existing SSH connection (SFTP)',
-    icon: FolderOpen
-  },
   {
     label: 'Job templates',
     description: 'Saved batch scripts, submitted with sbatch after you confirm',
