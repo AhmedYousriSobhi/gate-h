@@ -24,8 +24,6 @@ const api: GateHApi = {
     create: (input: ClusterInput) => ipcRenderer.invoke('clusters:create', input),
     update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
     remove: (id: string) => ipcRenderer.invoke('clusters:remove', id),
-    setKeepAlive: (id: string, keepAlive: boolean) =>
-      ipcRenderer.invoke('clusters:setKeepAlive', id, keepAlive),
     setActiveMonitoring: (id: string, active: boolean) =>
       ipcRenderer.invoke('clusters:setActiveMonitoring', id, active)
   },

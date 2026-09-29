@@ -32,8 +32,8 @@ interface MainPanelProps {
   reachability?: ClusterReachability
   /** True when this cluster isn't the one currently selected in the sidebar - kept mounted
    *  (instead of unmounted) so every one of its terminal sessions stays connected in the
-   *  background, just visually hidden. Unless the cluster is pinned, Status is unmounted
-   *  meanwhile (no Grafana/Jira polling, no live panel embeds) and remounts fresh on return. */
+   *  background, just visually hidden. Status is unmounted meanwhile (no Grafana/Jira polling, no
+   *  live panel embeds) and remounts fresh on return. */
   hidden?: boolean
   onTerminalStatusChange?: (status: SessionStatus) => void
   /** How many of this cluster's sessions are connected - what closing the cluster would end. */
@@ -541,7 +541,6 @@ export default function MainPanel({
                           cluster={cluster}
                           reachability={reachability}
                           suspended={hidden}
-                          keepAlive={cluster.keepAliveInBackground}
                           onStatusChange={(status) => {
                             setTabStatuses((prev) =>
                               prev.get(tabId) === status ? prev : new Map(prev).set(tabId, status)
@@ -612,9 +611,7 @@ export default function MainPanel({
             />
           )}
           <div className="panel-pane" style={paneStyle(visible, 'status', ratio)}>
-            {(!hidden || cluster.keepAliveInBackground) && (
-              <StatusPanel cluster={cluster} reachability={reachability} />
-            )}
+            {!hidden && <StatusPanel cluster={cluster} reachability={reachability} />}
           </div>
         </div>
       ) : (

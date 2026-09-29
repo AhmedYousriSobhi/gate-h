@@ -26,7 +26,7 @@ const PHASES = new Set<string>([
 ] satisfies AzureTunnelPhase[])
 
 let broadcast: ((event: AzureTunnelStatusEvent) => void) | null = null
-// One in-flight `up` per cluster: a Terminal reconnect and a background (pinned) session can ask
+// One in-flight `up` per cluster: a Terminal reconnect and another tab's session can ask
 // at the same moment, and two concurrent `up`s would race for the same local port.
 const pendingUps = new Map<string, Promise<void>>()
 const openedTunnels = new Set<string>()
