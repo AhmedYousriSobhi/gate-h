@@ -7,6 +7,7 @@
   <img src="https://img.shields.io/badge/version-0.1.0-7db2ff" alt="Version 0.1.0">
   <img src="https://img.shields.io/badge/platform-Linux-0a0f1c?logo=linux&logoColor=white" alt="Platform: Linux">
   <img src="https://img.shields.io/badge/platform-macOS-0a0f1c?logo=apple&logoColor=white" alt="Platform: macOS">
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-0a0f1c" alt="macOS: Apple Silicon and Intel">
   <br/>
   <img src="https://img.shields.io/badge/Electron-39-47848F?logo=electron&logoColor=white" alt="Electron 39">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19">
@@ -16,6 +17,7 @@
 
 <p align="center">
   <b>A desktop app for running several HPC clusters from one window: SSH, Grafana status, and Jira.</b><br/>
+  For Linux and macOS (Apple Silicon and Intel).<br/>
   No server to deploy, no browser tabs, no telemetry.
 </p>
 
@@ -25,32 +27,35 @@
 
 ## 🚀 Quick start
 
-**① Install.**
+**① Install.** Pick your system. Both build with the same command: `./build-desktop.sh`.
 
-- **Linux:** you need [Docker](https://docs.docker.com/engine/install/).
+- **Linux:** you need [Docker](https://docs.docker.com/engine/install/). The script builds inside
+  a container, so nothing else has to be installed.
 
   ```bash
   git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
   ./build-desktop.sh && ./dist/Gate-H-*.AppImage
   ```
 
-- **macOS** (Apple Silicon or Intel): download `Gate-H-macos-arm64` or `-x64` from the latest
-  [macOS workflow run](https://github.com/AhmedYousriSobhi/gate-h/actions/workflows/macos.yml),
-  open the `.dmg`, and drag Gate-H to Applications. Or build it yourself with Node.js 20+:
+- **macOS** (Apple Silicon or Intel): you need [Node.js](https://nodejs.org) 20+ (`brew install
+  node`) and Xcode's Command Line Tools (`xcode-select --install`). Docker isn't used, because a
+  Mac app can only be built on a Mac. The script builds for your Mac's own chip.
 
   ```bash
   git clone git@github.com:AhmedYousriSobhi/gate-h.git && cd gate-h
   ./build-desktop.sh && open dist/*.dmg
   ```
 
-  On a Mac the script builds natively (Docker is Linux-only); it checks for Node.js and Xcode's
-  Command Line Tools first.
+  Drag Gate-H to **Applications**. The app isn't notarized yet, so macOS blocks the first
+  launch: open **System Settings → Privacy & Security** and click **Open Anyway**, or run
+  `xattr -dr com.apple.quarantine /Applications/Gate-H.app`.
 
-  The app isn't notarized yet, so the first launch is blocked. Go to **System Settings →
-  Privacy & Security** and click **Open Anyway**, or run
-  `xattr -dr com.apple.quarantine /Applications/Gate-H.app`. `tsh` and `az` from Homebrew are
-  found even when Gate-H is started from the Dock. Teleport login needs `python3`, which comes
-  with Xcode's Command Line Tools (`xcode-select --install`).
+  Don't want to build? Signed-in GitHub users can download `Gate-H-macos-arm64` (Apple Silicon)
+  or `Gate-H-macos-x64` (Intel) from the latest
+  [macOS workflow run](https://github.com/AhmedYousriSobhi/gate-h/actions/workflows/macos.yml).
+
+  `tsh` and `az` installed with Homebrew are found even when Gate-H is started from the Dock.
+  Teleport login needs `python3`, which comes with the Command Line Tools.
 
 **② Add a cluster.** Click **+ Add**, give it a name, fill in *SSH connection* (see below), and
 click **Save cluster**.
@@ -359,6 +364,9 @@ the shell.
 | The terminal says *Paused* | Gate-H stopped retrying to spare the cluster. Click **Reconnect now**, or wait: it resumes by itself when the light turns green. A session that dropped while its cluster was in the background reconnects when you select the cluster. |
 | *Host key … changed* notification | The server's key changed since your last connection. Ask your cluster admin before trusting it. |
 | Azure: a sign-in code appears | Your Azure login expired. Open the link and enter the code. |
+| macOS: *"Gate-H" can't be opened because Apple cannot check it* | The app isn't notarized. Go to **System Settings → Privacy & Security → Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Gate-H.app`. |
+| macOS: `tsh` or `az` not found | Install it with Homebrew. Gate-H reads your login shell's PATH, so a restart of Gate-H after installing is enough. |
+| macOS: Teleport login does nothing or fails at once | It needs `python3`. Run `xcode-select --install`. |
 | Teleport: *unreachable* or *no route to host* | Your machine can't reach the proxy. Check the VPN and the proxy address. |
 | Teleport: *certificate signed by unknown authority* | Start Gate-H with `SSL_CERT_FILE` pointing at your organisation's CA file. |
 | Teleport: *login needed* on a cluster in the background | Background clusters never log in on their own. Log in from any cluster on that proxy; the rest reconnect. |
@@ -372,6 +380,10 @@ the shell.
 npm install       # Node.js 20+; also builds the native modules for Electron
 npm run dev       # start Gate-H with hot reload
 ```
+
+This works the same on Linux and macOS. To build the packaged app, use `./build-desktop.sh` (see
+[Quick start](#-quick-start)); CI runs it on macOS for both chips
+([macos.yml](.github/workflows/macos.yml)).
 
 Before opening a pull request, run `npm run typecheck`, `npm run lint` and `npm run build`. To
 test a single part: `./scripts/test-azure-tunnel.sh`, `./scripts/test-teleport.sh` and
