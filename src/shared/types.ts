@@ -481,6 +481,8 @@ export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
 }
 
 export interface GateHApi {
+  /** `process.platform` of the main process - 'darwin', 'linux' or 'win32'. */
+  platform: string
   clusters: {
     /** Only the active profile's clusters - see `profiles` below. */
     list(): Promise<ClusterSummary[]>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import './terminal.css'
+import { SPLIT_SHORTCUT_LABEL } from '../../lib/platform'
 
 interface TabContextMenuProps {
   x: number
@@ -60,7 +61,7 @@ export default function TabContextMenu({
       </button>
       <button className="tab-context-menu-item" onClick={() => run(onSplit)}>
         Split
-        <kbd className="tab-context-menu-shortcut">Ctrl+Shift+5</kbd>
+        <kbd className="tab-context-menu-shortcut">{SPLIT_SHORTCUT_LABEL}</kbd>
       </button>
       <button className="tab-context-menu-item" onClick={() => run(onDuplicate)}>
         Duplicate

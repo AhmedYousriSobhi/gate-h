@@ -1,0 +1,95 @@
+# Builds and tests Gate-H on macOS, which it can't be on the Linux machines it's developed on:
+# typecheck, lint, the headless checks and script tests (the scripts under macOS's own bash 3.2
+# and BSD userland), then a packaged .app per architecture, smoke-tested and uploaded.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          # GitHub's last Intel macOS image, supported until August 2027.
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Also rebuilds the native modules for Electron (postinstall: electron-builder install-app-deps).
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: node scripts/test-pty-manager.mjs
+
+      # A Mac user's scripts run under /bin/bash 3.2 unless they've installed a newer bash, so the
+      # tests do too, whatever the runner image has on PATH.
+      - name: Script tests under /bin/bash 3.2
+        run: |
+          mkdir -p "$RUNNER_TEMP/bash32"
+          ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
+          export PATH="$RUNNER_TEMP/bash32:$PATH"
+          bash --version | head -1
+          ./scripts/test-teleport.sh
+          ./scripts/test-azure-tunnel.sh
+
+      - name: Package
+        # electron-builder skips signing on pull_request builds, which leaves Electron's own
+        # signature invalid once the app is repackaged.
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
+        run: ./build-desktop.sh
+
+      - run: ./scripts/smoke-packaged-mac.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gate-H-macos-${{ matrix.arch }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+  # A version tag (git tag v0.1.0 && git push origin v0.1.0) publishes the builds, so testers can
+  # download them instead of building. Marked a pre-release because the app isn't notarized.
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Checksums
+        run: cd release && sha256sum *.dmg *.zip > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" release/*
+          --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --prerelease
