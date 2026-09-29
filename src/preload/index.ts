@@ -102,6 +102,9 @@ const api: GateHApi = {
     history: (clusterId: string, days: number) =>
       ipcRenderer.invoke('scheduler:history', clusterId, days)
   },
+  storage: {
+    usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)
+  },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
     onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {

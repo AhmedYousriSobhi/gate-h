@@ -29,6 +29,7 @@ ticket tracker separately.
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
 | `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
 | `SchedulerConfig` | `kind` (`slurm`), `scope` (`mine`\|`partitions`), `partitions`, `intervalSec`, `autoRefresh` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
+| `StorageConfig` | `paths` | Optional per cluster: paths whose usage and quota the Status widget checks on request. See §3.10. |
 | `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
 
 Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
@@ -189,6 +190,9 @@ in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
   one summary. While the cluster is open in the background, it's checked at most every 5 minutes,
   on its terminal's existing SSH connection only, with backoff, and never on Teleport clusters. A
   closed or standby cluster runs nothing.
+- **Storage quota.** For configured paths, show the whole filesystem's usage and the user's own
+  quota where the filesystem has one (Lustre, GPFS), flagging usage over the soft limit. Checked
+  on request only, over the existing session.
 - **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
   running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
   existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside

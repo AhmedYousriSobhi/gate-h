@@ -75,7 +75,7 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   | 6 | **Job submission helper** | 📝 Outlined | Local `#SBATCH` template library; `sbatch`/`scancel` only after the user confirms the exact command |
   | — | **Slurm notifications** | ✅ Done | Opt-in per cluster; snapshot diffs (`scheduler/changes.ts`) plus one `sacct` for final states; background check every 5 min on the open cluster's existing connection, never on Teleport. Covered by `slurm.checks.ts` and `scheduler-monitor.checks.ts` |
   | — | **Job history** | ✅ Done | `sacct` for the user's own allocations over 24 h or 7 days, on request only (`SlurmHistory.tsx`); reuses the phase 1 runner |
-  | — | Storage quota | 💡 Idea | `lfs quota`/`mmlsquota`/`df`; would reuse the phase 1 runner |
+  | — | **Storage quota** | ✅ Done | Per-cluster `storage.paths`; on request, one command per refresh: `df` per path plus `lfs quota` (Lustre) or `mmlsquota -Y` (GPFS), picked by `stat -f`. Reuses the phase 1 runner. Covered by `storage.checks.ts`, which runs the real command in a local bash; the Lustre/GPFS parsers are checked against recorded output only |
   | — | PBS/LSF | 💡 Idea | `SchedulerConfig.kind` leaves room; not designed |
 
 - **No drag-to-resize between panes** — the side-by-side/stacked split is a fixed 50/50 today

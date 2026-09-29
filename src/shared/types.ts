@@ -142,6 +142,15 @@ export const DEFAULT_SCHEDULER_INTERVAL_SEC = 60
 /** Partition names are passed to squeue/sinfo on the remote shell, so only these are accepted. */
 export const SLURM_PARTITION_PATTERN = /^[A-Za-z0-9_.-]+$/
 
+/** Paths whose usage and quota the Status widget can check, e.g. `~` or `/scratch/$USER`. */
+export interface StorageConfig {
+  paths: string[]
+}
+
+/** Characters allowed in a storage path, after removing `$USER`/`$HOME` - paths are passed to the
+ *  remote shell, so nothing that could end the quoting or start a command. */
+export const STORAGE_PATH_PATTERN = /^[A-Za-z0-9_./~-]+$/
+
 export interface Cluster {
   id: string
   name: string
@@ -153,6 +162,7 @@ export interface Cluster {
   azureTunnel: AzureTunnelConfig | null
   teleport: TeleportConfig | null
   scheduler: SchedulerConfig | null
+  storage: StorageConfig | null
   /** Master on/off switch for this cluster's Terminal/Grafana connections, independent of
    *  whether it's open or selected. False ("standby") means no SSH session and no Grafana
    *  polling exist for this cluster at all, even if it's selected. Defaults to true so existing
@@ -176,6 +186,7 @@ export interface ClusterInput {
   azureTunnel: AzureTunnelConfig | null
   teleport: TeleportConfig | null
   scheduler: SchedulerConfig | null
+  storage: StorageConfig | null
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
@@ -336,6 +347,26 @@ export interface SchedulerSnapshot {
 
 export const MAX_SLURM_JOBS = 2000
 
+/** The user's quota on a path's filesystem, in KiB. Limits are null when there's no limit. */
+export interface StorageQuota {
+  source: 'lfs' | 'mmlsquota'
+  usedKiB: number
+  softKiB: number | null
+  hardKiB: number | null
+  files: number | null
+  filesHard: number | null
+}
+
+export interface StorageUsage {
+  path: string
+  /** As `stat -f -c %T` reports it: `lustre`, `gpfs`, `nfs`, `xfs`, ... */
+  fsType: string
+  /** The whole filesystem, from df - shared with everyone else on it. */
+  filesystem?: { sizeKiB: number; usedKiB: number }
+  quota?: StorageQuota
+  error?: string
+}
+
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
 export interface ClusterReachability {
@@ -463,6 +494,10 @@ export interface GateHApi {
     arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
     /** The SSH user's jobs over the last `days` (1 or 7) days, newest first, run once on request. */
     history(clusterId: string, days: number): Promise<SlurmHistoryJob[]>
+  }
+  storage: {
+    /** Usage and quota for the cluster's configured paths, run once on request. */
+    usage(clusterId: string): Promise<StorageUsage[]>
   }
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
