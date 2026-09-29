@@ -1,12 +1,18 @@
 import { useState } from 'react'
-import { BarChart3, Cloud, KeyRound, ShieldCheck, Ticket } from 'lucide-react'
+import { BarChart3, Cloud, KeyRound, ListChecks, ShieldCheck, Ticket } from 'lucide-react'
 import type {
   AzureSubscription,
   AzureTunnelMode,
   ClusterInput,
   ClusterSummary,
   JiraAuthMode,
+  SchedulerScope,
   SshAuthMethod
+} from '../../../../shared/types'
+import {
+  DEFAULT_SCHEDULER_INTERVAL_SEC,
+  MIN_SCHEDULER_INTERVAL_SEC,
+  SLURM_PARTITION_PATTERN
 } from '../../../../shared/types'
 import { toClusterSlug } from '../../../../shared/clusterSlug'
 import './clusters.css'
@@ -59,6 +65,11 @@ interface FormState {
   teleportCluster: string
   teleportUser: string
   teleportAuthConnector: string
+  useScheduler: boolean
+  schedulerScope: SchedulerScope
+  schedulerPartitions: string
+  schedulerInterval: string
+  schedulerAutoRefresh: boolean
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -103,8 +114,29 @@ function toFormState(c?: ClusterSummary): FormState {
     teleportProxy: c?.teleport?.proxy ?? '',
     teleportCluster: c?.teleport?.cluster ?? '',
     teleportUser: c?.teleport?.user ?? '',
-    teleportAuthConnector: c?.teleport?.authConnector ?? ''
+    teleportAuthConnector: c?.teleport?.authConnector ?? '',
+    useScheduler: Boolean(c?.scheduler),
+    schedulerScope: c?.scheduler?.scope ?? 'mine',
+    schedulerPartitions: c?.scheduler?.partitions.join(', ') ?? '',
+    schedulerInterval: String(c?.scheduler?.intervalSec ?? DEFAULT_SCHEDULER_INTERVAL_SEC),
+    schedulerAutoRefresh: c?.scheduler?.autoRefresh ?? !c?.teleport
   }
+}
+
+/** Returns why the Slurm settings can't be saved, or null if they can. */
+function schedulerError(form: FormState): string | null {
+  if (!form.useScheduler) return null
+  const partitions = splitList(form.schedulerPartitions)
+  const bad = partitions.find((name) => !SLURM_PARTITION_PATTERN.test(name))
+  if (bad) return `Partition names may only use letters, digits, _ . and - ("${bad}").`
+  if (form.schedulerScope === 'partitions' && partitions.length === 0) {
+    return "Showing everyone's jobs needs at least one partition."
+  }
+  const interval = Number(form.schedulerInterval)
+  if (!Number.isInteger(interval) || interval < MIN_SCHEDULER_INTERVAL_SEC) {
+    return `Slurm refresh interval must be a whole number of seconds, at least ${MIN_SCHEDULER_INTERVAL_SEC}.`
+  }
+  return null
 }
 
 /** Returns why the Teleport settings can't be saved, or null if they can. */
@@ -187,7 +219,7 @@ export default function ClusterForm({
       setError('Name, host, and username are required.')
       return
     }
-    const tunnelError = teleportError(form) ?? azureTunnelError(form)
+    const tunnelError = teleportError(form) ?? azureTunnelError(form) ?? schedulerError(form)
     if (tunnelError) {
       setError(tunnelError)
       return
@@ -255,6 +287,15 @@ export default function ClusterForm({
             cluster: form.teleportCluster.trim() || undefined,
             user: form.teleportUser.trim() || undefined,
             authConnector: form.teleportAuthConnector.trim() || undefined
+          }
+        : null,
+      scheduler: form.useScheduler
+        ? {
+            kind: 'slurm',
+            scope: form.schedulerScope,
+            partitions: splitList(form.schedulerPartitions),
+            intervalSec: Number(form.schedulerInterval),
+            autoRefresh: form.schedulerAutoRefresh
           }
         : null
     }
@@ -670,6 +711,87 @@ export default function ClusterForm({
                     placeholder={initial?.hasGrafanaToken ? 'Unchanged - leave blank to keep' : ''}
                   />
                 </div>
+              </>
+            )}
+          </div>
+
+          <div className="form-section">
+            <label className="form-field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.useScheduler}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    useScheduler: e.target.checked,
+                    // Each run on a Teleport cluster is an audited session - opt in explicitly.
+                    schedulerAutoRefresh: e.target.checked
+                      ? !prev.useTeleport
+                      : prev.schedulerAutoRefresh
+                  }))
+                }
+              />
+              <h4 style={{ margin: 0 }}>
+                <ListChecks size={13} strokeWidth={2} />
+                Slurm jobs and nodes
+              </h4>
+            </label>
+            {form.useScheduler && (
+              <>
+                <p className="hint">
+                  Runs squeue and sinfo on the terminal&apos;s open session - never a new login -
+                  and only while this cluster&apos;s Status is showing. See
+                  docs/HPC_ORCHESTRATION.md.
+                </p>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="schedulerScope">Show</label>
+                    <select
+                      id="schedulerScope"
+                      value={form.schedulerScope}
+                      onChange={(e) => set('schedulerScope', e.target.value as SchedulerScope)}
+                    >
+                      <option value="mine">My jobs</option>
+                      <option value="partitions">Everyone&apos;s jobs in these partitions</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="schedulerPartitions">
+                      Partitions{form.schedulerScope === 'mine' ? ' (optional)' : ''}
+                    </label>
+                    <input
+                      id="schedulerPartitions"
+                      placeholder="gpu, cpu"
+                      value={form.schedulerPartitions}
+                      onChange={(e) => set('schedulerPartitions', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="schedulerInterval">Refresh every (seconds)</label>
+                    <input
+                      id="schedulerInterval"
+                      type="number"
+                      min={MIN_SCHEDULER_INTERVAL_SEC}
+                      value={form.schedulerInterval}
+                      onChange={(e) => set('schedulerInterval', e.target.value)}
+                    />
+                  </div>
+                  <label className="form-field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={form.schedulerAutoRefresh}
+                      onChange={(e) => set('schedulerAutoRefresh', e.target.checked)}
+                    />
+                    Refresh automatically
+                  </label>
+                </div>
+                {form.useTeleport && form.schedulerAutoRefresh && (
+                  <p className="hint">
+                    Every refresh is a new Teleport session in your site&apos;s audit log.
+                  </p>
+                )}
               </>
             )}
           </div>

@@ -168,6 +168,10 @@ connection attempts. Secrets are encrypted on disk.
 - 🛡️ **Teleport clusters.** For clusters behind a Teleport proxy, Gate-H checks your `tsh`
   session and connects with `tsh ssh`. If you need to log in, you do it right in the terminal.
 - 📊 **Grafana status.** Health checks plus live panels you choose, stacked or side by side.
+- 📋 **Slurm jobs and nodes.** Your jobs (or everyone's in the partitions you name), with state,
+  time used and why a pending job is waiting, plus each partition's node states and why nodes
+  were drained. Runs `squeue`/`sinfo` on the session you already have open, only while you're
+  looking at it.
 - 🎫 **Jira, Cloud or Data Center.** List a cluster's issues and file new ones from its view.
 - 🧩 **Widgets side by side.** Show, hide, swap, stack and resize the terminal and status views.
   Your layout is remembered.
@@ -181,13 +185,9 @@ connection attempts. Secrets are encrypted on disk.
 
 ## Roadmap
 
-Next up is HPC orchestration: seeing and managing your jobs without leaving Gate-H. None of it is
-built yet.
+Next up is the rest of HPC orchestration: managing your jobs without leaving Gate-H. The Slurm
+job queue and node health are already in (see [Features](#features)); these aren't built yet.
 
-- 📋 **Job queue.** Your Slurm jobs, with state, time used and remaining, and why a pending job is
-  waiting.
-- 🩺 **Node health.** Each partition's idle, allocated, down and drained nodes, and why nodes were
-  drained.
 - 🎛️ **GPU usage.** Utilization, memory and temperature of the GPUs your jobs are running on, from
   your cluster's Grafana, or sampled on demand.
 - 📁 **File transfer.** Browse, upload and download files over the connection you already have.
@@ -264,6 +264,7 @@ while you're looking at them, so they add almost no load to the cluster. Details
 | I want to… | Do this |
 |---|---|
 | see all clusters at a glance | Open **Overview** at the top of the sidebar |
+| see my Slurm jobs and node states | Edit the cluster → tick **Slurm jobs and nodes**; they show in its Status. Click ▸ on a job array to list its tasks |
 | rearrange a cluster's widgets | Use the toolbar above them; the puzzle-piece icon shows or hides each one |
 | see what changed anywhere | Click the 🔔 bell; click an entry to jump to that cluster |
 | separate work and research clusters | Click the profile name at the top of the sidebar |

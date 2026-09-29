@@ -28,7 +28,7 @@ ticket tracker separately.
 | `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
 | `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
-| `SchedulerConfig` *(planned)* | `kind` (`slurm`), `scope` (`mine`\|`partitions`), `partitions`, `intervalSec`, `autoRefresh` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
+| `SchedulerConfig` | `kind` (`slurm`), `scope` (`mine`\|`partitions`), `partitions`, `intervalSec`, `autoRefresh` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
 | `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
 
 Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
@@ -164,7 +164,8 @@ never the plaintext or ciphertext.
   count — never a blank "pick something" screen.
 
 ### 3.10 HPC orchestration (planned)
-Not built yet. The design is in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
+The job queue and node health are built; the rest isn't yet (see docs/STATUS.md). The design is
+in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
 - **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
   own jobs, or every user's jobs in named partitions (never the whole queue). Each job shows its
   state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
