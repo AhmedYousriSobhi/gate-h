@@ -20,7 +20,7 @@
 
 ---
 
-**Jump to:** [🚀 Quick start](#-quick-start) · [Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) · [Features](#features) · [For developers](#for-developers) · [Documentation](#documentation)
+**Jump to:** [🚀 Quick start](#-quick-start) · [Everyday use](#everyday-use) · [Troubleshooting](#troubleshooting) · [Features](#features) · [Roadmap](#roadmap) · [For developers](#for-developers) · [Documentation](#documentation)
 
 ## 🚀 Quick start
 
@@ -179,6 +179,25 @@ connection attempts. Secrets are encrypted on disk.
   in the background, quietly, until you close it. Or put a cluster in standby so it makes no
   connections at all.
 
+## Roadmap
+
+Next up is HPC orchestration: seeing and managing your jobs without leaving Gate-H. None of it is
+built yet.
+
+- 📋 **Job queue.** Your Slurm jobs, with state, time used and remaining, and why a pending job is
+  waiting.
+- 🩺 **Node health.** Each partition's idle, allocated, down and drained nodes, and why nodes were
+  drained.
+- 🎛️ **GPU usage.** Utilization, memory and temperature of the GPUs your jobs are running on, from
+  your cluster's Grafana, or sampled on demand.
+- 📁 **File transfer.** Browse, upload and download files over the connection you already have.
+- 📝 **Job templates.** Fill in a saved batch script, check it, and submit it with one confirmed
+  click.
+
+These features never open a connection of their own, and never log in for you. They only refresh
+while you're looking at them, so they add almost no load to the cluster. Details:
+[docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
+
 ## Preview
 
 <p align="center">
@@ -327,6 +346,7 @@ has the commands, the code map, the conventions and the known gotchas.
 | [docs/TELEPORT.md](docs/TELEPORT.md) | Teleport clusters: the session check, login, routing, and testing. |
 | [docs/AZURE.md](docs/AZURE.md) | Azure tunnels: how they stay alive, investigating drops, the script on its own, and testing. |
 | [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) | Jira setup, and keeping several clusters' tickets apart in one project. |
+| [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md) | Planned Slurm job queue, node health, GPU telemetry, file transfer and job submission: design and phases. |
 | [docs/STATUS.md](docs/STATUS.md) | What's shipped, how each feature was verified, known limitations, and the roadmap. |
 | [SPEC.md](SPEC.md) | The functional spec, written as requirements. |
 | [docs/ANALYSIS.md](docs/ANALYSIS.md) | Prior art (Open OnDemand, ColdFront/XDMoD, Slurm-web, …) and the reasons behind the design. |

@@ -28,6 +28,7 @@ ticket tracker separately.
 | `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths` | A service-account API token is stored alongside but never returned to the renderer. |
 | `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
 | `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
+| `SchedulerConfig` *(planned)* | `kind` (`slurm`), `scope` (`mine`\|`all`), optional `partitions`, `intervalSec` | Optional per cluster; `null` means no scheduler integration. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
 | `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
 
 Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
@@ -162,6 +163,34 @@ never the plaintext or ciphertext.
   reachability, tags, which integrations (Grafana/Jira) are configured, and unread notification
   count — never a blank "pick something" screen.
 
+### 3.10 HPC orchestration (planned)
+Not built yet. The design is in [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
+- **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
+  jobs (or the whole queue, or chosen partitions) with state, elapsed/limit, nodes, and expected
+  start or pending reason, plus per-partition node counts by state and drain reasons.
+- **Scheduler commands never open a connection.** They run only on a session the user already has
+  open: an extra `ssh2` channel on the terminal's connection, or, for Teleport, a non-interactive
+  `tsh ssh` while the Teleport session is valid. With no live session, nothing runs, and a
+  scheduler query never triggers a login or MFA prompt.
+- **Fixed commands only.** The renderer asks for a cluster's snapshot, never for a command, and
+  any user-supplied argument (partition names) is validated before it reaches a shell. Each run
+  has a timeout and an output cap, and a cluster never has more than one scheduler command in
+  flight.
+- **Scheduler polling is scoped to what the user is looking at.** It polls only while the cluster
+  is selected, not in standby, and a scheduler widget is visible, with a floor on the interval,
+  the same failure backoff as §3.4, and a slower cadence while the window is unfocused.
+  Background clusters (§3.6) never poll. On Teleport clusters, where each run is an audited
+  session, refresh is manual unless the user turns automatic refresh on.
+- **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
+  running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
+  existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside
+  one of the user's own jobs (`srun --overlap`), never polled and never over direct SSH to compute
+  nodes.
+- **File transfer.** Browse, upload and download over SFTP on the existing connection.
+- **Job submission helper.** A local library of batch script templates. Submitting shows the full
+  rendered script and the exact command, and runs `sbatch` only after an explicit confirmation.
+  Cancelling a job has the same confirmation and applies only to the user's own jobs.
+
 ## 4. Non-functional requirements
 
 - **Secrets never leave the main process in plaintext or ciphertext** — see §2; enforced by
@@ -181,7 +210,9 @@ never the plaintext or ciphertext.
   Gate-H's) — Gate-H only connects to clusters that already exist.
 - A **multi-tenant, server-hosted** portal (that's Open OnDemand's niche) — Gate-H is a
   single-user desktop app; there is no server component and no concept of other users.
-- **Scheduler-level job management** (submit/cancel/monitor Slurm/PBS/LSF jobs) beyond what's
-  reachable through the plain SSH terminal — see `docs/STATUS.md`'s roadmap for the planned,
-  not-yet-built job-queue/GPU/storage/node-health widgets, which would run *read-only* scheduler
-  commands over the existing SSH session rather than becoming a scheduler client.
+- **Becoming a scheduler client or admin tool.** Gate-H won't talk to `slurmrestd`, won't
+  perform admin actions (drain/resume nodes, change partitions, manage accounts), and won't
+  submit or cancel anything without an explicit per-action confirmation. The planned
+  job-queue, node-health, GPU and submission features (§3.10) run ordinary user-level scheduler
+  commands over the session the user already has open.
+- **PBS/LSF** for now. `SchedulerConfig.kind` leaves room for them, but only Slurm is designed.
