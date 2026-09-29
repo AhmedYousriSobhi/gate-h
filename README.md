@@ -256,6 +256,8 @@ connection attempts. Secrets are encrypted on disk.
 | reorder tabs, or stack two into one view | Drag a tab onto the edge of another tab to reorder, or onto its middle to stack them |
 | move tabs between the side and the top | Click **⋯** above the tabs → **Tabs position** |
 | rename, split, unstack or close a session | Right-click its tab or the session itself (or double-click the tab to rename) |
+| focus on one session in a stack for a while | Click **Maximize** in its header; **Restore** brings the layout back |
+| split or close a session from where you're looking | Use the icons on the right of its header bar |
 
 **Terminal shortcuts:** **Ctrl+Shift+C** / **Ctrl+Shift+V** copy and paste (plain **Ctrl+C**
 still interrupts). **Ctrl+F** searches the scrollback. **Ctrl+Tab** / **Ctrl+Shift+Tab** switch

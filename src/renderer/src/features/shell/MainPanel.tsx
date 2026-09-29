@@ -114,8 +114,19 @@ export default function MainPanel({
     groupLeaves.findIndex((ids) => ids.includes(activeTabId))
   )
   const activeGroup = groups[activeGroupIndex]
-  const activeRects = useMemo(() => layoutRects(activeGroup), [activeGroup])
   const activeIsSplit = activeGroup.kind === 'split'
+  // A session "maximized" over its stack (header toolbar) fills the stack's area; the others stay
+  // mounted and connected, just hidden. Only counts while it's still in the visible, split stack,
+  // so closing, moving or unstacking it simply ends the maximize.
+  const [maximizedId, setMaximizedId] = useState<string | null>(null)
+  const zoomedId =
+    maximizedId && activeIsSplit && groupLeaves[activeGroupIndex].includes(maximizedId)
+      ? maximizedId
+      : null
+  const activeRects = useMemo(
+    () => (zoomedId ? new Map([[zoomedId, { x: 0, y: 0, w: 1, h: 1 }]]) : layoutRects(activeGroup)),
+    [activeGroup, zoomedId]
+  )
   // What the layout menu shows as selected: the visible stack's own outer direction if it's
   // split, otherwise the default a new split would use.
   const splitOrientation =
@@ -214,6 +225,7 @@ export default function MainPanel({
   const handleSplitTab = useCallback(
     (sourceId: string): void => {
       const newId = crypto.randomUUID()
+      setMaximizedId(null)
       setGroups((prev) =>
         prev.map((g) =>
           leaves(g).includes(sourceId) ? insertBeside(g, sourceId, newId, defaultEdge) : g
@@ -261,6 +273,7 @@ export default function MainPanel({
   // Moves dragId out of wherever it is and beside targetId on `edge` - shared by tab-strip merges
   // and panel-edge drops, which differ only in how the edge is chosen.
   const moveBeside = useCallback((dragId: string, targetId: string, edge: Edge): void => {
+    setMaximizedId(null)
     setGroups((prev) =>
       removeEverywhere(prev, new Set([dragId])).map((g) =>
         leaves(g).includes(targetId) ? insertBeside(g, targetId, dragId, edge) : g
@@ -347,7 +360,10 @@ export default function MainPanel({
     onDrop: handleDropTab,
     onPaneDrop: handlePaneDrop
   })
-  const activeDividers = useMemo(() => dividers(activeGroup), [activeGroup])
+  const activeDividers = useMemo(
+    () => (zoomedId ? [] : dividers(activeGroup)),
+    [activeGroup, zoomedId]
+  )
 
   // Dragging the border between two sessions in the visible stack - resizes live, trading space
   // only between the two sessions either side of it.
@@ -490,7 +506,9 @@ export default function MainPanel({
                         key={tabId}
                         data-tab-id={tabId}
                         className={`terminal-tab-pane${
-                          activeIsSplit && tabId === activeTabId ? ' terminal-tab-pane-focused' : ''
+                          activeIsSplit && !zoomedId && tabId === activeTabId
+                            ? ' terminal-tab-pane-focused'
+                            : ''
                         }${rect && rect.x + rect.w < 0.999 ? ' terminal-tab-pane-border-right' : ''}${
                           rect && rect.y + rect.h < 0.999 ? ' terminal-tab-pane-border-bottom' : ''
                         }${sessionDrag.draggingId === tabId ? ' terminal-tab-pane-dragging' : ''}`}
@@ -522,6 +540,14 @@ export default function MainPanel({
                           onCycleTab={handleCycleTab}
                           onSplit={() => handleSplitTab(tabId)}
                           onHeaderPointerDown={(e) => sessionDrag.startDrag(tabId, e)}
+                          splitDirection={splitOrientation}
+                          maximized={zoomedId === tabId}
+                          onToggleMaximize={
+                            activeIsSplit
+                              ? () => setMaximizedId(zoomedId === tabId ? null : tabId)
+                              : undefined
+                          }
+                          onClose={isPrimary ? undefined : () => handleCloseTab(tabId)}
                           onTitleChange={(title) =>
                             setShellTitles((prev) => {
                               const trimmed = title.trim()
