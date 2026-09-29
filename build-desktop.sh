@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Builds the Gate-H Linux AppImage reproducibly, inside Docker, instead of relying on whatever
-# Node/toolchain happens to be installed locally.
+# Builds Gate-H: the Linux AppImage reproducibly inside Docker, or on macOS the dmg + zip natively.
 #
 # Usage:
 #   ./build-desktop.sh
-#   ./dist/Gate-H-*.AppImage
+#   ./dist/Gate-H-*.AppImage        (Linux)
+#   open dist/*.dmg                 (macOS)
+#
+# macOS can't use the container: a dmg and its code signature need macOS's own hdiutil and
+# codesign, and Docker on a Mac only runs Linux. It builds on the host instead and needs Node.js 20+.
 #
 # The Docker image (docker/build.Dockerfile) is the build TOOLCHAIN only - a pinned Node version
 # plus the native-module and Linux-packaging build deps. The actual repo is bind-mounted in at run
@@ -16,6 +19,25 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE_TAG="gateh-builder:latest"
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  if ! command -v node >/dev/null 2>&1 || (( $(node -p 'process.versions.node.split(".")[0]') < 20 )); then
+    echo "error: Node.js 20+ is required (brew install node)" >&2
+    exit 1
+  fi
+  if ! xcode-select -p >/dev/null 2>&1; then
+    echo "error: Xcode Command Line Tools are required (xcode-select --install)" >&2
+    exit 1
+  fi
+  cd "$ROOT_DIR"
+  echo "==> Building Gate-H for macOS (npm ci && npm run typecheck && npm run build:mac)"
+  npm ci && npm run typecheck && npm run build:mac
+  echo
+  echo "==> Done. Build artifacts:"
+  ls -1 dist/*.dmg dist/*.zip 2>/dev/null || echo "(no dmg/zip found under dist/ - check the build log above)"
+  echo "First launch: System Settings > Privacy & Security > Open Anyway (the app isn't notarized)."
+  exit 0
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "error: docker is required but was not found on PATH" >&2
