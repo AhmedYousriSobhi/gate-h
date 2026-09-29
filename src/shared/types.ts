@@ -131,6 +131,10 @@ export interface SchedulerConfig {
   /** Off means refresh only on request. Defaults off for Teleport clusters, where every run is a
    *  new, audited Teleport session. */
   autoRefresh: boolean
+  /** Notify when the user's jobs finish or start and when nodes go down or are drained. While
+   *  the cluster is open in the background, this keeps a check every 5 minutes on its existing
+   *  SSH connection (never on Teleport). Absent in configs saved before it existed = off. */
+  notify?: boolean
 }
 
 export const MIN_SCHEDULER_INTERVAL_SEC = 30
@@ -340,7 +344,7 @@ export interface ClusterReachability {
   checkedAt: string
 }
 
-export type NotificationKind = 'reachability' | 'jira' | 'ssh'
+export type NotificationKind = 'reachability' | 'jira' | 'ssh' | 'scheduler'
 export type NotificationSeverity = 'info' | 'warning'
 
 export interface ClusterNotification {

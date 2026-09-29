@@ -70,6 +70,7 @@ interface FormState {
   schedulerPartitions: string
   schedulerInterval: string
   schedulerAutoRefresh: boolean
+  schedulerNotify: boolean
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -119,7 +120,8 @@ function toFormState(c?: ClusterSummary): FormState {
     schedulerScope: c?.scheduler?.scope ?? 'mine',
     schedulerPartitions: c?.scheduler?.partitions.join(', ') ?? '',
     schedulerInterval: String(c?.scheduler?.intervalSec ?? DEFAULT_SCHEDULER_INTERVAL_SEC),
-    schedulerAutoRefresh: c?.scheduler?.autoRefresh ?? !c?.teleport
+    schedulerAutoRefresh: c?.scheduler?.autoRefresh ?? !c?.teleport,
+    schedulerNotify: c?.scheduler?.notify ?? false
   }
 }
 
@@ -295,7 +297,8 @@ export default function ClusterForm({
             scope: form.schedulerScope,
             partitions: splitList(form.schedulerPartitions),
             intervalSec: Number(form.schedulerInterval),
-            autoRefresh: form.schedulerAutoRefresh
+            autoRefresh: form.schedulerAutoRefresh,
+            notify: form.schedulerNotify && !form.useTeleport
           }
         : null
     }
@@ -787,6 +790,22 @@ export default function ClusterForm({
                     Refresh automatically
                   </label>
                 </div>
+                {!form.useTeleport && (
+                  <label className="form-field-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={form.schedulerNotify}
+                      onChange={(e) => set('schedulerNotify', e.target.checked)}
+                    />
+                    Notify me when my jobs finish or start, and when nodes go down
+                  </label>
+                )}
+                {!form.useTeleport && form.schedulerNotify && (
+                  <p className="hint">
+                    While this cluster is open in the background, Gate-H keeps checking every 5
+                    minutes on its terminal&apos;s connection. Closed or in standby, nothing runs.
+                  </p>
+                )}
                 {form.useTeleport && form.schedulerAutoRefresh && (
                   <p className="hint">
                     Every refresh is a new Teleport session in your site&apos;s audit log.

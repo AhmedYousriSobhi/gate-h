@@ -73,6 +73,7 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   | 4 | **GPU usage** | 📝 Outlined | Grafana `/api/ds/query` on DCGM exporter metrics with the existing token; otherwise an on-demand `srun --overlap … nvidia-smi` sample inside the user's own job |
   | 5 | **File transfer** (SFTP) | 📝 Outlined | `client.sftp()` on the existing connection; Teleport (`tsh scp`) later |
   | 6 | **Job submission helper** | 📝 Outlined | Local `#SBATCH` template library; `sbatch`/`scancel` only after the user confirms the exact command |
+  | — | **Slurm notifications** | ✅ Done | Opt-in per cluster; snapshot diffs (`scheduler/changes.ts`) plus one `sacct` for final states; background check every 5 min on the open cluster's existing connection, never on Teleport. Covered by `slurm.checks.ts` and `scheduler-monitor.checks.ts` |
   | — | **Job history** | ✅ Done | `sacct` for the user's own allocations over 24 h or 7 days, on request only (`SlurmHistory.tsx`); reuses the phase 1 runner |
   | — | Storage quota | 💡 Idea | `lfs quota`/`mmlsquota`/`df`; would reuse the phase 1 runner |
   | — | PBS/LSF | 💡 Idea | `SchedulerConfig.kind` leaves room; not designed |
@@ -88,15 +89,11 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
 - **Can't move a cluster between profiles** — a cluster is assigned to whichever profile was
   active when it was created, and there's no "move to another profile" action yet; the only way is
   to delete it and re-add it under the target profile (re-entering its SSH/Grafana/Jira details).
-- **No scheduler-level event detection (e.g. Slurm node drains)** — deliberately not implemented
-  yet, rather than faked (planned as a follow-up to the Node health widget; see
-  [HPC_ORCHESTRATION.md §5](./HPC_ORCHESTRATION.md#5-when-it-runs-schedulermonitorts)). The notification bell's signals (`src/main/monitor/clusterMonitor.ts`,
-  `jiraMonitor.ts`, `src/main/ssh/manager.ts`) are all things H-Gate can observe generically across
-  any cluster: is the SSH port up, did a Jira ticket change, did an open session drop. Detecting
-  "node X went into drain state" would mean H-Gate itself periodically running a non-interactive
-  command like `sinfo`/`pbsnodes`/`bhosts` over SSH and parsing scheduler-specific output - a
-  real, separate feature (and one that varies by scheduler: Slurm/PBS/LSF each report this
-  differently) rather than a small addition to the existing monitors.
+- **Scheduler event detection is Slurm-only and opt-in**. Job finished/started and node
+  down/drained notifications exist for Slurm (see
+  [HPC_ORCHESTRATION.md §5.1](./HPC_ORCHESTRATION.md#51-notifications)), but not for PBS/LSF. They
+  only fire while the cluster is open, since the background check reuses its terminal's
+  connection rather than opening one, and never on Teleport clusters.
 - **Reachability is an SSH-banner probe, not a real health check** — `src/main/monitor/reachability.ts`
   checks every 60 seconds (plus an on-refocus catch-up, throttled to at most once per 15s) whether
   the SSH port opens *and* actually speaks SSH (see the "fixed" entry in `CHANGELOG.md` for why

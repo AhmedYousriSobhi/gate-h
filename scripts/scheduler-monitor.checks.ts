@@ -1,13 +1,15 @@
 // Checks for src/main/scheduler/monitor.ts, run by test-pty-manager.mjs with the cluster store
 // and the command runner stubbed (see the runner's stub-scheduler plugin). Covers what keeps load
 // off slurmctld: nothing polls unless watched, manual refresh stays manual, backoff on failure,
-// the manual-refresh throttle, and that unwatching leaves no timers behind.
+// the manual-refresh throttle, the opt-in background check for notifications (only with a live,
+// non-Teleport connection), and that unwatching leaves no timers behind.
 
 import { live } from './resource-probe.checks'
 import {
   fetchArrayTasks,
   refreshScheduler,
   setSchedulerBroadcaster,
+  sweepBackground,
   stopSchedulerMonitor,
   unwatchScheduler,
   watchScheduler
@@ -16,6 +18,8 @@ import type { SchedulerConfig, SchedulerSnapshot } from '../src/shared/types'
 
 interface Globals {
   __clusters: Record<string, unknown>
+  __live: Set<string>
+  __notifications: Array<{ clusterId: string; kind: string; message: string }>
   __run: (
     cluster: { id: string },
     command: string,
@@ -35,9 +39,17 @@ const OUTPUT = '1|cpu|RUNNING|1:00|2:00|1|N/A|cpu01|job\n@@gateh@@\ncpu|up|4|idl
 let runs = 0
 let exitCode = 0
 let session = true
-g.__run = async (_cluster, _command, NoSessionError) => {
+// Per-cluster output overrides, for the notification checks.
+const outputs: Record<string, string> = {}
+const commands: string[] = []
+g.__run = async (cluster, command, NoSessionError) => {
   if (!session) throw new NoSessionError('Waiting for a terminal session.')
   runs++
+  commands.push(command)
+  if (command.includes('sacct --jobs=')) {
+    return { exitCode: 0, stdout: '10|FAILED|1:0\n', stderr: '' }
+  }
+  if (outputs[cluster.id]) return { exitCode: 0, stdout: outputs[cluster.id], stderr: '' }
   return {
     exitCode,
     stdout: exitCode === 0 ? OUTPUT : '',
@@ -58,8 +70,24 @@ g.__clusters = {
   auto: { id: 'auto', activeMonitoring: true, scheduler: config() },
   manual: { id: 'manual', activeMonitoring: true, scheduler: config({ autoRefresh: false }) },
   standby: { id: 'standby', activeMonitoring: false, scheduler: config() },
-  none: { id: 'none', activeMonitoring: true, scheduler: null }
+  none: { id: 'none', activeMonitoring: true, scheduler: null },
+  bg: bgCluster('bg'),
+  bgQuiet: { ...bgCluster('bgQuiet'), scheduler: config({ notify: false }) },
+  bgTeleport: { ...bgCluster('bgTeleport'), teleport: { proxy: 'tp.example.com' } },
+  bgClosed: bgCluster('bgClosed')
 }
+function bgCluster(id: string): object {
+  return {
+    id,
+    name: id,
+    activeMonitoring: true,
+    teleport: null,
+    connection: { username: 'me' },
+    scheduler: config({ notify: true })
+  }
+}
+g.__live = new Set(['bg', 'bgQuiet', 'bgTeleport'])
+g.__notifications = []
 const snapshots: SchedulerSnapshot[] = []
 setSchedulerBroadcaster((s) => snapshots.push(s))
 const last = (id: string): SchedulerSnapshot | undefined =>
@@ -142,6 +170,55 @@ async function main(): Promise<void> {
   )
   await fetchArrayTasks('auto', '2')
   report(runs === before + 2, 'a different array runs its own query')
+
+  console.log('-- background notifications')
+  const queueBefore =
+    '10|gpu|RUNNING|1:00|2:00|1|N/A|gpu01|train\n11|gpu|PENDING|0:00|2:00|1|N/A|(Resources)|eval\n' +
+    '@@gateh@@\ngpu|up|4|mixed\n@@gateh@@\n'
+  const queueAfter =
+    '11|gpu|RUNNING|0:10|2:00|1|N/A|gpu02|eval\n' +
+    '@@gateh@@\ngpu|up|4|mixed\n@@gateh@@\ngpu03|drained|ECC errors\n'
+  outputs.bg = queueBefore
+  outputs.bgQuiet = queueBefore
+  const beforeSweep = runs
+  sweepBackground()
+  await sleep(50)
+  report(
+    runs === beforeSweep + 1 && commands[commands.length - 1].includes('squeue'),
+    'the sweep checks only the open, non-Teleport cluster with notifications on',
+    `${runs - beforeSweep} runs`
+  )
+  report(g.__notifications.length === 0, 'the first snapshot is only a baseline: nothing to notify')
+  sweepBackground()
+  await sleep(50)
+  report(runs === beforeSweep + 1, 'a second sweep within 5 minutes runs nothing')
+  // Same baseline for the cluster with notifications off, through the foreground path.
+  watchScheduler('bgQuiet')
+  await sleep(50)
+  unwatchScheduler('bgQuiet')
+  outputs.bg = queueAfter
+  outputs.bgQuiet = queueAfter
+  watchScheduler('bg')
+  watchScheduler('bgQuiet')
+  await sleep(50)
+  refreshScheduler('bg')
+  refreshScheduler('bgQuiet')
+  await sleep(50)
+  const bgNotes = g.__notifications.filter((n) => n.clusterId === 'bg').map((n) => n.message)
+  report(
+    bgNotes.includes('Job 10 (train) failed (exit code 1:0)'),
+    'a job that left the queue is reported with its final state from sacct',
+    JSON.stringify(bgNotes)
+  )
+  report(bgNotes.includes('Job 11 (eval) started on gpu02'), 'a pending job that started')
+  report(bgNotes.includes('Nodes gpu03 are drained: ECC errors'), 'newly drained nodes')
+  report(
+    g.__notifications.every((n) => n.kind === 'scheduler' && n.clusterId === 'bg'),
+    'nothing for a cluster with notifications off'
+  )
+  unwatchScheduler('bg')
+  unwatchScheduler('bgQuiet')
+  stopSchedulerMonitor()
 
   console.log('-- idle cost')
   await sleep(50)
