@@ -246,6 +246,32 @@ every few minutes for a cluster you have open), so they add almost no load to th
 </tr>
 </table>
 
+<p align="center">
+  <img src="docs/assets/screenshots/slurm-status.png" alt="Slurm section of a cluster's Status: job queue with an expanded job array, GPU usage cards, and node health" width="720"><br/>
+  <sub>A cluster's Slurm jobs, with a job array expanded, the GPUs its running jobs are on (from
+  DCGM metrics in Grafana), and each partition's node states.</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/job-templates.png" alt="Job templates dialog with a batch script and its placeholder fields" width="360"><br/>
+  <sub>Job templates: fill in the placeholders, review, and submit with sbatch</sub>
+</td>
+<td width="50%" align="center">
+  <img src="docs/assets/screenshots/file-transfer.png" alt="Files dialog listing a remote home directory with transfers in progress" width="360"><br/>
+  <sub>Browse and transfer files over the terminal's connection</sub>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="center">
+  <img src="docs/assets/screenshots/storage-quota.png" alt="Job history and storage quota for home, Lustre scratch and GPFS project paths" width="720"><br/>
+  <sub>Job history from sacct, and storage usage with your Lustre and GPFS quotas</sub>
+</td>
+</tr>
+</table>
+
+
 ### Procedures
 
 <table>
