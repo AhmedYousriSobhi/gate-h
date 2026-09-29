@@ -245,9 +245,12 @@ export default function ClusterForm({
     try {
       const list = await window.api.azure.listSubscriptions()
       setSubscriptions(list)
-      if (!form.azureSubscription) {
-        const preferred = list.find((s) => s.isDefault) ?? list[0]
-        set('azureSubscription', preferred.id)
+      // `isDefault` is the az CLI's current default subscription - but opening any cluster's
+      // tunnel changes that (`az account set --subscription ...`), so with more than one
+      // subscription in play it just reflects whichever cluster last connected, not this one.
+      // Only safe to auto-fill when there's no ambiguity to get wrong.
+      if (!form.azureSubscription && list.length === 1) {
+        set('azureSubscription', list[0].id)
       }
     } catch (err) {
       setSubscriptionsError(err instanceof Error ? err.message : 'Failed to list subscriptions.')
