@@ -240,24 +240,33 @@ filesystem's metadata servers and nothing there changes minute to minute, so thi
 repeat within 30 s reuses the result. Usage over the soft limit (the start of the grace period) is
 flagged, not just usage near the hard limit.
 
-## 7. GPU and node telemetry (outline)
+## 7. GPU telemetry
 
-The **preferred source is Grafana**, because many GPU sites already run NVIDIA's
-[DCGM exporter](https://github.com/NVIDIA/dcgm-exporter) into Prometheus. That costs the cluster
-nothing extra, and Gate-H already holds a Grafana token for the cluster.
+GPU usage is a **GPUs** part of the Slurm section. It shows up while you have running jobs, as one
+card per GPU on their nodes, with utilization, memory and temperature. Node lists are expanded
+from Slurm's hostlist notation (`gpu[07-08]`, several bracket groups, at most 64 nodes), and every
+name is checked against `[A-Za-z0-9._-]`. There are two sources:
 
-1. **Embedded panels.** This works today: pick the site's DCGM dashboard panels in the Status
-   widget.
-2. **Native GPU widget, backed by Grafana.** The main process queries Grafana's
-   `/api/ds/query` with the existing service-account token, for `DCGM_FI_DEV_GPU_UTIL`,
-   `DCGM_FI_DEV_FB_USED` and `DCGM_FI_DEV_GPU_TEMP`, filtered to the nodes of the user's running
-   jobs from the Slurm snapshot. The renderer draws compact per-GPU bars. The token stays in main
-   as it does now. This needs one new setting per cluster: the Prometheus datasource UID.
-3. **Fallback over SSH, on demand only.** For sites without DCGM:
-   `srun --jobid=<id> --overlap --ntasks-per-node=1 nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits`,
-   run against one of the user's **own running jobs**, only when the user clicks *Sample GPUs*.
-   It never polls, and it never SSHes into compute nodes directly, which many sites forbid.
-   Login nodes usually have no GPU, so running `nvidia-smi` there tells you nothing.
+1. **Grafana, preferred.** Many GPU sites already feed NVIDIA's
+   [DCGM exporter](https://github.com/NVIDIA/dcgm-exporter) into Prometheus, so this costs the
+   cluster nothing. The cluster's Grafana settings take the **Prometheus datasource UID** and the
+   **node label**, `Hostname` by default, which must hold the node name as Slurm prints it. The
+   main process sends Grafana's `/api/ds/query` one instant query each for
+   `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE` and
+   `DCGM_FI_DEV_GPU_TEMP`, selecting `{<label>=~"node1|node2"}`, with the existing
+   service-account token, which stays in main. It refreshes with each Slurm snapshot.
+2. **`nvidia-smi` in a job, on request.** For sites without DCGM, each running job has a
+   *Sample* button that runs
+   `srun --jobid=<id> --overlap --whole --nodes=<n> --ntasks-per-node=1 sh -c '… nvidia-smi --query-gpu=… | sed "s/^/$h, /"'`.
+   That's one extra step per node inside the user's **own** job:
+   - `--overlap`, so it never waits behind the job;
+   - `--whole`, so it can see the job's GPUs where cgroups constrain devices. That flag needs
+     Slurm 21.08 or later; older versions report the option as unknown;
+   - each line is prefixed with the node's name.
+
+   It never polls, and it never SSHes into compute nodes directly, which many sites forbid. Login
+   nodes usually have no GPUs, so `nvidia-smi` there would tell you nothing. A repeat within 30 s
+   reuses the last sample.
 
 Node-level CPU, memory and load stay with Grafana (node exporter). Gate-H won't build a second
 metrics pipeline.
@@ -287,7 +296,7 @@ Each phase is one GitHub issue, one branch and one PR, following the repo conven
 | 3 | Node health | 2 |
 
 Phases 1 to 3 ship as one PR, because phase 1 on its own would add code nothing calls yet.
-| 4 | Native GPU widget via Grafana `/api/ds/query`, plus the on-demand `srun … nvidia-smi` sample | 2 |
+| 4 | GPU usage via Grafana `/api/ds/query`, plus the on-demand `srun … nvidia-smi` sample | 2 |
 | 5 | SFTP panel | — |
 | 6 | Batch templates and confirmed `sbatch`/`scancel` | 2, 5 |
 

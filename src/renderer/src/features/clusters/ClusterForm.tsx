@@ -20,6 +20,7 @@ import type {
 import {
   DEFAULT_SCHEDULER_INTERVAL_SEC,
   MIN_SCHEDULER_INTERVAL_SEC,
+  PROMETHEUS_LABEL_PATTERN,
   SLURM_PARTITION_PATTERN,
   STORAGE_PATH_PATTERN
 } from '../../../../shared/types'
@@ -52,6 +53,8 @@ interface FormState {
   grafanaBaseUrl: string
   grafanaDashboardUids: string
   grafanaApiToken: string
+  grafanaGpuDatasourceUid: string
+  grafanaGpuHostLabel: string
   useJira: boolean
   jiraBaseUrl: string
   jiraAuthMode: JiraAuthMode
@@ -105,6 +108,8 @@ function toFormState(c?: ClusterSummary): FormState {
     grafanaBaseUrl: c?.grafana?.baseUrl ?? '',
     grafanaDashboardUids: c?.grafana?.dashboardUids.join(', ') ?? '',
     grafanaApiToken: '',
+    grafanaGpuDatasourceUid: c?.grafana?.gpuDatasourceUid ?? '',
+    grafanaGpuHostLabel: c?.grafana?.gpuHostLabel ?? '',
     useJira: Boolean(c?.jira),
     jiraBaseUrl: c?.jira?.baseUrl ?? '',
     jiraAuthMode: c?.jira?.authMode ?? 'cloud',
@@ -136,6 +141,13 @@ function toFormState(c?: ClusterSummary): FormState {
     useStorage: Boolean(c?.storage),
     storagePaths: c?.storage?.paths.join(', ') ?? '~'
   }
+}
+
+/** Returns why the GPU metrics settings can't be saved, or null if they can. */
+function gpuError(form: FormState): string | null {
+  const label = form.grafanaGpuHostLabel.trim()
+  if (!form.useGrafana || !label || PROMETHEUS_LABEL_PATTERN.test(label)) return null
+  return `GPU host label must be a Prometheus label name ("${label}").`
 }
 
 /** Returns why the storage paths can't be saved, or null if they can. */
@@ -246,7 +258,11 @@ export default function ClusterForm({
       return
     }
     const tunnelError =
-      teleportError(form) ?? azureTunnelError(form) ?? schedulerError(form) ?? storageError(form)
+      teleportError(form) ??
+      azureTunnelError(form) ??
+      schedulerError(form) ??
+      storageError(form) ??
+      gpuError(form)
     if (tunnelError) {
       setError(tunnelError)
       return
@@ -279,7 +295,9 @@ export default function ClusterForm({
       grafana: form.useGrafana
         ? {
             baseUrl: form.grafanaBaseUrl.trim(),
-            dashboardUids: splitList(form.grafanaDashboardUids)
+            dashboardUids: splitList(form.grafanaDashboardUids),
+            gpuDatasourceUid: form.grafanaGpuDatasourceUid.trim() || undefined,
+            gpuHostLabel: form.grafanaGpuHostLabel.trim() || undefined
           }
         : null,
       grafanaApiToken: form.grafanaApiToken.trim() || undefined,
@@ -740,6 +758,33 @@ export default function ClusterForm({
                     placeholder={initial?.hasGrafanaToken ? 'Unchanged - leave blank to keep' : ''}
                   />
                 </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="grafanaGpuDatasourceUid">
+                      GPU metrics datasource UID (optional)
+                    </label>
+                    <input
+                      id="grafanaGpuDatasourceUid"
+                      placeholder="Prometheus datasource with DCGM metrics"
+                      value={form.grafanaGpuDatasourceUid}
+                      onChange={(e) => set('grafanaGpuDatasourceUid', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="grafanaGpuHostLabel">Node label</label>
+                    <input
+                      id="grafanaGpuHostLabel"
+                      placeholder="Hostname"
+                      value={form.grafanaGpuHostLabel}
+                      onChange={(e) => set('grafanaGpuHostLabel', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <p className="hint">
+                  With a datasource set, the Slurm section shows GPU utilization, memory and
+                  temperature for your running jobs&apos; nodes from NVIDIA&apos;s DCGM exporter
+                  metrics. The node label must hold the node name as Slurm prints it.
+                </p>
               </>
             )}
           </div>
