@@ -352,6 +352,10 @@ body.session-dragging * {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* Without min-width: 0 at each level down to the xterm container, a pane made narrower (a
+     split, a divider drag) can't shrink below the terminal's current rendered width - FitAddon
+     then keeps the old column count and the right edge, header buttons included, gets clipped. */
+  min-width: 0;
 }
 
 .terminal-statusbar {
@@ -369,7 +373,49 @@ body.session-dragging * {
   user-select: none;
 }
 
+/* Right side of a session's header: split / maximize / close. Muted until hovered, and sized
+   (20px with negative block margins) to fit inside the header's existing text line so adding them
+   doesn't make the header taller. */
+.terminal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--space-2);
+}
+
+.terminal-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-block: -3px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-3);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.terminal-header-btn:hover {
+  color: var(--color-text-1);
+  background-color: var(--color-surface-hover);
+}
+
+.terminal-header-btn-active {
+  color: var(--color-accent);
+}
+
+.terminal-header-btn-danger:hover {
+  color: var(--color-offline);
+}
+
 .terminal-statusbar-label {
+  margin-right: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -417,11 +463,13 @@ body.session-dragging * {
   position: relative;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
 }
 
 .terminal-container {
   flex: 1;
+  min-width: 0;
   padding: var(--space-2);
   background-color: #0a0a0c;
   overflow: hidden;
