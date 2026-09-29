@@ -6,6 +6,9 @@
 //     optional Teleport lab run);
 //   - scripts/teleport-sessions.checks.ts: the Teleport session monitor, against a fake `tsh`, a
 //     scratch HOME, and stubbed cluster/notification stores.
+//   - scripts/slurm.checks.ts: the Slurm command builders and output parsers;
+//   - scripts/scheduler-monitor.checks.ts: when the scheduler monitor polls, against a fake
+//     command runner and a stubbed cluster store.
 //
 //   node scripts/test-pty-manager.mjs
 
@@ -56,6 +59,28 @@ const stubStores = {
   }
 }
 
+// The scheduler monitor reads clusters and runs commands through ./exec (which needs a live SSH
+// session); the checks supply both through globals instead.
+const stubScheduler = {
+  name: 'stub-scheduler',
+  setup(b) {
+    b.onResolve({ filter: /^(\.\.\/clusters|\.\/exec)$/ }, (args) => ({
+      path: args.path,
+      namespace: 'stub-scheduler'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-scheduler' }, () => ({
+      contents: 'module.exports = { getCluster: (id) => globalThis.__clusters[id] ?? null }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /exec$/, namespace: 'stub-scheduler' }, () => ({
+      contents:
+        'class NoSessionError extends Error {}\n' +
+        'module.exports = { NoSessionError, runOnCluster: (c, cmd) => globalThis.__run(c, cmd, NoSessionError) }',
+      loader: 'js'
+    }))
+  }
+}
+
 try {
   const home = join(work, 'home')
   const bin = join(work, 'bin')
@@ -74,7 +99,9 @@ try {
       entry: 'teleport-sessions.checks.ts',
       plugins: [assetPath, stubStores],
       env: { HOME: home, PATH: `${bin}:${process.env.PATH}` }
-    }
+    },
+    { entry: 'slurm.checks.ts', plugins: [], env: {} },
+    { entry: 'scheduler-monitor.checks.ts', plugins: [stubScheduler], env: {} }
   ]
   let failed = false
   for (const job of jobs) {

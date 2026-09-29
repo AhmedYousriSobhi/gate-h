@@ -323,6 +323,16 @@ export function openTeleportLogin(
   return { sessionId }
 }
 
+/** The connection behind one of this cluster's open terminal sessions, if any - scheduler
+ *  commands run on it as extra channels (see ../scheduler/exec.ts) instead of logging in again.
+ *  Always null for Teleport clusters, whose terminals are PTYs. */
+export function getLiveClient(clusterId: string): Client | null {
+  for (const session of sessions.values()) {
+    if (session.clusterId === clusterId) return session.client
+  }
+  return null
+}
+
 export function writeToSession(sessionId: string, data: string): void {
   if (ptyManager.has(sessionId)) ptyManager.write(sessionId, data)
   else sessions.get(sessionId)?.stream.write(data)
