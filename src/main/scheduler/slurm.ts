@@ -3,6 +3,7 @@ import {
   SLURM_PARTITION_PATTERN,
   type SchedulerConfig,
   type SchedulerStatus,
+  type SlurmHistoryJob,
   type SlurmJob,
   type SlurmNodeIssue,
   type SlurmPartition
@@ -23,6 +24,9 @@ export interface SlurmData {
 const SECTION_MARKER = '@@gateh@@'
 const MINE_JOB_FORMAT = '%i|%P|%T|%M|%l|%D|%S|%R|%j'
 const PARTITION_JOB_FORMAT = '%i|%P|%u|%T|%M|%l|%D|%S|%R|%j'
+// --parsable2 separates with | and doesn't end lines with one; JobName is free text, so last.
+const HISTORY_FORMAT = 'JobID,Partition,State,ExitCode,Elapsed,Start,End,JobName'
+export const HISTORY_DAYS = [1, 7]
 
 function partitionArg(config: SchedulerConfig): string {
   for (const name of config.partitions) {
@@ -58,6 +62,16 @@ export function snapshotCommand(config: SchedulerConfig): string {
 export function arrayTasksCommand(config: SchedulerConfig, arrayJobId: string): string {
   if (!/^\d+$/.test(arrayJobId)) throw new Error(`Invalid job array id: ${arrayJobId}`)
   return jobsCommand(config, ` --array --jobs=${arrayJobId}`)
+}
+
+/** The SSH user's finished and running allocations (no job steps) over the last `days` days,
+ *  newest first. sacct reads slurmdbd, not slurmctld, and is only ever run on request. */
+export function historyCommand(days: number): string {
+  if (!HISTORY_DAYS.includes(days)) throw new Error(`Unsupported history range: ${days} days`)
+  return (
+    `LC_ALL=C sacct --user="$(id -un)" --allocations --noheader --parsable2 ` +
+    `--starttime=now-${days}days '--format=${HISTORY_FORMAT}'`
+  )
 }
 
 function splitFields(line: string, count: number): string[] | null {
@@ -109,6 +123,27 @@ export function parseJobs(
     jobs.push(job)
   }
   return { jobs, truncated: rows.length > MAX_SLURM_JOBS }
+}
+
+/** Newest first: sacct lists oldest first, and the recent failures are what people look for. */
+export function parseHistory(text: string): SlurmHistoryJob[] {
+  const jobs: SlurmHistoryJob[] = []
+  for (const row of lines(text).slice(-MAX_SLURM_JOBS)) {
+    const f = splitFields(row, 8)
+    if (!f) continue
+    const [id, partition, state, exitCode, elapsed, start, end, name] = f
+    jobs.push({
+      id,
+      partition,
+      state,
+      exitCode,
+      elapsed,
+      start: slurmTime(start),
+      end: slurmTime(end),
+      name
+    })
+  }
+  return jobs.reverse()
 }
 
 /** sinfo prints one row per partition and node state; this folds them into one per partition.

@@ -3,6 +3,8 @@ import { NoSessionError, runOnCluster } from './exec'
 import {
   arrayTasksCommand,
   classifyFailure,
+  historyCommand,
+  parseHistory,
   parseJobs,
   parseSnapshot,
   snapshotCommand
@@ -11,6 +13,7 @@ import {
   MIN_SCHEDULER_INTERVAL_SEC,
   type SchedulerConfig,
   type SchedulerSnapshot,
+  type SlurmHistoryJob,
   type SlurmJob
 } from '../../shared/types'
 
@@ -190,37 +193,58 @@ export function setSchedulerWindowFocused(focused: boolean): void {
   }
 }
 
-// Expanding and collapsing an array row repeatedly shouldn't cost a run each time - on Teleport
-// every run is an audited session. Keyed by cluster id and array id.
-const ARRAY_TASKS_TTL_MS = 30_000
-const arrayTasks = new Map<string, { at: number; tasks: Promise<SlurmJob[]> }>()
+// On-demand lookups - an array's tasks, the job history. Repeating one within 30s (expanding and
+// collapsing a row, switching history ranges back and forth) reuses the last result rather than
+// running again: on Teleport every run is an audited session. Keyed by cluster, kind and argument.
+const ON_DEMAND_TTL_MS = 30_000
+const onDemand = new Map<string, { at: number; result: Promise<unknown> }>()
 
-async function runArrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]> {
+function reuseRecent<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const hit = onDemand.get(key)
+  if (hit && Date.now() - hit.at < ON_DEMAND_TTL_MS) return hit.result as Promise<T>
+  const result = run()
+  onDemand.set(key, { at: Date.now(), result })
+  // A failure isn't worth remembering - the next click should try again.
+  result.catch(() => {
+    if (onDemand.get(key)?.result === result) onDemand.delete(key)
+  })
+  return result
+}
+
+async function runOnDemand<T>(
+  clusterId: string,
+  command: (config: SchedulerConfig) => string,
+  parse: (stdout: string, config: SchedulerConfig) => T
+): Promise<T> {
   const cluster = getCluster(clusterId)
   const config = cluster?.scheduler
   if (!cluster || !config) throw new Error('This cluster has no scheduler configured.')
   if (!cluster.activeMonitoring) throw new Error('This cluster is in standby.')
-  const result = await runOnCluster(cluster, arrayTasksCommand(config, arrayJobId))
-  if (result.exitCode !== 0)
+  const result = await runOnCluster(cluster, command(config))
+  if (result.exitCode !== 0) {
     throw new Error(classifyFailure(result.exitCode, result.stderr).message)
-  return parseJobs(result.stdout, config.scope).jobs
+  }
+  return parse(result.stdout, config)
 }
 
 export function fetchArrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]> {
-  const key = `${clusterId}:${arrayJobId}`
-  const hit = arrayTasks.get(key)
-  if (hit && Date.now() - hit.at < ARRAY_TASKS_TTL_MS) return hit.tasks
-  const tasks = runArrayTasks(clusterId, arrayJobId)
-  arrayTasks.set(key, { at: Date.now(), tasks })
-  // A failure isn't worth remembering - the next click should try again.
-  tasks.catch(() => {
-    if (arrayTasks.get(key)?.tasks === tasks) arrayTasks.delete(key)
-  })
-  return tasks
+  return reuseRecent(`${clusterId}:array:${arrayJobId}`, () =>
+    runOnDemand(
+      clusterId,
+      (config) => arrayTasksCommand(config, arrayJobId),
+      (stdout, config) => parseJobs(stdout, config.scope).jobs
+    )
+  )
+}
+
+export function fetchJobHistory(clusterId: string, days: number): Promise<SlurmHistoryJob[]> {
+  return reuseRecent(`${clusterId}:history:${days}`, () =>
+    runOnDemand(clusterId, () => historyCommand(days), parseHistory)
+  )
 }
 
 export function stopSchedulerMonitor(): void {
   for (const watch of watches.values()) if (watch.timer) clearTimeout(watch.timer)
   watches.clear()
-  arrayTasks.clear()
+  onDemand.clear()
 }
