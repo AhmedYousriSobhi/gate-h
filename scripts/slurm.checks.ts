@@ -5,6 +5,8 @@
 import {
   arrayTasksCommand,
   classifyFailure,
+  historyCommand,
+  parseHistory,
   parseJobs,
   parseNodeIssues,
   parsePartitions,
@@ -134,6 +136,35 @@ report(
 report(
   throws(() => parseSnapshot('motd noise only', 'mine')),
   'refuses output without the section markers'
+)
+
+console.log('-- sacct')
+const hist = historyCommand(7)
+report(
+  hist.includes('--user="$(id -un)"') &&
+    hist.includes('--starttime=now-7days') &&
+    hist.includes('--allocations'),
+  "history is the user's own allocations over the range"
+)
+report(
+  throws(() => historyCommand(30)) && throws(() => historyCommand(1.5)),
+  'only the offered ranges are accepted'
+)
+const history = parseHistory(
+  [
+    '100|cpu|COMPLETED|0:0|00:10:00|2026-09-28T08:00:00|2026-09-28T08:10:00|prep',
+    '101|gpu|CANCELLED by 1234|0:15|00:01:00|2026-09-28T09:00:00|2026-09-28T09:01:00|a|b',
+    '102|gpu|RUNNING|0:0|00:05:00|2026-09-29T09:00:00|Unknown|train'
+  ].join('\n')
+)
+report(history.length === 3 && history[0].id === '102', 'newest first')
+report(
+  history[0].end === null && history[2].end === '2026-09-28T08:10:00',
+  'a running job has no end time'
+)
+report(
+  history[1].state === 'CANCELLED by 1234' && history[1].name === 'a|b',
+  'keeps the state suffix and a name containing |'
 )
 
 console.log('-- failures')

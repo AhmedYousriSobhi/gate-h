@@ -360,6 +360,16 @@
   font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
+.slurm-table td.slurm-wrap {
+  white-space: normal;
+  word-break: break-all;
+  min-width: 140px;
+}
+
+.slurm-block {
+  display: block;
+}
+
 .slurm-name {
   max-width: 220px;
   overflow: hidden;
@@ -380,6 +390,10 @@
 .slurm-indent {
   display: inline-block;
   width: 16px;
+}
+
+.slurm-grow {
+  flex: 1;
 }
 
 .slurm-subheading {

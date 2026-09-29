@@ -191,6 +191,14 @@ drained nodes from `sinfo --list-reasons` with their reasons.
 
 The section shows the snapshot's age, a refresh button, and the states from §4.
 
+### 6.1 Job history
+
+Below the node health, **History** lists the user's own allocations from the last 24 hours or 7
+days (`sacct --user … --allocations --parsable2 --starttime=now-<N>days`), newest first, with
+state, exit code, elapsed time and end time. `sacct` reads `slurmdbd`, not `slurmctld`, and there's
+no reason to poll it, so it only runs when a range button is clicked. Like array tasks, a repeat
+within 30 s reuses the last result. Sites without accounting storage show `sacct`'s own error.
+
 ## 7. GPU and node telemetry (outline)
 
 The **preferred source is Grafana**, because many GPU sites already run NVIDIA's
