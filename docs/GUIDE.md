@@ -42,7 +42,10 @@ troubleshooting and developer notes.
   Teleport login needs `python3`, which comes with the Command Line Tools.
 
 **② Add a cluster.** Click **+ Add**, give it a name, fill in *SSH connection* (see below), and
-click **Save cluster**.
+click **Save cluster**. Already have clusters in `~/.ssh/config`? Click the import icon next to
+**+ Add** instead and pick which hosts to bring in: host, port, username and identity file carry
+over (private key if the entry has one, SSH agent otherwise). A `ProxyJump`/`ProxyCommand` entry
+is flagged, not imported - add its jump host by hand afterward.
 
 **③ Open it.** Click the cluster in the sidebar. Its terminal and status open side by side.
 
@@ -165,12 +168,18 @@ connection attempts. Secrets are encrypted on disk.
 ## Features
 
 - 🖥️ **All your clusters in one sidebar.** Each has its own SSH settings: password, key or
-  agent, with an optional jump host.
-- 🟢 **Live reachability.** A light per cluster, checked in the background and re-checked as soon
-  as the window regains focus.
+  agent, with an optional jump host. Already have hosts in `~/.ssh/config`? Import them instead of
+  retyping.
+- 🟢 **Live reachability, with latency.** A light per cluster, checked in the background and
+  re-checked as soon as the window regains focus; hover it for the last probe's round-trip time.
 - ⌨️ **Built-in terminal.** Host keys are remembered on first use. Dead connections are
   detected, reconnects are limited and spaced out, and the terminal makes it obvious when a
   session isn't live. Search the scrollback, and click links to open them.
+- 📜 **Per-session connection log.** Every step of a session's connect/reconnect/disconnect
+  history, timestamped, in a popover from the terminal's header - handy for seeing what actually
+  happened to a session you weren't watching.
+- ✂️ **Command snippets.** Save commands you run often and insert them into the active terminal
+  from a popover, without retyping or hunting through shell history.
 - 🗔 **Multiple sessions per cluster, VS Code-style.** Open as many terminal sessions as you
   need, each named after what its shell reports (like `user@host: ~/logs`) and with its own live
   status dot. Rename them, reorder them, and drag them together to
@@ -315,6 +324,11 @@ every few minutes for a cluster you have open), so they add almost no load to th
 | I want to… | Do this |
 |---|---|
 | see all clusters at a glance | Open **Overview** at the top of the sidebar |
+| add clusters already in `~/.ssh/config` | Click the import icon next to **+ Add** in the sidebar |
+| insert a saved command | Click the snippet icon in the terminal header, then the snippet |
+| save/edit/delete snippets | Click the snippet icon → **Manage snippets** |
+| see what happened to a session that dropped | Click the **Connection log** (clock) icon in the terminal header |
+| check a cluster's latency | Hover its reachability light in the sidebar or Overview |
 | see my Slurm jobs and node states | Edit the cluster → tick **Slurm jobs and nodes**; they show in its Status. Click ▸ on a job array to list its tasks |
 | copy files to or from a cluster | Click the folder icon above its panes: open folders, **↓** to download, **Upload here** to upload |
 | submit a batch job | Click the code icon above the cluster's panes, pick or write a template, fill it in, **Review**, then **Submit** and confirm |

@@ -44,6 +44,10 @@ never the plaintext or ciphertext.
 - Create, edit, and remove a cluster; each belongs to the profile active at creation time.
 - Register any number of clusters, each fully self-contained (its own SSH/Grafana/Jira config) —
   nothing about one cluster's setup constrains another's.
+- Clusters can be imported from `~/.ssh/config` (and its `Include` files): the user picks which
+  hosts to bring in from a list read from the file. Host, port, username, and identity file carry
+  over; a host using `ProxyJump`/`ProxyCommand` is flagged rather than imported, since that
+  routing isn't representable by a single cluster's fields.
 - Create, rename, delete, and switch between profiles; switching profiles clears the current
   selection (a cluster from the old profile can't stay "selected" under the new one) and closes
   every open cluster (§3.6) — a profile is a separate context, often with separate credentials.
@@ -56,7 +60,7 @@ never the plaintext or ciphertext.
   the probe confirms an actual SSH banner), independent of whether the cluster is selected,
   open, or in standby (§3.6).
 - A per-cluster LED (online/offline/checking) is shown in the sidebar and the overview dashboard,
-  updated in real time as probes complete.
+  updated in real time as probes complete, with the probe's round-trip time available on hover.
 - Regaining window focus triggers an immediate re-check (throttled to avoid extra probing if
   focus events fire in quick succession), so the LED catches up quickly after e.g. a VPN
   reconnect without waiting for the next scheduled sweep.
@@ -100,11 +104,23 @@ never the plaintext or ciphertext.
   plain Ctrl keys still reach the shell). Ctrl+Tab switches sessions on both.
 - Sessions, their layout and these tab settings live only as long as the app runs; none of them
   is saved across restarts. (The Terminal/Status layout of §3.8 is.)
+- Each session keeps a timestamped log of its own connect/reconnect/disconnect history, viewable
+  from a popover in the terminal header, so what happened to a session the user wasn't watching
+  is still visible afterward.
+- The user can save named command snippets (per profile) and insert one into the active session
+  from a popover in the terminal header, without retyping it or searching shell history.
 
 ### 3.3.1 Azure tunnel pre-flight
 - A cluster may require an Azure tunnel. Before its SSH session connects, the app signs in with
   the Azure CLI (a device-code prompt if needed), selects the configured subscription, and opens
-  the tunnel. Each step shows in the terminal view.
+  the tunnel. Each step shows in the terminal view. Every `az` call is scoped to the configured
+  subscription per-invocation (`--subscription`), never through the CLI's own process-wide
+  `az account set`, so configuring one cluster never changes what another cluster (or a manual
+  `az` session elsewhere) resolves against.
+- Azure Bastion and `az ssh vm` both accept a VM name instead of a full resource ID; the app
+  resolves it to one itself when the tunnel opens. Bastion also accepts a bare target IP address
+  (needing no resource ID at all), for a target the signed-in account can reach but doesn't have
+  a resource ID for (a different resource group, subscription, or tenant).
 - The tunnel outlives individual SSH sessions: reconnecting reuses it, and reopens it if it died.
   A connect failure through the tunnel replaces it, since a hung tunnel can keep listening.
   Retries follow the same bounded backoff as §3.3.
@@ -130,6 +146,11 @@ never the plaintext or ciphertext.
 - A failed session check (proxy unreachable, login failed or timed out, `tsh` missing) is shown
   as the terminal's error and raises a notification.
 - A Teleport cluster's reachability (§3.2) reflects its proxy.
+- A cluster behind a self-signed or lab proxy with no real CA to trust can skip certificate
+  verification (`tsh`'s own `--insecure`), off by default since it drops TLS verification
+  entirely. A proxy behind a real organisation CA instead points `SSL_CERT_FILE`/`SSL_CERT_DIR` at
+  it, which the app adopts from the user's login shell at startup the same way it already does
+  `PATH` (needed on macOS, where a Dock-launched app doesn't inherit the login shell's exports).
 
 ### 3.4 Grafana status
 - Per cluster, list configured dashboards and show a health check (reachable + version, or the
