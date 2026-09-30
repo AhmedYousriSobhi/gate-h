@@ -428,7 +428,7 @@ export default function ClusterForm({
    *  localhost port" bug this was added for), not something to block on outright since the user
    *  may know the two are never used at the same time. */
   function findPortConflict(): ClusterSummary | null {
-    if (!form.useAzureTunnel) return null
+    if (form.connectionMode !== 'azure') return null
     const port = Number(form.azureLocalPort)
     if (!Number.isInteger(port)) return null
     return (
