@@ -31,6 +31,10 @@ import './clusters.css'
 
 interface ClusterFormProps {
   initial?: ClusterSummary
+  /** Every other cluster, used only to warn about an Azure tunnel local port already claimed by
+   *  one of them - two tunnels silently sharing a port is a real, confusing failure mode (see the
+   *  "both mapped to the same localhost port" bug this was added for). */
+  existingClusters?: ClusterSummary[]
   onCancel: () => void
   onSubmit: (input: ClusterInput) => Promise<void>
 }
@@ -301,12 +305,17 @@ function ConnectionModeTabs({
 
 export default function ClusterForm({
   initial,
+  existingClusters = [],
   onCancel,
   onSubmit
 }: ClusterFormProps): React.JSX.Element {
   const [form, setForm] = useState<FormState>(() => toFormState(initial))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Set to the port a same-port conflict was already warned about and saved through anyway;
+  // changing the port (or turning the tunnel off) clears it, so a stale confirmation can't
+  // silently cover a new conflict.
+  const [portConflictConfirmedFor, setPortConflictConfirmedFor] = useState<string | null>(null)
   const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([])
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null)
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false)
@@ -413,6 +422,22 @@ export default function ClusterForm({
     return null
   }
 
+  /** Another cluster whose Azure tunnel already claims this one's local port - two tunnels
+   *  silently sharing a port is a real, confusing failure mode (TCP connects, but whichever one
+   *  didn't actually win the bind never gets real traffic - see the "both mapped to the same
+   *  localhost port" bug this was added for), not something to block on outright since the user
+   *  may know the two are never used at the same time. */
+  function findPortConflict(): ClusterSummary | null {
+    if (!form.useAzureTunnel) return null
+    const port = Number(form.azureLocalPort)
+    if (!Number.isInteger(port)) return null
+    return (
+      existingClusters.find(
+        (c) => c.id !== initial?.id && c.azureTunnel && c.azureTunnel.localPort === port
+      ) ?? null
+    )
+  }
+
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
     setError(null)
@@ -429,6 +454,17 @@ export default function ClusterForm({
       gpuError(form)
     if (tunnelError) {
       setError(tunnelError)
+      return
+    }
+
+    const conflict = findPortConflict()
+    if (conflict && portConflictConfirmedFor !== form.azureLocalPort) {
+      setPortConflictConfirmedFor(form.azureLocalPort)
+      setError(
+        `Local port ${form.azureLocalPort} is already used by "${conflict.name}"'s Azure tunnel - ` +
+          'two tunnels sharing a port can silently interfere with each other. Click Save again to ' +
+          'use it anyway, or pick a different port.'
+      )
       return
     }
 
