@@ -375,6 +375,44 @@ export default function ClusterForm({
     }
   }
 
+  /** Always shows something for the last "Find subscription" click - searching, the error, the
+   *  match found, or a picker for more than one - directly under the field it came from, so a
+   *  search never looks like it did nothing. */
+  function renderVmSearchStatus(): React.JSX.Element | null {
+    if (findingVm) {
+      return <p className="hint">Searching every subscription you can see...</p>
+    }
+    if (vmMatches.length > 0) {
+      return (
+        <div className="form-field">
+          <label htmlFor="azureVmMatches">
+            {vmMatches.length} matches found across your subscriptions - pick one
+          </label>
+          <select
+            id="azureVmMatches"
+            value=""
+            onChange={(e) => {
+              const match = vmMatches.find((m) => m.id === e.target.value)
+              if (match) applyVmMatch(match)
+            }}
+          >
+            <option value="" disabled>
+              Choose the subscription / resource group...
+            </option>
+            {vmMatches.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.subscriptionName} / {m.resourceGroup}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+    if (vmLookupError) return <p className="hint">{vmLookupError}</p>
+    if (vmFoundMessage) return <p className="hint">{vmFoundMessage}</p>
+    return null
+  }
+
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
     setError(null)
@@ -867,6 +905,7 @@ export default function ClusterForm({
                           {findingVm ? 'Searching...' : 'Find subscription'}
                         </button>
                       </div>
+                      {renderVmSearchStatus()}
                     </div>
                     <div className="form-field">
                       <label htmlFor="azureTargetIpAddress">or IP address</label>
@@ -902,6 +941,7 @@ export default function ClusterForm({
                           {findingVm ? 'Searching...' : 'Find subscription'}
                         </button>
                       </div>
+                      {renderVmSearchStatus()}
                     </div>
                     <div className="form-field">
                       <label htmlFor="azureLocalUser">Local VM user (optional)</label>
@@ -912,32 +952,6 @@ export default function ClusterForm({
                         onChange={(e) => set('azureLocalUser', e.target.value)}
                       />
                     </div>
-                  </div>
-                )}
-                {vmLookupError && <p className="hint">{vmLookupError}</p>}
-                {vmFoundMessage && <p className="hint">{vmFoundMessage}</p>}
-                {vmMatches.length > 0 && (
-                  <div className="form-field">
-                    <label htmlFor="azureVmMatches">
-                      {vmMatches.length} matches found across your subscriptions - pick one
-                    </label>
-                    <select
-                      id="azureVmMatches"
-                      value=""
-                      onChange={(e) => {
-                        const match = vmMatches.find((m) => m.id === e.target.value)
-                        if (match) applyVmMatch(match)
-                      }}
-                    >
-                      <option value="" disabled>
-                        Choose the subscription / resource group...
-                      </option>
-                      {vmMatches.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.subscriptionName} / {m.resourceGroup}
-                        </option>
-                      ))}
-                    </select>
                   </div>
                 )}
               </div>
