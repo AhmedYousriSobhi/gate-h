@@ -91,6 +91,11 @@ export interface AzureTunnelConfig {
   targetResourceId?: string
   /** mode "az-ssh": VM name (required). mode "bastion": alternative to `targetResourceId`. */
   vmName?: string
+  /** mode "bastion": IP address of the target, needing no VM resource id at all - for a target in
+   *  a different resource group (or subscription/tenant) than the Bastion host, or one that isn't
+   *  an Azure VM resource. Needs "IP-based connection" enabled on the Bastion host. Alternative to
+   *  `targetResourceId`/`vmName`. */
+  targetIpAddress?: string
   localUser?: string
 }
 
