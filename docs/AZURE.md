@@ -35,6 +35,30 @@ Gate-H terminal ──ssh2──▶ 127.0.0.1:<local port> ══ Azure tunnel �
     ([azure-cli#24600](https://github.com/Azure/azure-cli/issues/24600)), and a probe could collide
     with your session.
 
+## Finding your cluster's Azure details
+
+Azure Resource Graph searches across **every subscription you have access to** in one query, so
+you don't need to already know (or guess) the right subscription before you can fill in the form.
+
+```bash
+# One-time, if az doesn't already have it (usually auto-installs on first use):
+az extension add --name resource-graph
+
+# Which subscription/resource group is this VM in?
+az graph query -q "Resources | where type =~ 'microsoft.compute/virtualmachines' and name =~ '<vm-name>' | project name, resourceGroup, subscriptionId, id" --output table
+
+# Which Bastion host serves it?
+az graph query -q "Resources | where type =~ 'microsoft.network/bastionhosts' | project name, resourceGroup, subscriptionId" --output table
+
+# Your tenant ID for a given subscription (also what the form's "Load from az" fetches):
+az account list --query "[].{name:name, id:id, tenantId:tenantId}" --output table
+```
+
+The first query's `id` column is the VM's full resource ID, for the Bastion form's **Target VM
+resource ID** field - or leave that blank and put the VM name in **VM name** instead, and Gate-H
+resolves it the same way, itself, when the tunnel opens. `subscriptionId` and `resourceGroup` go
+straight into the matching form fields.
+
 ## Keeping the tunnel and the shell alive
 
 ### Why Azure sessions drop
