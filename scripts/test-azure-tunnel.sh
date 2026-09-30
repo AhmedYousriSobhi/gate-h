@@ -131,6 +131,12 @@ check "...and the resolved id reached the tunnel command" grep -q -- "-> jump:" 
 expect 0 "down" down --name t
 MOCK_VM=missing expect 7 "an unresolvable VM name fails cleanly" up "${BASTION_BY_VM[@]}"
 
+echo "-- bastion by IP address (target has no VM resource id at all)"
+BASTION_BY_IP=(--name t --mode bastion -g rg --bastion b --target-ip 10.0.0.5 -l "$PORT" -s sub-a --non-interactive)
+expect 0 "--target-ip needs no VM resource id" up "${BASTION_BY_IP[@]}"
+check "...and the IP reached the tunnel command" grep -q -- "-> 10.0.0.5:" "$WORK/out"
+expect 0 "down" down --name t
+
 echo
 if ((failures)); then echo "$failures check(s) failed"; exit 1; fi
 echo "all checks passed"

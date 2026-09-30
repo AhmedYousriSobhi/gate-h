@@ -72,6 +72,7 @@ interface FormState {
   azureBastionName: string
   azureTargetResourceId: string
   azureVmName: string
+  azureTargetIpAddress: string
   azureLocalUser: string
   useTeleport: boolean
   teleportProxy: string
@@ -127,6 +128,7 @@ function toFormState(c?: ClusterSummary): FormState {
     azureBastionName: c?.azureTunnel?.bastionName ?? '',
     azureTargetResourceId: c?.azureTunnel?.targetResourceId ?? '',
     azureVmName: c?.azureTunnel?.vmName ?? '',
+    azureTargetIpAddress: c?.azureTunnel?.targetIpAddress ?? '',
     azureLocalUser: c?.azureTunnel?.localUser ?? '',
     useTeleport: Boolean(c?.teleport),
     teleportProxy: c?.teleport?.proxy ?? '',
@@ -207,8 +209,12 @@ function azureTunnelError(form: FormState): string | null {
   }
   if (form.azureMode === 'bastion') {
     if (!form.azureBastionName.trim()) return 'Azure Bastion needs the bastion name.'
-    if (!form.azureTargetResourceId.trim() && !form.azureVmName.trim()) {
-      return 'Azure Bastion needs the target VM resource ID or its VM name.'
+    if (
+      !form.azureTargetResourceId.trim() &&
+      !form.azureVmName.trim() &&
+      !form.azureTargetIpAddress.trim()
+    ) {
+      return 'Azure Bastion needs the target VM resource ID, its VM name, or its IP address.'
     }
   }
   if (form.azureMode === 'az-ssh' && !form.azureVmName.trim()) {
@@ -372,6 +378,10 @@ export default function ClusterForm({
             vmName:
               form.azureMode === 'az-ssh' || form.azureMode === 'bastion'
                 ? form.azureVmName.trim() || undefined
+                : undefined,
+            targetIpAddress:
+              form.azureMode === 'bastion'
+                ? form.azureTargetIpAddress.trim() || undefined
                 : undefined,
             localUser:
               form.azureMode === 'az-ssh' ? form.azureLocalUser.trim() || undefined : undefined
@@ -776,6 +786,20 @@ export default function ClusterForm({
                           {findingVm ? 'Searching...' : 'Find subscription'}
                         </button>
                       </div>
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="azureTargetIpAddress">or IP address</label>
+                      <input
+                        id="azureTargetIpAddress"
+                        placeholder="No VM resource id needed - e.g. a different resource group"
+                        value={form.azureTargetIpAddress}
+                        onChange={(e) => set('azureTargetIpAddress', e.target.value)}
+                      />
+                      <p className="hint">
+                        Needs &quot;IP-based connection&quot; enabled on this Bastion host. Use this
+                        when the target isn&apos;t in this Bastion&apos;s resource group (or
+                        subscription/tenant), or isn&apos;t an Azure VM resource at all.
+                      </p>
                     </div>
                   </>
                 ) : (
