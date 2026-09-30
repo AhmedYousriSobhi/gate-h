@@ -50,8 +50,48 @@ Or skip the build and take the `.dmg` from [Releases](https://github.com/AhmedYo
 (`arm64` is Apple Silicon, `x64` is Intel). The app isn't notarized yet, so the first launch needs
 **System Settings → Privacy & Security → Open Anyway**.
 
-Then click **+ Add**, enter the login node, and click the cluster. Full walkthrough for direct,
-jump-host, Azure and Teleport access: [docs/GUIDE.md](docs/GUIDE.md).
+### Connect your cluster
+
+Click **+ Add**, give it a name, then pick how you reach it:
+
+<details>
+<summary><b>🔑 Directly</b> — <code>ssh user@host</code></summary>
+<br/>
+
+Host/port of the login node, your username, and how you sign in: key, password, or agent.
+
+→ Full field list: [docs/GUIDE.md](docs/GUIDE.md#-quick-start)
+</details>
+
+<details>
+<summary><b>🪜 Through a jump host</b> — <code>ssh -J jump user@host</code></summary>
+<br/>
+
+Same as **Directly**, then tick **Connect through a jump/bastion host** and add its address,
+port, username and auth method.
+
+→ Full field list: [docs/GUIDE.md](docs/GUIDE.md#-quick-start)
+</details>
+
+<details>
+<summary><b>☁️ Through Azure</b> — Bastion or <code>az ssh vm</code></summary>
+<br/>
+
+Needs the Azure CLI (`az`). Tick **Azure tunnel**, pick Bastion or `az ssh vm`, and fill in the
+subscription, resource group and target. Gate-H signs you in and opens the tunnel itself.
+
+→ Setup, keeping a tunnel alive, troubleshooting a drop: [docs/AZURE.md](docs/AZURE.md)
+</details>
+
+<details>
+<summary><b>🛡️ Behind Teleport</b> — <code>tsh login</code> then <code>tsh ssh</code></summary>
+<br/>
+
+Needs the Teleport client (`tsh`). Tick **Behind Teleport** and fill in the proxy address, node
+name and your login. Log in right in the terminal, the first time it's needed.
+
+→ Setup, session handling, troubleshooting: [docs/TELEPORT.md](docs/TELEPORT.md)
+</details>
 
 ## Why you can trust it near a real cluster
 
@@ -62,10 +102,19 @@ jump-host, Azure and Teleport access: [docs/GUIDE.md](docs/GUIDE.md).
 - **Careful.** Host keys are remembered and a change raises a warning. Submitting and cancelling
   jobs both ask first.
 
-## More
+## Where to go next
 
-[Guide](docs/GUIDE.md) (setup, everyday use, troubleshooting) · [Slurm and GPU design](docs/HPC_ORCHESTRATION.md) ·
-[Status and known limits](docs/STATUS.md) · [Changelog](CHANGELOG.md) · [Contributing](CLAUDE.md) · [MIT](LICENSE)
+| You want to… | Read |
+|---|---|
+| set up any cluster, or look up a feature or shortcut | [docs/GUIDE.md](docs/GUIDE.md) |
+| connect through Azure Bastion/`az ssh vm`, or fix a dropped tunnel | [docs/AZURE.md](docs/AZURE.md) |
+| connect through a Teleport proxy, or fix a login/session problem | [docs/TELEPORT.md](docs/TELEPORT.md) |
+| keep several clusters' Jira tickets apart in one project | [docs/JIRA_GUIDE.md](docs/JIRA_GUIDE.md) |
+| see the Slurm/GPU/file-transfer design, shipped or planned | [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md) |
+| check what's shipped, how it was verified, and known limits | [docs/STATUS.md](docs/STATUS.md) |
+| read the functional spec, or why it's built this way | [SPEC.md](SPEC.md) · [docs/ANALYSIS.md](docs/ANALYSIS.md) |
+| see every change, in order | [CHANGELOG.md](CHANGELOG.md) |
+| contribute a change | [CLAUDE.md](CLAUDE.md) |
 
 <sub>Built with Electron, React and TypeScript. Screenshots use sample data; the HPC features haven't
 yet been tried against real Slurm, Lustre, GPFS or DCGM installations, so feedback from real
