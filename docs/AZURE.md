@@ -9,7 +9,7 @@ prerequisites and form fields), see "Through Azure" in the README's
 ```
 Gate-H terminal ──ssh2──▶ 127.0.0.1:<local port> ══ Azure tunnel ══▶ login node :22
                                     ▲
-       resources/azure-tunnel.sh up ┘  (az login → az account set → bastion tunnel | az ssh vm -L)
+       resources/azure-tunnel.sh up ┘  (az login → select subscription → bastion tunnel | az ssh vm -L)
 ```
 
 - **Connecting** (`src/main/ssh/manager.ts`): before a cluster with an Azure tunnel connects,
@@ -34,6 +34,30 @@ Gate-H terminal ──ssh2──▶ 127.0.0.1:<local port> ══ Azure tunnel �
     Bastion tunnel handles only one connection at a time reliably
     ([azure-cli#24600](https://github.com/Azure/azure-cli/issues/24600)), and a probe could collide
     with your session.
+
+## Finding your cluster's Azure details
+
+Azure Resource Graph searches across **every subscription you have access to** in one query, so
+you don't need to already know (or guess) the right subscription before you can fill in the form.
+
+```bash
+# One-time, if az doesn't already have it (usually auto-installs on first use):
+az extension add --name resource-graph
+
+# Which subscription/resource group is this VM in?
+az graph query -q "Resources | where type =~ 'microsoft.compute/virtualmachines' and name =~ '<vm-name>' | project name, resourceGroup, subscriptionId, id" --output table
+
+# Which Bastion host serves it?
+az graph query -q "Resources | where type =~ 'microsoft.network/bastionhosts' | project name, resourceGroup, subscriptionId" --output table
+
+# Your tenant ID for a given subscription (also what the form's "Load from az" fetches):
+az account list --query "[].{name:name, id:id, tenantId:tenantId}" --output table
+```
+
+The first query's `id` column is the VM's full resource ID, for the Bastion form's **Target VM
+resource ID** field - or leave that blank and put the VM name in **VM name** instead, and Gate-H
+resolves it the same way, itself, when the tunnel opens. `subscriptionId` and `resourceGroup` go
+straight into the matching form fields.
 
 ## Keeping the tunnel and the shell alive
 
@@ -191,6 +215,14 @@ For debugging, or to use the tunnel with another SSH client:
      -g my-rg --bastion my-bastion \
      --target-id /subscriptions/<sub-id>/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/login01 \
      -l 2222 -s "<subscription name or id>"
+
+   # --target-id can be replaced with --vm login01 - the script resolves the name to its
+   # resource ID via `az vm show` (needs -g to know which resource group to look in)
+
+   # --target-id can also be replaced with --target-ip <ip>, needing no VM resource id at
+   # all - for a target in a different resource group (or subscription/tenant) than the
+   # Bastion host, or one that isn't an Azure VM resource. Needs "IP-based connection"
+   # enabled on the Bastion host (a separate setting from native client support).
 
    # Through a VM with `az ssh vm`, forwarding on to a login node the VM can reach:
    ./resources/azure-tunnel.sh up --name mycluster --mode az-ssh \
