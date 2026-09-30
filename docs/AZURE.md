@@ -195,6 +195,11 @@ For debugging, or to use the tunnel with another SSH client:
    # --target-id can be replaced with --vm login01 - the script resolves the name to its
    # resource ID via `az vm show` (needs -g to know which resource group to look in)
 
+   # --target-id can also be replaced with --target-ip <ip>, needing no VM resource id at
+   # all - for a target in a different resource group (or subscription/tenant) than the
+   # Bastion host, or one that isn't an Azure VM resource. Needs "IP-based connection"
+   # enabled on the Bastion host (a separate setting from native client support).
+
    # Through a VM with `az ssh vm`, forwarding on to a login node the VM can reach:
    ./resources/azure-tunnel.sh up --name mycluster --mode az-ssh \
      -g my-rg --vm my-jumpbox --remote-host login01.internal \
