@@ -243,6 +243,7 @@ export default function ClusterForm({
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false)
   const [vmMatches, setVmMatches] = useState<AzureVmMatch[]>([])
   const [vmLookupError, setVmLookupError] = useState<string | null>(null)
+  const [vmFoundMessage, setVmFoundMessage] = useState<string | null>(null)
   const [findingVm, setFindingVm] = useState(false)
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
@@ -274,6 +275,9 @@ export default function ClusterForm({
     }))
     setVmMatches([])
     setVmLookupError(null)
+    setVmFoundMessage(
+      `Found it in "${match.subscriptionName}" / ${match.resourceGroup} - filled in above.`
+    )
   }
 
   async function handleFindVm(): Promise<void> {
@@ -283,6 +287,7 @@ export default function ClusterForm({
       return
     }
     setVmLookupError(null)
+    setVmFoundMessage(null)
     setVmMatches([])
     setFindingVm(true)
     try {
@@ -834,6 +839,7 @@ export default function ClusterForm({
                   </div>
                 )}
                 {vmLookupError && <p className="hint">{vmLookupError}</p>}
+                {vmFoundMessage && <p className="hint">{vmFoundMessage}</p>}
                 {vmMatches.length > 0 && (
                   <div className="form-field">
                     <label htmlFor="azureVmMatches">
