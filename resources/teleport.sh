@@ -44,6 +44,9 @@ Options (each also settable via the env var shown, or in a --config file):
   --login-timeout SECS  max wait for `tsh login` (SSO callback)  TPW_LOGIN_TIMEOUT (default: 180)
   --no-login            ssh/scp: fail instead of logging in
   --force               login: renew even if the session is still valid
+  --insecure            skip verifying the proxy's TLS certificate -    TPW_INSECURE=1
+                        only for a self-signed/lab proxy with no real
+                        CA to point SSL_CERT_FILE at
   --non-interactive     never prompt; print the SSO link instead TPW_NON_INTERACTIVE=1
                         of opening a browser
   --config FILE         bash file of TPW_*=... assignments       TPW_CONFIG
@@ -71,7 +74,7 @@ is_interactive() { [[ "$NON_INTERACTIVE" != 1 && -t 0 && -t 2 ]]; }
 
 parse_args() {
   local o_proxy="" o_cluster="" o_user="" o_auth="" o_ttl="" o_timeout=""
-  local o_config="" o_nonint=""
+  local o_config="" o_nonint="" o_insecure=""
   NO_LOGIN=0
   FORCE=0
   PASSTHROUGH=()
@@ -87,6 +90,7 @@ parse_args() {
       --config) o_config=${2:?--config needs a value}; shift ;;
       --no-login) NO_LOGIN=1 ;;
       --force) FORCE=1 ;;
+      --insecure) o_insecure=1 ;;
       --non-interactive) o_nonint=1 ;;
       --) shift; PASSTHROUGH=("$@"); break ;;
       -h | --help) usage; exit 0 ;;
@@ -110,6 +114,7 @@ parse_args() {
   MIN_TTL=${o_ttl:-${TPW_MIN_TTL:-300}}
   LOGIN_TIMEOUT=${o_timeout:-${TPW_LOGIN_TIMEOUT:-180}}
   NON_INTERACTIVE=${o_nonint:-${TPW_NON_INTERACTIVE:-0}}
+  INSECURE=${o_insecure:-${TPW_INSECURE:-0}}
 
   [[ "$MIN_TTL" =~ ^[0-9]+$ ]] || die "$EXIT_USAGE" "--min-ttl must be whole seconds"
   [[ "$LOGIN_TIMEOUT" =~ ^[0-9]+$ ]] || die "$EXIT_USAGE" "--login-timeout must be whole seconds"
@@ -132,6 +137,7 @@ require_tsh() {
 tsh_scope() {
   TSH_SCOPE=(--proxy="$PROXY")
   if [[ -n "$TP_USER" ]]; then TSH_SCOPE+=(--user="$TP_USER"); fi
+  if ((INSECURE)); then TSH_SCOPE+=(--insecure); fi
 }
 
 # ---------------------------------------------------------------------------
