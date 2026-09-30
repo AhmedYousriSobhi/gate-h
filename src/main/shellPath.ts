@@ -73,4 +73,11 @@ export function adoptLoginShellPath(): void {
       process.env.SSL_CERT_DIR = fromShellCerts.dir
     }
   }
+
+  // Visible only when run from a terminal (or in Console.app) - the one place to actually see
+  // what got adopted, since none of this has anywhere to show up in the UI itself.
+  console.error(
+    `[gate-h] shell env adopted from ${shell}: PATH has ${process.env.PATH?.split(':').length ?? 0} entries, ` +
+      `SSL_CERT_FILE=${process.env.SSL_CERT_FILE ?? '(unset)'}, SSL_CERT_DIR=${process.env.SSL_CERT_DIR ?? '(unset)'}`
+  )
 }
