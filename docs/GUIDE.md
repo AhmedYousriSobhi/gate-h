@@ -127,6 +127,7 @@ set a password, and scan the QR code into an authenticator app.
    | **Leaf cluster** / **Auth connector** | only if your admin gave you one |
    | **Teleport node name** | the node as `tsh ls` shows it, e.g. `slogin1` |
    | **Login** | your Linux account on that node |
+   | **Skip certificate verification** | only for a self-signed/lab proxy - see below |
 
 2. Select the cluster:
    - **Already logged in:** your shell opens straight away.
@@ -138,6 +139,8 @@ set a password, and scan the QR code into an authenticator app.
 
 💡 Proxy uses your organisation's own CA? Set `SSL_CERT_FILE=/path/to/ca.pem` (exporting it in your
 shell profile is enough on macOS - Gate-H picks it up at startup the same way it does `PATH`).
+Proxy is self-signed (a lab/test cluster with no real CA) instead? Tick **Skip certificate
+verification** in the form.
 More: [docs/TELEPORT.md](TELEPORT.md).
 
 </details>
@@ -355,7 +358,7 @@ the shell.
 | macOS: `tsh` or `az` not found | Install it with Homebrew. Gate-H reads your login shell's PATH, so a restart of Gate-H after installing is enough. |
 | macOS: Teleport login does nothing or fails at once | It needs `python3`. Run `xcode-select --install`. |
 | Teleport: *unreachable* or *no route to host* | Your machine can't reach the proxy. Check the VPN and the proxy address. |
-| Teleport: *certificate signed by unknown authority* | Set `SSL_CERT_FILE` (macOS: exporting it in your shell profile and restarting Gate-H is enough) pointing at your organisation's CA file. |
+| Teleport: *certificate signed by unknown authority* | Real organisation CA: set `SSL_CERT_FILE` (macOS: exporting it in your shell profile and restarting Gate-H is enough) pointing at it. Self-signed/lab proxy with no real CA: tick **Skip certificate verification** on the cluster instead. |
 | Teleport: *login needed* on a cluster in the background | Background clusters never log in on their own. Log in from any cluster on that proxy; the rest reconnect. |
 | Teleport: *access denied* | Your Teleport role doesn't allow that login or node. Run `tsh status` to see your logins. |
 

@@ -86,6 +86,7 @@ interface FormState {
   teleportCluster: string
   teleportUser: string
   teleportAuthConnector: string
+  teleportInsecure: boolean
   useScheduler: boolean
   schedulerScope: SchedulerScope
   schedulerPartitions: string
@@ -146,6 +147,7 @@ function toFormState(c?: ClusterSummary): FormState {
     teleportCluster: c?.teleport?.cluster ?? '',
     teleportUser: c?.teleport?.user ?? '',
     teleportAuthConnector: c?.teleport?.authConnector ?? '',
+    teleportInsecure: Boolean(c?.teleport?.insecure),
     useScheduler: Boolean(c?.scheduler),
     schedulerScope: c?.scheduler?.scope ?? 'mine',
     schedulerPartitions: c?.scheduler?.partitions.join(', ') ?? '',
@@ -542,7 +544,8 @@ export default function ClusterForm({
               proxy: form.teleportProxy.trim(),
               cluster: form.teleportCluster.trim() || undefined,
               user: form.teleportUser.trim() || undefined,
-              authConnector: form.teleportAuthConnector.trim() || undefined
+              authConnector: form.teleportAuthConnector.trim() || undefined,
+              insecure: form.teleportInsecure || undefined
             }
           : null,
       scheduler: form.useScheduler
@@ -804,6 +807,22 @@ export default function ClusterForm({
                     onChange={(e) => set('teleportAuthConnector', e.target.value)}
                   />
                 </div>
+                <label className="form-field-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={form.teleportInsecure}
+                    onChange={(e) => set('teleportInsecure', e.target.checked)}
+                  />
+                  Skip certificate verification (self-signed/lab proxy, no real CA)
+                </label>
+                {form.teleportInsecure && (
+                  <p className="hint">
+                    tsh won&apos;t verify this proxy&apos;s TLS certificate at all - only use this
+                    for a proxy you know is self-signed (a lab/test cluster), never on a network you
+                    don&apos;t trust. For a real organisation CA, use <code>SSL_CERT_FILE</code>{' '}
+                    instead and leave this off.
+                  </p>
+                )}
               </div>
             )}
 
