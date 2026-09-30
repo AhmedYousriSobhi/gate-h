@@ -448,6 +448,10 @@ export interface ClusterReachability {
   clusterId: string
   status: ReachabilityStatus
   checkedAt: string
+  /** How long the reachability probe itself took to get an answer, in milliseconds - only
+   *  meaningful (and only set) when `status` is `'online'`; a slow-but-up login node reads
+   *  differently from a fast one, which a bare online/offline light can't distinguish. */
+  latencyMs?: number
 }
 
 export type NotificationKind = 'reachability' | 'jira' | 'ssh' | 'scheduler'

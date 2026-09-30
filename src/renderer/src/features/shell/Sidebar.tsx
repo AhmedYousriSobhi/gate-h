@@ -118,7 +118,10 @@ export default function Sidebar({
               style={{ backgroundColor: avatarColorFor(cluster.name) }}
             >
               {initialFor(cluster.name)}
-              <StatusLed status={reachability[cluster.id]?.status} />
+              <StatusLed
+                status={reachability[cluster.id]?.status}
+                latencyMs={reachability[cluster.id]?.latencyMs}
+              />
             </span>
             <div className="cluster-row-main">
               <div className="cluster-row-name">
