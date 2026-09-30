@@ -9,6 +9,7 @@ import type {
   FileTransferEvent,
   GateHApi,
   JobTemplateInput,
+  SnippetInput,
   PanelLayout,
   PanelOrientation,
   SchedulerSnapshot,
@@ -130,6 +131,11 @@ const api: GateHApi = {
     list: () => ipcRenderer.invoke('templates:list'),
     save: (input: JobTemplateInput) => ipcRenderer.invoke('templates:save', input),
     remove: (id: string) => ipcRenderer.invoke('templates:remove', id)
+  },
+  snippets: {
+    list: () => ipcRenderer.invoke('snippets:list'),
+    save: (input: SnippetInput) => ipcRenderer.invoke('snippets:save', input),
+    remove: (id: string) => ipcRenderer.invoke('snippets:remove', id)
   },
   storage: {
     usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)
