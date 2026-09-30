@@ -151,10 +151,13 @@ xterm ──ssh:write/resize──▶ main: ptyManager (src/main/pty/manager.ts)
   leaf cluster, Teleport user or auth connector if needed. Host becomes the Teleport node name
   (as `tsh ls` shows it) and Username the login. Port, auth method and jump host don't apply.
   `tsh` must be on the app's `PATH`. A proxy behind your organisation's own CA needs `SSL_CERT_FILE`
-  (or `SSL_CERT_DIR`) set to the CA bundle, as for `tsh` itself. A self-signed or lab proxy with no
-  real CA to point that at instead has its own **Skip certificate verification** checkbox in the
-  cluster form (`tsh`'s own `--insecure`) - off by default, since it drops TLS verification
-  entirely; only turn it on for a proxy you know is self-signed.
+  (and/or `SSL_CERT_DIR`) set to the CA bundle, as for `tsh` itself - on macOS, Gate-H adopts these
+  from your login shell at startup the same way it already does `PATH`, so exporting them in
+  `.zshrc`/`.bash_profile` and restarting the app is enough; they don't need to be set on whatever
+  command launches it. A self-signed or lab proxy with no real CA to point that at instead has its
+  own **Skip certificate verification** checkbox in the cluster form (`tsh`'s own `--insecure`) -
+  off by default, since it drops TLS verification entirely; only turn it on for a proxy you know is
+  self-signed.
 
 ### Testing the PTY session
 

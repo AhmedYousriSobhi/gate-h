@@ -80,7 +80,10 @@ export default function OverviewDashboard({
                     style={{ backgroundColor: avatarColorFor(cluster.name) }}
                   >
                     {initialFor(cluster.name)}
-                    <StatusLed status={reachability[cluster.id]?.status} />
+                    <StatusLed
+                      status={reachability[cluster.id]?.status}
+                      latencyMs={reachability[cluster.id]?.latencyMs}
+                    />
                   </span>
                   <div>
                     <div className="overview-card-name">{cluster.name}</div>

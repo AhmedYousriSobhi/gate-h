@@ -86,9 +86,16 @@ export interface AzureTunnelConfig {
   localPort: number
   /** mode "bastion" */
   bastionName?: string
+  /** mode "bastion": full ARM resource id of the target VM. If absent, `vmName` is resolved to
+   *  one via `az vm show` when the tunnel opens. */
   targetResourceId?: string
-  /** mode "az-ssh" */
+  /** mode "az-ssh": VM name (required). mode "bastion": alternative to `targetResourceId`. */
   vmName?: string
+  /** mode "bastion": IP address of the target, needing no VM resource id at all - for a target in
+   *  a different resource group (or subscription/tenant) than the Bastion host, or one that isn't
+   *  an Azure VM resource. Needs "IP-based connection" enabled on the Bastion host. Alternative to
+   *  `targetResourceId`/`vmName`. */
+  targetIpAddress?: string
   localUser?: string
 }
 
@@ -105,6 +112,15 @@ export interface AzureSubscription {
   id: string
   name: string
   isDefault: boolean
+}
+
+/** One VM found by `findVm`, naming which subscription/resource group it actually lives in. */
+export interface AzureVmMatch {
+  subscriptionId: string
+  subscriptionName: string
+  resourceGroup: string
+  /** Full ARM resource id - usable directly as a Bastion tunnel's target resource ID. */
+  id: string
 }
 
 /** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
@@ -200,6 +216,20 @@ export interface ClusterInput {
   teleport: TeleportConfig | null
   scheduler: SchedulerConfig | null
   storage: StorageConfig | null
+}
+
+/** One `Host` block read from ~/.ssh/config, ready to become a cluster's SSH connection - no
+ *  secret ever comes from here (a password isn't in ssh_config at all, and a private key's path
+ *  is not its contents). `hasProxy` flags a ProxyJump/ProxyCommand directive that isn't imported,
+ *  so the picker can say a jump host still needs configuring by hand instead of silently
+ *  dropping it. */
+export interface SshConfigCandidate {
+  name: string
+  host: string
+  port: number
+  username?: string
+  privateKeyPath?: string
+  hasProxy: boolean
 }
 
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
@@ -431,12 +461,34 @@ export interface JobTemplateInput {
   body: string
 }
 
+/** A saved shell command (or short block of them), inserted into a terminal's active session on
+ *  click - stored per profile, like job templates, but plain text: no {{placeholder}} handling,
+ *  no confirmation step, since it's typed into an interactive shell rather than submitted as a
+ *  job. */
+export interface Snippet {
+  id: string
+  name: string
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SnippetInput {
+  id?: string
+  name: string
+  body: string
+}
+
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
 export interface ClusterReachability {
   clusterId: string
   status: ReachabilityStatus
   checkedAt: string
+  /** How long the reachability probe itself took to get an answer, in milliseconds - only
+   *  meaningful (and only set) when `status` is `'online'`; a slow-but-up login node reads
+   *  differently from a fast one, which a bare online/offline light can't distinguish. */
+  latencyMs?: number
 }
 
 export type NotificationKind = 'reachability' | 'jira' | 'ssh' | 'scheduler'
@@ -497,6 +549,9 @@ export interface GateHApi {
     remove(id: string): Promise<void>
     /** Toggles this cluster's master Active/Standby switch - see Cluster.activeMonitoring. */
     setActiveMonitoring(id: string, active: boolean): Promise<ClusterSummary>
+    /** Reads ~/.ssh/config (following Include directives) for candidate clusters - read-only,
+     *  nothing is imported until the picker calls `create` per selected entry. */
+    importFromSshConfig(): Promise<SshConfigCandidate[]>
   }
   grafana: {
     getStatus(clusterId: string): Promise<GrafanaStatusResult>
@@ -578,6 +633,12 @@ export interface GateHApi {
     save(input: JobTemplateInput): Promise<JobTemplate>
     remove(id: string): Promise<void>
   }
+  snippets: {
+    /** The active profile's saved shell commands. */
+    list(): Promise<Snippet[]>
+    save(input: SnippetInput): Promise<Snippet>
+    remove(id: string): Promise<void>
+  }
   storage: {
     /** Usage and quota for the cluster's configured paths, run once on request. */
     usage(clusterId: string): Promise<StorageUsage[]>
@@ -595,6 +656,9 @@ export interface GateHApi {
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
     listSubscriptions(): Promise<AzureSubscription[]>
+    /** Searches every enabled subscription for a VM by name - there's no single `az` command for
+     *  "which subscription is this VM in". */
+    findVm(vmName: string): Promise<AzureVmMatch[]>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
   }

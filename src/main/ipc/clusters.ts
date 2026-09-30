@@ -11,6 +11,7 @@ import { refreshCluster } from '../monitor/clusterMonitor'
 import { stopTunnel } from '../azure/tunnel'
 import { refreshTeleportSessions } from '../teleport/sessionState'
 import { getActiveProfileId } from '../profiles'
+import { importFromSshConfig } from '../sshConfigImport'
 import type { ClusterInput } from '../../shared/types'
 
 export function registerClusterIpcHandlers(): void {
@@ -43,4 +44,5 @@ export function registerClusterIpcHandlers(): void {
     if (!active && getCluster(id)?.azureTunnel) await stopTunnel(id)
     return setClusterActiveMonitoring(id, active)
   })
+  ipcMain.handle('clusters:importFromSshConfig', () => importFromSshConfig())
 }

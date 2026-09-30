@@ -4,11 +4,14 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import {
+  FileCode2,
+  History,
   LogIn,
   Maximize2,
   Minimize2,
   RefreshCw,
   Search,
+  Settings2,
   SquareSplitHorizontal,
   SquareSplitVertical,
   X
@@ -16,9 +19,11 @@ import {
 import type {
   ClusterReachability,
   ClusterSummary,
+  Snippet,
   TeleportSessionInfo
 } from '../../../../shared/types'
 import TeleportLoginDialog from './TeleportLoginDialog'
+import SnippetsDialog from './SnippetsDialog'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 import { isMac, SPLIT_SHORTCUT_LABEL } from '../../lib/platform'
@@ -80,6 +85,14 @@ const STABLE_SESSION_MS = 30_000
 // left, a resume would only be turned away again.
 const TELEPORT_WARN_MS = 15 * 60_000
 const TELEPORT_MIN_TTL_MS = 5 * 60_000
+// How much of this session's connection history to keep - enough to see the run-up to a failure
+// (tunnel steps, the drop, a retry or two) without growing unbounded over a long-lived session.
+const MAX_LOG_ENTRIES = 50
+
+interface ConnectionLogEntry {
+  time: string
+  message: string
+}
 
 function msLeft(info: TeleportSessionInfo | undefined): number {
   return info?.validUntil ? Date.parse(info.validUntil) - Date.now() : -Infinity
@@ -122,6 +135,12 @@ export default function TerminalPanel({
   // Latest Azure pre-flight progress line ("Checking Azure CLI session", a device-code login
   // prompt, "Tunnel active on port X", ...) - shown while not connected.
   const [tunnelMessage, setTunnelMessage] = useState<string | null>(null)
+  // Every step of this session's connection lifecycle, timestamped - unlike tunnelMessage/
+  // connectError (last-message-wins, cleared on the next attempt or once paused shows a generic
+  // message), this survives past the moment that produced it so "what actually happened" can be
+  // read after the fact instead of only in the instant it flashed by.
+  const [connectionLog, setConnectionLog] = useState<ConnectionLogEntry[]>([])
+  const [logOpen, setLogOpen] = useState(false)
   // Teleport only: expiry of this cluster's tsh session, and whether it's within the warning
   // window. Both come from session updates, which the main process also pushes at the warning
   // and expiry times, so no countdown timer is needed here.
@@ -131,6 +150,9 @@ export default function TerminalPanel({
     expired: boolean
   } | null>(null)
   const [loginDialog, setLoginDialog] = useState<{ renew: boolean } | null>(null)
+  const [snippets, setSnippets] = useState<Snippet[]>([])
+  const [snippetsOpen, setSnippetsOpen] = useState(false)
+  const [manageSnippetsOpen, setManageSnippetsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchAddonRef = useRef<SearchAddon | null>(null)
@@ -153,6 +175,15 @@ export default function TerminalPanel({
   // for reachability or a manual Reconnect, as before.
   const pausedInBackgroundRef = useRef(false)
   const refitRef = useRef<(() => void) | null>(null)
+  // Mirrors the connect effect's own local `sessionId` so inserting a snippet (triggered from the
+  // header, outside that effect) can write to whatever session is currently live.
+  const sessionIdRef = useRef<string | null>(null)
+
+  const logEvent = useCallback((message: string): void => {
+    setConnectionLog((prev) =>
+      [...prev, { time: new Date().toISOString(), message }].slice(-MAX_LOG_ENTRIES)
+    )
+  }, [])
 
   function clearRetryTimer(): void {
     if (retryTimerRef.current) {
@@ -167,6 +198,7 @@ export default function TerminalPanel({
     if (suspendedRef.current) {
       pausedInBackgroundRef.current = true
       setStatus('paused')
+      logEvent('Paused - cluster is in the background')
       return
     }
     const now = Date.now()
@@ -177,6 +209,7 @@ export default function TerminalPanel({
 
     if (attemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
       setStatus('paused')
+      logEvent(`Paused - ${MAX_RECONNECT_ATTEMPTS} retries used up`)
       return
     }
 
@@ -185,9 +218,12 @@ export default function TerminalPanel({
     setStatus('reconnecting')
     const delay =
       BASE_RECONNECT_DELAY_MS * 2 ** (attemptsRef.current - 1) + Math.random() * RECONNECT_JITTER_MS
+    logEvent(
+      `Retrying in ${Math.round(delay / 1000)}s (attempt ${attemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
+    )
     clearRetryTimer()
     retryTimerRef.current = setTimeout(() => setConnectNonce((n) => n + 1), delay)
-  }, [])
+  }, [logEvent])
 
   /** Manual "Reconnect" click, or a reachability recovery signal for this cluster - both reset
    *  the backoff window so a fresh burst of attempts is available rather than inheriting whatever
@@ -199,8 +235,9 @@ export default function TerminalPanel({
     attemptsRef.current = 0
     setRetryAttempt(0)
     setStatus('connecting')
+    logEvent('Reconnecting now')
     setConnectNonce((n) => n + 1)
-  }, [])
+  }, [logEvent])
 
   useEffect(() => {
     // Re-checked on every reachability push for this cluster (roughly every 60s, same cadence the
@@ -236,10 +273,34 @@ export default function TerminalPanel({
   useEffect(
     () =>
       window.api.azure.onStatus((event) => {
-        if (event.clusterId === cluster.id) setTunnelMessage(event.message)
+        if (event.clusterId !== cluster.id) return
+        setTunnelMessage(event.message)
+        logEvent(event.message)
       }),
-    [cluster.id]
+    [cluster.id, logEvent]
   )
+
+  // Reloaded whenever the management dialog closes too, so an edit there shows up in the insert
+  // popover without needing to reopen this session.
+  useEffect(() => {
+    let cancelled = false
+    window.api.snippets
+      .list()
+      .then((list) => {
+        if (!cancelled) setSnippets(list)
+      })
+      .catch(() => {
+        // Best-effort: an empty list just means the insert popover has nothing to show.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [manageSnippetsOpen])
+
+  function insertSnippet(body: string): void {
+    if (sessionIdRef.current) window.api.ssh.write(sessionIdRef.current, body)
+    setSnippetsOpen(false)
+  }
 
   const isTeleport = Boolean(cluster.teleport)
   useEffect(() => {
@@ -275,6 +336,7 @@ export default function TerminalPanel({
     let stableTimer: ReturnType<typeof setTimeout> | null = null
     setStatus('connecting')
     setConnectError(null)
+    logEvent(`Connecting to ${cluster.connection.host}`)
 
     const term = new Terminal({
       convertEol: true,
@@ -364,12 +426,16 @@ export default function TerminalPanel({
       if (event.authRequired) {
         clearRetryTimer()
         setStatus('auth-required')
+        logEvent('Teleport login needed')
         return
       }
+      logEvent('Session closed unexpectedly')
       scheduleReconnectOrPause()
     })
     const offError = window.api.ssh.onError((event) => {
-      if (event.sessionId === sessionId) setConnectError(event.message)
+      if (event.sessionId !== sessionId) return
+      setConnectError(event.message)
+      logEvent(event.message)
     })
 
     const dataDisposable = term.onData((data) => {
@@ -385,17 +451,20 @@ export default function TerminalPanel({
           return
         }
         sessionId = result.sessionId
+        sessionIdRef.current = sessionId
         stableTimer = setTimeout(() => {
           windowStartRef.current = Date.now()
           attemptsRef.current = 0
           setRetryAttempt(0)
         }, STABLE_SESSION_MS)
         setStatus('connected')
+        logEvent('Connected')
         window.api.ssh.resize(sessionId, term.cols, term.rows)
         term.focus()
       })
       .catch((err: Error) => {
         setConnectError(err.message)
+        logEvent(err.message)
         if (!disposed) scheduleReconnectOrPause()
       })
 
@@ -405,6 +474,7 @@ export default function TerminalPanel({
       if (stableTimer) clearTimeout(stableTimer)
       resizeObserver.disconnect()
       refitRef.current = null
+      sessionIdRef.current = null
       offData()
       offClosed()
       offError()
@@ -415,7 +485,7 @@ export default function TerminalPanel({
       searchAddonRef.current = null
       setSearchOpen(false)
     }
-  }, [cluster.id, connectNonce, scheduleReconnectOrPause])
+  }, [cluster.id, cluster.connection.host, connectNonce, scheduleReconnectOrPause, logEvent])
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus()
@@ -473,6 +543,24 @@ export default function TerminalPanel({
         )}
         {/* Stops pointerdown so pressing a button never starts a header drag. */}
         <span className="terminal-header-actions" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            className={`terminal-header-btn${snippetsOpen ? ' terminal-header-btn-active' : ''}`}
+            title="Insert a saved snippet"
+            aria-label="Snippets"
+            aria-pressed={snippetsOpen}
+            onClick={() => setSnippetsOpen((v) => !v)}
+          >
+            <FileCode2 size={13} strokeWidth={2} />
+          </button>
+          <button
+            className={`terminal-header-btn${logOpen ? ' terminal-header-btn-active' : ''}`}
+            title="Connection log"
+            aria-label="Connection log"
+            aria-pressed={logOpen}
+            onClick={() => setLogOpen((v) => !v)}
+          >
+            <History size={13} strokeWidth={2} />
+          </button>
           {onSplit && (
             <button
               className="terminal-header-btn"
@@ -514,6 +602,71 @@ export default function TerminalPanel({
           )}
         </span>
       </div>
+      {snippetsOpen && (
+        <div className="terminal-popover terminal-snippets-popover">
+          <div className="terminal-popover-header">
+            <h5>Snippets</h5>
+            <button className="btn-icon" title="Close" onClick={() => setSnippetsOpen(false)}>
+              <X size={12} strokeWidth={2} />
+            </button>
+          </div>
+          {snippets.length === 0 ? (
+            <p className="terminal-popover-empty">No snippets saved yet.</p>
+          ) : (
+            <ul className="terminal-popover-list">
+              {snippets.map((snippet) => (
+                <li key={snippet.id}>
+                  <button
+                    className="terminal-snippet-item"
+                    title={snippet.body}
+                    onClick={() => insertSnippet(snippet.body)}
+                  >
+                    {snippet.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            className="terminal-snippets-manage"
+            onClick={() => {
+              setSnippetsOpen(false)
+              setManageSnippetsOpen(true)
+            }}
+          >
+            <Settings2 size={12} strokeWidth={2} />
+            Manage snippets...
+          </button>
+        </div>
+      )}
+      {logOpen && (
+        <div className="terminal-connection-log">
+          <div className="terminal-connection-log-header">
+            <h5>Connection log</h5>
+            <button className="btn-icon" title="Close" onClick={() => setLogOpen(false)}>
+              <X size={12} strokeWidth={2} />
+            </button>
+          </div>
+          {connectionLog.length === 0 ? (
+            <p className="terminal-connection-log-empty">Nothing yet.</p>
+          ) : (
+            <ul className="terminal-connection-log-list">
+              {[...connectionLog].reverse().map((entry, i) => (
+                <li key={entry.time + i} className="terminal-connection-log-entry">
+                  <span className="terminal-connection-log-time">
+                    {new Date(entry.time).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </span>
+                  <span className="terminal-connection-log-message">{entry.message}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {connectError && <div className="error-banner terminal-error">{connectError}</div>}
       <div className="terminal-body">
         <div className="terminal-container" ref={containerRef} />
@@ -605,6 +758,7 @@ export default function TerminalPanel({
           onClose={() => setLoginDialog(null)}
         />
       )}
+      {manageSnippetsOpen && <SnippetsDialog onClose={() => setManageSnippetsOpen(false)} />}
     </div>
   )
 }
