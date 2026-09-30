@@ -74,8 +74,9 @@ Gate-H remembers the server's host key and warns you if it ever changes.
 
 <br/>
 
-1. Fill in the login node as for **Directly** (or Azure/Teleport - a jump host composes with any
-   of them).
+1. Fill in the login node as for **Directly** (or Azure - a jump host composes with either one, but
+   not Teleport: every node Teleport routes to presents a certificate host key this app's SSH
+   library can't verify).
 2. Tick **Route through a jump host / bastion hop**, then enter the jump host's address, port,
    username, auth method, and its own password/passphrase if it needs one.
 

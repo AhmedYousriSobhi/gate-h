@@ -10,12 +10,11 @@ import type { ClusterSummary } from '../../shared/types'
 // Runs one fixed scheduler command (built in ./slurm.ts, never text from the renderer) on a
 // session the user already has open. It never opens a connection or logs in: an ssh2 cluster
 // gets an extra channel on its terminal's connection, which also covers jump hosts and Azure
-// tunnels, and a bare Teleport cluster (no jump host) gets a `tsh ssh --no-login`, only while its
-// tsh session is valid. When `scheduler.execTarget` is set, the command instead runs on that
-// internal node - one more forwarded ssh2 hop for an already-live client, or `tsh ssh --no-login`
-// to that node for a bare Teleport cluster. Runs for one cluster are queued, so a cluster never
-// has more than one scheduler channel open, and OpenSSH's MaxSessions (10 by default) is left to
-// the terminal tabs.
+// tunnels, and a Teleport cluster gets a `tsh ssh --no-login`, only while its tsh session is
+// valid. When `scheduler.execTarget` is set, the command instead runs on that internal node - one
+// more forwarded ssh2 hop for an already-live client, or `tsh ssh --no-login` to that node for a
+// Teleport cluster. Runs for one cluster are queued, so a cluster never has more than one
+// scheduler channel open, and OpenSSH's MaxSessions (10 by default) is left to the terminal tabs.
 
 const TIMEOUT_MS = 15_000
 const MAX_OUTPUT_BYTES = 1024 * 1024
@@ -168,10 +167,7 @@ function hasTeleportSession(clusterId: string): boolean {
 
 function runNow(cluster: ClusterSummary, command: string, stdin?: string): Promise<ExecResult> {
   const execTarget = cluster.scheduler?.execTarget
-  // A bare Teleport cluster (no jump host) has no ssh2 client - it needs its own tsh invocation.
-  // One with a jump host already has a real live client (see ssh/manager.ts), so it's handled by
-  // the ssh2 path below like Direct/Azure, gaining execTarget support for free.
-  if (cluster.teleport && !cluster.connection.jumpHost) {
+  if (cluster.teleport) {
     if (!hasTeleportSession(cluster.id)) {
       return Promise.reject(new NoSessionError('Waiting for a Teleport login.'))
     }

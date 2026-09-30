@@ -153,8 +153,7 @@ function toFormState(c?: ClusterSummary): FormState {
     schedulerScope: c?.scheduler?.scope ?? 'mine',
     schedulerPartitions: c?.scheduler?.partitions.join(', ') ?? '',
     schedulerInterval: String(c?.scheduler?.intervalSec ?? DEFAULT_SCHEDULER_INTERVAL_SEC),
-    schedulerAutoRefresh:
-      c?.scheduler?.autoRefresh ?? (!c?.teleport || Boolean(c?.connection.jumpHost)),
+    schedulerAutoRefresh: c?.scheduler?.autoRefresh ?? !c?.teleport,
     schedulerNotify: c?.scheduler?.notify ?? false,
     schedulerExecHost: c?.scheduler?.execTarget?.host ?? '',
     schedulerExecPort: c?.scheduler?.execTarget?.port ? String(c.scheduler.execTarget.port) : '',
@@ -200,6 +199,12 @@ function schedulerError(form: FormState): string | null {
 /** Returns why the jump host settings can't be saved, or null if they can. */
 function jumpHostError(form: FormState): string | null {
   if (!form.jumpHostEnabled) return null
+  if (form.connectionMode === 'teleport') {
+    return (
+      "A jump host can't be combined with Teleport - every Teleport-routed node presents a " +
+      "certificate host key this app's SSH library can't verify."
+    )
+  }
   if (!form.jumpHost.trim() || !form.jumpUsername.trim()) {
     return 'A jump host needs a host and a username.'
   }
@@ -500,19 +505,24 @@ export default function ClusterForm({
         username: form.username.trim(),
         authMethod: form.authMethod,
         privateKeyPath: form.authMethod === 'private-key' ? form.privateKeyPath.trim() : undefined,
-        jumpHost: form.jumpHostEnabled
-          ? {
-              host: form.jumpHost.trim(),
-              port: Number(form.jumpPort) || 22,
-              username: form.jumpUsername.trim(),
-              authMethod: form.jumpAuthMethod,
-              privateKeyPath:
-                form.jumpAuthMethod === 'private-key' ? form.jumpPrivateKeyPath.trim() : undefined
-            }
-          : undefined
+        // Not available for Teleport (see JumpHostConfig).
+        jumpHost:
+          form.jumpHostEnabled && form.connectionMode !== 'teleport'
+            ? {
+                host: form.jumpHost.trim(),
+                port: Number(form.jumpPort) || 22,
+                username: form.jumpUsername.trim(),
+                authMethod: form.jumpAuthMethod,
+                privateKeyPath:
+                  form.jumpAuthMethod === 'private-key' ? form.jumpPrivateKeyPath.trim() : undefined
+              }
+            : undefined
       },
       connectionSecret: form.connectionSecret || undefined,
-      jumpHostSecret: form.jumpHostEnabled ? form.jumpHostSecret.trim() || undefined : undefined,
+      jumpHostSecret:
+        form.jumpHostEnabled && form.connectionMode !== 'teleport'
+          ? form.jumpHostSecret.trim() || undefined
+          : undefined,
       grafana: form.useGrafana
         ? {
             baseUrl: form.grafanaBaseUrl.trim(),
@@ -574,8 +584,7 @@ export default function ClusterForm({
             partitions: splitList(form.schedulerPartitions),
             intervalSec: Number(form.schedulerInterval),
             autoRefresh: form.schedulerAutoRefresh,
-            notify:
-              form.schedulerNotify && (form.connectionMode !== 'teleport' || form.jumpHostEnabled),
+            notify: form.schedulerNotify && form.connectionMode !== 'teleport',
             execTarget: form.schedulerExecHost.trim()
               ? {
                   host: form.schedulerExecHost.trim(),
@@ -710,7 +719,15 @@ export default function ClusterForm({
             <h4>How does Gate-H reach it?</h4>
             <ConnectionModeTabs
               value={form.connectionMode}
-              onChange={(mode) => set('connectionMode', mode)}
+              onChange={(mode) =>
+                setForm((prev) => ({
+                  ...prev,
+                  connectionMode: mode,
+                  // A jump host can't be combined with Teleport (see JumpHostConfig) - switching
+                  // to it turns the toggle off instead of leaving a hidden, unsavable state.
+                  jumpHostEnabled: mode === 'teleport' ? false : prev.jumpHostEnabled
+                }))
+              }
             />
 
             {form.connectionMode === 'direct' && (
@@ -734,7 +751,9 @@ export default function ClusterForm({
                 <p className="hint">
                   The terminal runs tsh ssh through this proxy. If there&apos;s no valid tsh
                   session, you log in right in the terminal: password and OTP prompts appear there,
-                  or your browser opens for SSO. Needs tsh on PATH. See docs/TELEPORT.md.
+                  or your browser opens for SSO. Needs tsh on PATH. See docs/TELEPORT.md. A jump
+                  host can&apos;t be layered on a Teleport connection - every node it routes to
+                  presents a certificate host key this app&apos;s SSH library can&apos;t verify.
                 </p>
                 <div className="form-field">
                   <label htmlFor="teleportProxy">Proxy address</label>
@@ -979,103 +998,98 @@ export default function ClusterForm({
             )}
           </div>
 
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.jumpHostEnabled}
-                onChange={(e) => set('jumpHostEnabled', e.target.checked)}
-              />
-              <h4 style={{ margin: 0 }}>
-                <Waypoints size={13} strokeWidth={2} />
-                Route through a jump host / bastion hop
-              </h4>
-            </label>
-            {form.jumpHostEnabled && (
-              <>
-                <p className="hint">
-                  Reached first, through whichever method is picked above (Direct dials it directly;
-                  Azure&apos;s tunnel and Teleport&apos;s proxy reach it as their own target) - then
-                  a normal SSH hop from there reaches Host/Port above.
-                </p>
-                {form.connectionMode === 'teleport' && (
+          {form.connectionMode !== 'teleport' && (
+            <div className="form-section">
+              <label className="form-field-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.jumpHostEnabled}
+                  onChange={(e) => set('jumpHostEnabled', e.target.checked)}
+                />
+                <h4 style={{ margin: 0 }}>
+                  <Waypoints size={13} strokeWidth={2} />
+                  Route through a jump host / bastion hop
+                </h4>
+              </label>
+              {form.jumpHostEnabled && (
+                <>
                   <p className="hint">
-                    A jump host reached through a Teleport proxy hasn&apos;t been verified against a
-                    live Teleport cluster yet - test this combination carefully before relying on
-                    it.
+                    Reached first, through whichever method is picked above (Direct dials it
+                    directly; Azure&apos;s tunnel reaches it as its own target) - then a normal SSH
+                    hop from there reaches Host/Port above.
                   </p>
-                )}
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="jumpHost">Jump host</label>
-                    <input
-                      id="jumpHost"
-                      value={form.jumpHost}
-                      onChange={(e) => set('jumpHost', e.target.value)}
-                    />
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label htmlFor="jumpHost">Jump host</label>
+                      <input
+                        id="jumpHost"
+                        value={form.jumpHost}
+                        onChange={(e) => set('jumpHost', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="jumpPort">Jump port</label>
+                      <input
+                        id="jumpPort"
+                        value={form.jumpPort}
+                        onChange={(e) => set('jumpPort', e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="form-field">
-                    <label htmlFor="jumpPort">Jump port</label>
-                    <input
-                      id="jumpPort"
-                      value={form.jumpPort}
-                      onChange={(e) => set('jumpPort', e.target.value)}
-                    />
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label htmlFor="jumpUsername">Jump username</label>
+                      <input
+                        id="jumpUsername"
+                        value={form.jumpUsername}
+                        onChange={(e) => set('jumpUsername', e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="jumpAuthMethod">Jump auth method</label>
+                      <select
+                        id="jumpAuthMethod"
+                        value={form.jumpAuthMethod}
+                        onChange={(e) => set('jumpAuthMethod', e.target.value as SshAuthMethod)}
+                      >
+                        <option value="private-key">Private key</option>
+                        <option value="password">Password</option>
+                        <option value="agent">SSH agent</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="jumpUsername">Jump username</label>
-                    <input
-                      id="jumpUsername"
-                      value={form.jumpUsername}
-                      onChange={(e) => set('jumpUsername', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="jumpAuthMethod">Jump auth method</label>
-                    <select
-                      id="jumpAuthMethod"
-                      value={form.jumpAuthMethod}
-                      onChange={(e) => set('jumpAuthMethod', e.target.value as SshAuthMethod)}
-                    >
-                      <option value="private-key">Private key</option>
-                      <option value="password">Password</option>
-                      <option value="agent">SSH agent</option>
-                    </select>
-                  </div>
-                </div>
-                {form.jumpAuthMethod === 'private-key' && (
-                  <div className="form-field">
-                    <label htmlFor="jumpPrivateKeyPath">Jump host private key path</label>
-                    <input
-                      id="jumpPrivateKeyPath"
-                      value={form.jumpPrivateKeyPath}
-                      onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
-                    />
-                  </div>
-                )}
-                {form.jumpAuthMethod !== 'agent' && (
-                  <div className="form-field">
-                    <label htmlFor="jumpHostSecret">
-                      {form.jumpAuthMethod === 'password'
-                        ? 'Jump host password'
-                        : 'Jump host key passphrase (if any)'}
-                    </label>
-                    <input
-                      id="jumpHostSecret"
-                      type="password"
-                      value={form.jumpHostSecret}
-                      onChange={(e) => set('jumpHostSecret', e.target.value)}
-                      placeholder={
-                        initial?.hasJumpHostSecret ? 'Unchanged - leave blank to keep' : ''
-                      }
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                  {form.jumpAuthMethod === 'private-key' && (
+                    <div className="form-field">
+                      <label htmlFor="jumpPrivateKeyPath">Jump host private key path</label>
+                      <input
+                        id="jumpPrivateKeyPath"
+                        value={form.jumpPrivateKeyPath}
+                        onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {form.jumpAuthMethod !== 'agent' && (
+                    <div className="form-field">
+                      <label htmlFor="jumpHostSecret">
+                        {form.jumpAuthMethod === 'password'
+                          ? 'Jump host password'
+                          : 'Jump host key passphrase (if any)'}
+                      </label>
+                      <input
+                        id="jumpHostSecret"
+                        type="password"
+                        value={form.jumpHostSecret}
+                        onChange={(e) => set('jumpHostSecret', e.target.value)}
+                        placeholder={
+                          initial?.hasJumpHostSecret ? 'Unchanged - leave blank to keep' : ''
+                        }
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div className="form-section">
             <label className="form-field-checkbox">
@@ -1158,10 +1172,9 @@ export default function ClusterForm({
                   setForm((prev) => ({
                     ...prev,
                     useScheduler: e.target.checked,
-                    // Each run on a bare Teleport cluster (no jump host) is an audited session -
-                    // opt in explicitly. One with a jump host has a real background connection.
+                    // Each run on a Teleport cluster is an audited session - opt in explicitly.
                     schedulerAutoRefresh: e.target.checked
-                      ? prev.connectionMode !== 'teleport' || prev.jumpHostEnabled
+                      ? prev.connectionMode !== 'teleport'
                       : prev.schedulerAutoRefresh
                   }))
                 }
@@ -1222,7 +1235,7 @@ export default function ClusterForm({
                     Refresh automatically
                   </label>
                 </div>
-                {(form.connectionMode !== 'teleport' || form.jumpHostEnabled) && (
+                {form.connectionMode !== 'teleport' && (
                   <label className="form-field-checkbox">
                     <input
                       type="checkbox"
@@ -1232,20 +1245,17 @@ export default function ClusterForm({
                     Notify me when my jobs finish or start, and when nodes go down
                   </label>
                 )}
-                {(form.connectionMode !== 'teleport' || form.jumpHostEnabled) &&
-                  form.schedulerNotify && (
-                    <p className="hint">
-                      While this cluster is open in the background, Gate-H keeps checking every 5
-                      minutes on its terminal&apos;s connection. Closed or in standby, nothing runs.
-                    </p>
-                  )}
-                {form.connectionMode === 'teleport' &&
-                  !form.jumpHostEnabled &&
-                  form.schedulerAutoRefresh && (
-                    <p className="hint">
-                      Every refresh is a new Teleport session in your site&apos;s audit log.
-                    </p>
-                  )}
+                {form.connectionMode !== 'teleport' && form.schedulerNotify && (
+                  <p className="hint">
+                    While this cluster is open in the background, Gate-H keeps checking every 5
+                    minutes on its terminal&apos;s connection. Closed or in standby, nothing runs.
+                  </p>
+                )}
+                {form.connectionMode === 'teleport' && form.schedulerAutoRefresh && (
+                  <p className="hint">
+                    Every refresh is a new Teleport session in your site&apos;s audit log.
+                  </p>
+                )}
                 <div className="form-row">
                   <div className="form-field">
                     <label htmlFor="schedulerExecHost">

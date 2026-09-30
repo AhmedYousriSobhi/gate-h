@@ -45,9 +45,10 @@ this repo or its history.)
 | Command snippets | ✅ Done | Per-profile saved commands, inserted into the active terminal session from a popover in its header (`src/main/snippets.ts`, `SnippetsDialog.tsx`) |
 | Per-session connection log | ✅ Done | Every connect/reconnect/disconnect step for a session, timestamped, in a popover from the terminal header |
 | Reachability latency | ✅ Done | The reachability probe's round-trip time, shown in the LED's tooltip (`ClusterReachability.latencyMs`) |
-| Cluster form: connection mode | ✅ Done | Direct/Azure/Teleport are mutually exclusive base-transport tabs (`connectionMode`); a jump host is a separate, independent checkbox composable with any of them (`src/main/ssh/manager.ts` generalizes the existing forwardOut chaining to reach the jump host through whichever base transport is picked, then hop to the final target) |
-| Jump host composed with Azure/Teleport | ⚠️ Partial | Azure: the tunnel reaches the jump host instead of the final target (`src/main/azure/tunnel.ts`) — same, well-exercised ssh2 chaining as Direct+jump-host. Teleport: a new `tsh proxy ssh`-based path (`src/main/teleport/proxyClient.ts`, `resources/teleport.sh proxy-ssh`) wraps the proxy connection as a duplex socket for ssh2 to chain from — **not yet verified against a live Teleport proxy** (no `tsh`/proxy available in this environment); verify manually before relying on it |
-| Slurm execution target | ✅ Done | Optional `scheduler.execTarget` (`src/main/scheduler/exec.ts`) runs squeue/sinfo/sacct on a different internal node than the terminal's own target, through one more forwarded ssh2 hop (or `tsh ssh --no-login` for a bare Teleport cluster) - for a bastion/login node that doesn't host Slurm itself |
+| Cluster form: connection mode | ✅ Done | Direct/Azure/Teleport are mutually exclusive base-transport tabs (`connectionMode`); a jump host is a separate, independent checkbox composable with Direct or Azure (`src/main/ssh/manager.ts` generalizes the existing forwardOut chaining to reach the jump host through whichever of the two is picked, then hop to the final target) |
+| Jump host composed with Azure | ✅ Done | The tunnel reaches the jump host instead of the final target (`src/main/azure/tunnel.ts`) — same, well-exercised ssh2 chaining as Direct+jump-host |
+| Jump host composed with Teleport | ❌ Not possible | Tried and confirmed broken against a live Teleport v18 lab, not just untested: `tsh proxy ssh` does hand `ssh2` a real duplex stream (the SSH handshake starts correctly), but every node Teleport can route to presents a certificate-format host key (`ecdsa-sha2-nistp256-cert-v01@openssh.com`), and the `ssh2` npm package has no support for certificate host keys at all (checked `node_modules/ssh2/lib/protocol/constants.js` — no `*-cert-v01@openssh.com` entries anywhere). Fails 100% of the time, before authentication is even attempted. Supporting it would mean patching or replacing the SSH library; out of scope here. The cluster form disables the jump-host toggle for Teleport rather than offering something that can't work |
+| Slurm execution target | ✅ Done | Optional `scheduler.execTarget` (`src/main/scheduler/exec.ts`) runs squeue/sinfo/sacct on a different internal node than the terminal's own target, through one more forwarded ssh2 hop (or `tsh ssh --no-login` for a Teleport cluster, which doesn't hit the certificate issue above since it stays on tsh's own bare `ssh` path rather than a raw ssh2 socket) - for a bastion/login node that doesn't host Slurm itself |
 | Azure tunnel: VM name, target-IP, subscription picker | ✅ Done | Bastion/`az ssh vm` accept a VM name (resolved to a resource ID at tunnel time) as an alternative to a resource ID, or a bare `--target-ip` for a target with no resource ID in reach; the subscription picker scopes every `az` call with `--subscription` instead of the process-wide `az account set`. See `docs/AZURE.md` |
 | Teleport: skip certificate verification | ✅ Done | Per-cluster **Skip certificate verification** checkbox (`tsh`'s own `--insecure`), for a self-signed/lab proxy with no real CA to point `SSL_CERT_FILE` at; off by default. See `docs/TELEPORT.md` |
 | macOS: SSL cert env adoption | ✅ Done | `adoptLoginShellPath()` also adopts `SSL_CERT_FILE`/`SSL_CERT_DIR` from the login shell at startup, the same way it already does `PATH`, so a Dock-launched app still sees an org CA exported in `.zshrc`/`.bash_profile` |
@@ -124,11 +125,10 @@ has no reachable SSH/Grafana/Jira servers to test against live. So every feature
   yet; today the only way to recover from an expected key change is to delete the row from the
   `known_hosts` SQLite table directly. A "trust this new key" button on the connection-refused
   error is the natural next step.
-- **Jump host reached through a Teleport proxy is unverified live** — see
-  `src/main/teleport/proxyClient.ts`; the `tsh proxy ssh` + ssh2 wrapping was written against
-  Teleport's documented behavior, not exercised against a real proxy. If the jump host is itself a
-  Teleport-enrolled node expecting certificate-based auth rather than a password/key, this won't
-  authenticate - that's a materially different setup not handled yet.
+- **A jump host can't be layered on a Teleport connection** — confirmed against a live Teleport v18
+  lab: every node Teleport routes to presents a certificate-format host key, and the `ssh2` package
+  this app uses has no certificate-host-key support at all. The cluster form doesn't offer the
+  combination; see the entry above.
 - **Grafana snapshots need the image-renderer plugin** — without it, Gate-H falls back to just
   the dashboard title and an "Open in Grafana" link. A future iteration could let a cluster point
   at specific panel IDs instead of just dashboard UIDs, for a more compact status view.

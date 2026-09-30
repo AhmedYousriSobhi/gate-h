@@ -1,5 +1,4 @@
 import { Client, type ClientChannel, type ConnectConfig } from 'ssh2'
-import type { ChildProcess } from 'child_process'
 import { randomUUID } from 'crypto'
 import type { WebContents } from 'electron'
 import { getCluster, getClusterSecrets } from '../clusters'
@@ -13,24 +12,23 @@ import {
   teleportLoginCommand,
   teleportSshCommand
 } from '../teleport/session'
-import { connectViaTeleportProxy } from '../teleport/proxyClient'
 import { refreshTeleportSessions } from '../teleport/sessionState'
 import type { ClusterSummary, ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
-// forwardOut, per the standard ssh2 jump-host pattern - composable with any base method, see
-// openSshSession below), opens an interactive shell channel, and streams its output to the
-// renderer over IPC. Sessions live only in memory for this process. A bare Teleport cluster (no
-// jump host) is the exception: its session is `tsh ssh` on a local PTY (see openTeleportSession),
-// behind the same session ids and ssh:* events, so the renderer drives both kinds identically.
+// forwardOut, per the standard ssh2 jump-host pattern - composable with Direct or an Azure
+// tunnel, see openSshSession below), opens an interactive shell channel, and streams its output
+// to the renderer over IPC. Sessions live only in memory for this process. Teleport clusters are
+// the exception: their session is `tsh ssh` on a local PTY (see openTeleportSession), behind the
+// same session ids and ssh:* events, so the renderer drives both kinds identically. A jump host
+// can't be layered on a Teleport session: every node Teleport can route to presents a
+// certificate-format host key, which the `ssh2` package this app uses cannot verify at all (see
+// docs/STATUS.md).
 
 interface Session {
   clusterId: string
   clusterName: string
   jumpClient: Client | null
-  /** Set only when the jump host was reached through a Teleport proxy (see
-   *  teleport/proxyClient.ts) - the subprocess backing `jumpClient`'s duplex socket. */
-  jumpProcess: ChildProcess | null
   client: Client
   stream: ClientChannel
 }
@@ -81,15 +79,10 @@ export async function openSshSession(
 ): Promise<{ sessionId: string }> {
   const cluster = getCluster(clusterId)
   if (!cluster) throw new Error('Cluster not found')
+  if (cluster.teleport) return openTeleportSession(cluster, sender)
   const jump = cluster.connection.jumpHost
-  // A bare Teleport cluster (no jump host) keeps its own dedicated, battle-tested path: `tsh ssh`
-  // on a PTY, not an ssh2.Client, so none of the forwardOut chaining below applies to it.
-  if (cluster.teleport && !jump) return openTeleportSession(cluster, sender)
-
   const secrets = getClusterSecrets(clusterId)
-  // Teleport takes priority over an Azure tunnel if both were somehow set, same as before this
-  // change (openTeleportSession used to return before `azureTunnel` was even read).
-  const tunnel = cluster.teleport ? null : cluster.azureTunnel
+  const tunnel = cluster.azureTunnel
 
   if (tunnel) {
     try {
@@ -105,10 +98,10 @@ export async function openSshSession(
     }
   }
 
-  // The near hop: what the base method (Direct, Azure tunnel or Teleport) actually reaches first.
-  // Without a jump host this is the cluster's own target - today's no-jump behavior, unchanged.
-  // With one, the base method reaches the jump host instead, and a `forwardOut` below completes
-  // the trip to `cluster.connection`, whose meaning as the final interactive target never changes.
+  // The near hop: what the base method (Direct or Azure tunnel) actually reaches first. Without a
+  // jump host this is the cluster's own target - today's no-jump behavior, unchanged. With one,
+  // the base method reaches the jump host instead, and a `forwardOut` below completes the trip to
+  // `cluster.connection`, whose meaning as the final interactive target never changes.
   const nearProfile: ConnectionProfile = jump
     ? {
         host: jump.host,
@@ -127,28 +120,16 @@ export async function openSshSession(
       (jump.authMethod === cluster.connection.authMethod ? secrets.connectionSecret : null))
     : secrets.connectionSecret
 
-  let jumpProcess: ChildProcess | null = null
   let nearClient: Client
   try {
-    if (cluster.teleport) {
-      const proxied = await connectViaTeleportProxy(
-        cluster.teleport,
+    nearClient = await connectClient(
+      buildConnectConfig(
         nearProfile,
         nearSecret,
-        nearContext
+        nearContext,
+        tunnel ? { host: '127.0.0.1', port: tunnel.localPort } : undefined
       )
-      nearClient = proxied.client
-      jumpProcess = proxied.process
-    } else {
-      nearClient = await connectClient(
-        buildConnectConfig(
-          nearProfile,
-          nearSecret,
-          nearContext,
-          tunnel ? { host: '127.0.0.1', port: tunnel.localPort } : undefined
-        )
-      )
-    }
+    )
   } catch (err) {
     // A Bastion tunnel can hang with its local port still listening (azure-cli#28367), so `up`
     // would keep reusing it; tearing it down makes the Terminal's next retry open a fresh one.
@@ -193,7 +174,6 @@ export async function openSshSession(
       }
     } catch (err) {
       jumpClient.end()
-      jumpProcess?.kill()
       notifyConnectFailure(
         clusterId,
         cluster.name,
@@ -206,7 +186,6 @@ export async function openSshSession(
       client = await connectClient(targetConfig)
     } catch (err) {
       jumpClient.end()
-      jumpProcess?.kill()
       notifyConnectFailure(clusterId, cluster.name, err, `Could not connect to ${cluster.name}`)
       throw err
     }
@@ -217,14 +196,7 @@ export async function openSshSession(
   const stream = await openShell(client)
 
   const sessionId = randomUUID()
-  sessions.set(sessionId, {
-    clusterId,
-    clusterName: cluster.name,
-    jumpClient,
-    jumpProcess,
-    client,
-    stream
-  })
+  sessions.set(sessionId, { clusterId, clusterName: cluster.name, jumpClient, client, stream })
 
   stream.on('data', (chunk: Buffer) => {
     safeSend(sender, 'ssh:data', { sessionId, chunk: chunk.toString('utf8') })
@@ -254,8 +226,10 @@ export async function openSshSession(
 }
 
 function openTeleportSession(cluster: ClusterSummary, sender: WebContents): { sessionId: string } {
-  if (cluster.azureTunnel) {
-    throw new Error('A Teleport cluster connects through its proxy only - remove the Azure tunnel.')
+  if (cluster.azureTunnel || cluster.connection.jumpHost) {
+    throw new Error(
+      'A Teleport cluster connects through its proxy only - remove the jump host or Azure tunnel.'
+    )
   }
   const preflight = new TeleportPreflight()
   // The PTY only emits data/exit asynchronously, so this is assigned before either can fire.
@@ -322,7 +296,7 @@ export function openTeleportLogin(
 
 /** The connection behind one of this cluster's open terminal sessions, if any - scheduler
  *  commands run on it as extra channels (see ../scheduler/exec.ts) instead of logging in again.
- *  Null for a bare Teleport cluster (no jump host), whose terminal is a PTY. */
+ *  Always null for Teleport clusters, whose terminals are PTYs. */
 export function getLiveClient(clusterId: string): Client | null {
   for (const session of sessions.values()) {
     if (session.clusterId === clusterId) return session.client
@@ -352,7 +326,6 @@ export function closeSession(sessionId: string): void {
   session.stream.end()
   session.client.end()
   session.jumpClient?.end()
-  session.jumpProcess?.kill()
   sessions.delete(sessionId)
 }
 

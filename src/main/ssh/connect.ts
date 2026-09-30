@@ -6,9 +6,9 @@ import { addNotification } from '../notifications/store'
 import { checkKnownHost } from './knownHosts'
 import type { ConnectionProfile } from '../../shared/types'
 
-// Shared by ssh/manager.ts (Direct/Azure/Teleport sessions), teleport/proxyClient.ts (a jump host
-// reached through a Teleport proxy) and scheduler/exec.ts (an extra forwarded hop to a Slurm
-// execution target) - the one place that dials an ssh2.Client and pins its host key.
+// Shared by ssh/manager.ts (Direct/Azure sessions and jump-host chaining) and scheduler/exec.ts
+// (an extra forwarded hop to a Slurm execution target) - the one place that dials an ssh2.Client
+// and pins its host key.
 
 export interface HostContext {
   clusterId: string
