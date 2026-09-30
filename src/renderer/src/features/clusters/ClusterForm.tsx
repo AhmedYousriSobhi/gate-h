@@ -857,7 +857,7 @@ export default function ClusterForm({
                           type="button"
                           className="btn btn-sm"
                           onClick={handleFindVm}
-                          disabled={findingVm}
+                          disabled={findingVm || !form.azureVmName.trim()}
                         >
                           {findingVm ? 'Searching...' : 'Find subscription'}
                         </button>
@@ -892,7 +892,7 @@ export default function ClusterForm({
                           type="button"
                           className="btn btn-sm"
                           onClick={handleFindVm}
-                          disabled={findingVm}
+                          disabled={findingVm || !form.azureVmName.trim()}
                         >
                           {findingVm ? 'Searching...' : 'Find subscription'}
                         </button>
