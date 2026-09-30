@@ -4,11 +4,13 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import {
+  FileCode2,
   LogIn,
   Maximize2,
   Minimize2,
   RefreshCw,
   Search,
+  Settings2,
   SquareSplitHorizontal,
   SquareSplitVertical,
   X
@@ -16,9 +18,11 @@ import {
 import type {
   ClusterReachability,
   ClusterSummary,
+  Snippet,
   TeleportSessionInfo
 } from '../../../../shared/types'
 import TeleportLoginDialog from './TeleportLoginDialog'
+import SnippetsDialog from './SnippetsDialog'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 import { isMac, SPLIT_SHORTCUT_LABEL } from '../../lib/platform'
@@ -131,6 +135,9 @@ export default function TerminalPanel({
     expired: boolean
   } | null>(null)
   const [loginDialog, setLoginDialog] = useState<{ renew: boolean } | null>(null)
+  const [snippets, setSnippets] = useState<Snippet[]>([])
+  const [snippetsOpen, setSnippetsOpen] = useState(false)
+  const [manageSnippetsOpen, setManageSnippetsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchAddonRef = useRef<SearchAddon | null>(null)
@@ -153,6 +160,9 @@ export default function TerminalPanel({
   // for reachability or a manual Reconnect, as before.
   const pausedInBackgroundRef = useRef(false)
   const refitRef = useRef<(() => void) | null>(null)
+  // Mirrors the connect effect's own local `sessionId` so inserting a snippet (triggered from the
+  // header, outside that effect) can write to whatever session is currently live.
+  const sessionIdRef = useRef<string | null>(null)
 
   function clearRetryTimer(): void {
     if (retryTimerRef.current) {
@@ -240,6 +250,28 @@ export default function TerminalPanel({
       }),
     [cluster.id]
   )
+
+  // Reloaded whenever the management dialog closes too, so an edit there shows up in the insert
+  // popover without needing to reopen this session.
+  useEffect(() => {
+    let cancelled = false
+    window.api.snippets
+      .list()
+      .then((list) => {
+        if (!cancelled) setSnippets(list)
+      })
+      .catch(() => {
+        // Best-effort: an empty list just means the insert popover has nothing to show.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [manageSnippetsOpen])
+
+  function insertSnippet(body: string): void {
+    if (sessionIdRef.current) window.api.ssh.write(sessionIdRef.current, body)
+    setSnippetsOpen(false)
+  }
 
   const isTeleport = Boolean(cluster.teleport)
   useEffect(() => {
@@ -385,6 +417,7 @@ export default function TerminalPanel({
           return
         }
         sessionId = result.sessionId
+        sessionIdRef.current = sessionId
         stableTimer = setTimeout(() => {
           windowStartRef.current = Date.now()
           attemptsRef.current = 0
@@ -405,6 +438,7 @@ export default function TerminalPanel({
       if (stableTimer) clearTimeout(stableTimer)
       resizeObserver.disconnect()
       refitRef.current = null
+      sessionIdRef.current = null
       offData()
       offClosed()
       offError()
@@ -473,6 +507,15 @@ export default function TerminalPanel({
         )}
         {/* Stops pointerdown so pressing a button never starts a header drag. */}
         <span className="terminal-header-actions" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            className={`terminal-header-btn${snippetsOpen ? ' terminal-header-btn-active' : ''}`}
+            title="Insert a saved snippet"
+            aria-label="Snippets"
+            aria-pressed={snippetsOpen}
+            onClick={() => setSnippetsOpen((v) => !v)}
+          >
+            <FileCode2 size={13} strokeWidth={2} />
+          </button>
           {onSplit && (
             <button
               className="terminal-header-btn"
@@ -514,6 +557,43 @@ export default function TerminalPanel({
           )}
         </span>
       </div>
+      {snippetsOpen && (
+        <div className="terminal-popover terminal-snippets-popover">
+          <div className="terminal-popover-header">
+            <h5>Snippets</h5>
+            <button className="btn-icon" title="Close" onClick={() => setSnippetsOpen(false)}>
+              <X size={12} strokeWidth={2} />
+            </button>
+          </div>
+          {snippets.length === 0 ? (
+            <p className="terminal-popover-empty">No snippets saved yet.</p>
+          ) : (
+            <ul className="terminal-popover-list">
+              {snippets.map((snippet) => (
+                <li key={snippet.id}>
+                  <button
+                    className="terminal-snippet-item"
+                    title={snippet.body}
+                    onClick={() => insertSnippet(snippet.body)}
+                  >
+                    {snippet.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            className="terminal-snippets-manage"
+            onClick={() => {
+              setSnippetsOpen(false)
+              setManageSnippetsOpen(true)
+            }}
+          >
+            <Settings2 size={12} strokeWidth={2} />
+            Manage snippets...
+          </button>
+        </div>
+      )}
       {connectError && <div className="error-banner terminal-error">{connectError}</div>}
       <div className="terminal-body">
         <div className="terminal-container" ref={containerRef} />
@@ -605,6 +685,7 @@ export default function TerminalPanel({
           onClose={() => setLoginDialog(null)}
         />
       )}
+      {manageSnippetsOpen && <SnippetsDialog onClose={() => setManageSnippetsOpen(false)} />}
     </div>
   )
 }
