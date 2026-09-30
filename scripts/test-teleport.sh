@@ -33,6 +33,10 @@ case "$sub" in
         "$MOCK/profile" teleport.example.com alice 43200 >"$MOCK/status.json" ;;
       network) echo "ERROR: dial tcp: lookup teleport.example.com: no such host" >&2; exit 1 ;;
       tty) echo "ERROR: underlying reader is not a terminal" >&2; exit 1 ;;
+      cert)
+        echo "ERROR: tls: failed to verify certificate: x509: certificate signed by unknown authority" >&2
+        echo "If you understand the risks, you may use the --insecure flag to bypass this check." >&2
+        exit 1 ;;
       hang) sleep 30 ;;
       # What tsh prints when killed while its first request to a silent proxy is still pending.
       blackhole)
@@ -133,6 +137,9 @@ reset
 MOCK_LOGIN=network expect 6 "an unreachable proxy is a network error" login "${P[@]}"
 MOCK_LOGIN=tty expect 5 "a password prompt with no terminal fails login" login "${P[@]}"
 check "...and says to log in from a terminal" grep -q "needs a terminal prompt" "$WORK/out"
+MOCK_LOGIN=cert expect 5 "an untrusted proxy certificate fails login" login "${P[@]}"
+check "...and points at the insecure setting, not a raw x509 dump" \
+  grep -q "Skip certificate verification" "$WORK/out"
 if command -v timeout >/dev/null; then
   MOCK_LOGIN=hang expect 5 "a login nobody completes times out" login "${P[@]}" --login-timeout 1
   MOCK_LOGIN=blackhole expect 6 "a proxy that never answers is a network error" login "${P[@]}" --login-timeout 1
