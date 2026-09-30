@@ -12,6 +12,7 @@ import {
 import type {
   AzureSubscription,
   AzureTunnelMode,
+  AzureVmMatch,
   ClusterInput,
   ClusterSummary,
   JiraAuthMode,
@@ -303,6 +304,9 @@ export default function ClusterForm({
   const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([])
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null)
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false)
+  const [vmMatches, setVmMatches] = useState<AzureVmMatch[]>([])
+  const [vmLookupError, setVmLookupError] = useState<string | null>(null)
+  const [findingVm, setFindingVm] = useState(false)
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -318,6 +322,45 @@ export default function ClusterForm({
       setSubscriptionsError(err instanceof Error ? err.message : 'Failed to list subscriptions.')
     } finally {
       setLoadingSubscriptions(false)
+    }
+  }
+
+  /** Fills Subscription/Resource group (and, for Bastion, the target resource ID) from a VM
+   *  search match, so the exact id `findVm` already found doesn't need re-resolving at connect
+   *  time. */
+  function applyVmMatch(match: AzureVmMatch): void {
+    setForm((prev) => ({
+      ...prev,
+      azureSubscription: match.subscriptionId,
+      azureResourceGroup: match.resourceGroup,
+      azureTargetResourceId: prev.azureMode === 'bastion' ? match.id : prev.azureTargetResourceId
+    }))
+    setVmMatches([])
+    setVmLookupError(null)
+  }
+
+  async function handleFindVm(): Promise<void> {
+    const name = form.azureVmName.trim()
+    if (!name) {
+      setVmLookupError('Enter a VM name first.')
+      return
+    }
+    setVmLookupError(null)
+    setVmMatches([])
+    setFindingVm(true)
+    try {
+      const matches = await window.api.azure.findVm(name)
+      if (matches.length === 0) {
+        setVmLookupError(`No VM named "${name}" found in any subscription you can see.`)
+      } else if (matches.length === 1) {
+        applyVmMatch(matches[0])
+      } else {
+        setVmMatches(matches)
+      }
+    } catch (err) {
+      setVmLookupError(err instanceof Error ? err.message : 'Could not search for the VM.')
+    } finally {
+      setFindingVm(false)
     }
   }
 
@@ -793,23 +836,43 @@ export default function ClusterForm({
                     </div>
                     <div className="form-field">
                       <label htmlFor="azureVmName">or VM name</label>
-                      <input
-                        id="azureVmName"
-                        placeholder="Resolved to a resource ID via `az vm show` when opened"
-                        value={form.azureVmName}
-                        onChange={(e) => set('azureVmName', e.target.value)}
-                      />
+                      <div className="form-inline">
+                        <input
+                          id="azureVmName"
+                          placeholder="Resolved to a resource ID via `az vm show` when opened"
+                          value={form.azureVmName}
+                          onChange={(e) => set('azureVmName', e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={handleFindVm}
+                          disabled={findingVm}
+                        >
+                          {findingVm ? 'Searching...' : 'Find subscription'}
+                        </button>
+                      </div>
                     </div>
                   </>
                 ) : (
                   <div className="form-row">
                     <div className="form-field">
                       <label htmlFor="azureVmName">VM name</label>
-                      <input
-                        id="azureVmName"
-                        value={form.azureVmName}
-                        onChange={(e) => set('azureVmName', e.target.value)}
-                      />
+                      <div className="form-inline">
+                        <input
+                          id="azureVmName"
+                          value={form.azureVmName}
+                          onChange={(e) => set('azureVmName', e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={handleFindVm}
+                          disabled={findingVm}
+                        >
+                          {findingVm ? 'Searching...' : 'Find subscription'}
+                        </button>
+                      </div>
                     </div>
                     <div className="form-field">
                       <label htmlFor="azureLocalUser">Local VM user (optional)</label>
@@ -820,6 +883,31 @@ export default function ClusterForm({
                         onChange={(e) => set('azureLocalUser', e.target.value)}
                       />
                     </div>
+                  </div>
+                )}
+                {vmLookupError && <p className="hint">{vmLookupError}</p>}
+                {vmMatches.length > 0 && (
+                  <div className="form-field">
+                    <label htmlFor="azureVmMatches">
+                      {vmMatches.length} matches found across your subscriptions - pick one
+                    </label>
+                    <select
+                      id="azureVmMatches"
+                      value=""
+                      onChange={(e) => {
+                        const match = vmMatches.find((m) => m.id === e.target.value)
+                        if (match) applyVmMatch(match)
+                      }}
+                    >
+                      <option value="" disabled>
+                        Choose the subscription / resource group...
+                      </option>
+                      {vmMatches.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.subscriptionName} / {m.resourceGroup}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
