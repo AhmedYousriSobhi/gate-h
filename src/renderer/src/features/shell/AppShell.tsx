@@ -216,6 +216,7 @@ export default function AppShell(): React.JSX.Element {
         {editing && (
           <ClusterForm
             initial={editing === 'new' ? undefined : editing}
+            existingClusters={clusters}
             onCancel={() => setEditing(null)}
             onSubmit={handleSubmit}
           />
