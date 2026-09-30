@@ -109,6 +109,15 @@ export interface AzureSubscription {
   isDefault: boolean
 }
 
+/** One VM found by `findVm`, naming which subscription/resource group it actually lives in. */
+export interface AzureVmMatch {
+  subscriptionId: string
+  subscriptionName: string
+  resourceGroup: string
+  /** Full ARM resource id - usable directly as a Bastion tunnel's target resource ID. */
+  id: string
+}
+
 /** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
  *  the session check and any login (password/OTP prompts, or SSO in the browser) happen in the
  *  terminal before `tsh ssh` takes over. `connection.host` is the Teleport node name and
@@ -592,6 +601,9 @@ export interface GateHApi {
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
     listSubscriptions(): Promise<AzureSubscription[]>
+    /** Searches every enabled subscription for a VM by name - there's no single `az` command for
+     *  "which subscription is this VM in". */
+    findVm(vmName: string): Promise<AzureVmMatch[]>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
   }
