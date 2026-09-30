@@ -442,6 +442,24 @@ export interface JobTemplateInput {
   body: string
 }
 
+/** A saved shell command (or short block of them), inserted into a terminal's active session on
+ *  click - stored per profile, like job templates, but plain text: no {{placeholder}} handling,
+ *  no confirmation step, since it's typed into an interactive shell rather than submitted as a
+ *  job. */
+export interface Snippet {
+  id: string
+  name: string
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SnippetInput {
+  id?: string
+  name: string
+  body: string
+}
+
 export type ReachabilityStatus = 'online' | 'offline' | 'checking'
 
 export interface ClusterReachability {
@@ -591,6 +609,12 @@ export interface GateHApi {
     /** The active profile's batch script templates. */
     list(): Promise<JobTemplate[]>
     save(input: JobTemplateInput): Promise<JobTemplate>
+    remove(id: string): Promise<void>
+  }
+  snippets: {
+    /** The active profile's saved shell commands. */
+    list(): Promise<Snippet[]>
+    save(input: SnippetInput): Promise<Snippet>
     remove(id: string): Promise<void>
   }
   storage: {
