@@ -6,6 +6,7 @@ import MainPanel from './MainPanel'
 import TitleBar from './TitleBar'
 import Toaster from '../toast/Toaster'
 import OverviewDashboard from './OverviewDashboard'
+import ImportSshConfigDialog from './ImportSshConfigDialog'
 import { useReachability } from '../../hooks/useReachability'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useProfiles } from '../../hooks/useProfiles'
@@ -23,6 +24,7 @@ export default function AppShell(): React.JSX.Element {
   // src/main/settings.ts.
   const { layout: panelLayout, setLayout: setPanelLayout } = usePanelLayout()
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   const [terminalStatuses, setTerminalStatuses] = useState<Record<string, SessionStatus>>({})
   const [liveSessionCounts, setLiveSessionCounts] = useState<Record<string, number>>({})
   // Every cluster selected since launch that hasn't been explicitly closed - switching away never
@@ -147,6 +149,7 @@ export default function AppShell(): React.JSX.Element {
           onSelect={(cluster) => selectCluster(cluster.id)}
           onShowOverview={() => selectCluster(null)}
           onAdd={() => setEditing('new')}
+          onImport={() => setImportOpen(true)}
           onEdit={(cluster) => setEditing(cluster)}
           onRemove={handleRemove}
           notifications={notifications}
@@ -218,6 +221,12 @@ export default function AppShell(): React.JSX.Element {
             initial={editing === 'new' ? undefined : editing}
             onCancel={() => setEditing(null)}
             onSubmit={handleSubmit}
+          />
+        )}
+        {importOpen && (
+          <ImportSshConfigDialog
+            onClose={() => setImportOpen(false)}
+            onImported={() => void refresh()}
           />
         )}
       </div>
