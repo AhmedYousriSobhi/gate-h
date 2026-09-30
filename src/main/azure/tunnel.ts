@@ -5,6 +5,7 @@ import type {
   AzureSubscription,
   AzureTunnelPhase,
   AzureTunnelStatusEvent,
+  AzureVmMatch,
   ClusterSummary
 } from '../../shared/types'
 
@@ -64,6 +65,8 @@ function upArgs(cluster: ClusterSummary): string[] {
   if (tunnel.mode === 'bastion') {
     if (tunnel.bastionName) args.push('--bastion', tunnel.bastionName)
     if (tunnel.targetResourceId) args.push('--target-id', tunnel.targetResourceId)
+    else if (tunnel.vmName) args.push('--vm', tunnel.vmName)
+    else if (tunnel.targetIpAddress) args.push('--target-ip', tunnel.targetIpAddress)
   } else {
     if (tunnel.vmName) args.push('--vm', tunnel.vmName)
     args.push('--remote-host', cluster.connection.host)
@@ -167,6 +170,7 @@ export function listSubscriptions(): Promise<AzureSubscription[]> {
         '--query',
         "[?state=='Enabled'].{id:id, name:name, isDefault:isDefault}"
       ],
+      { timeout: 20_000 },
       (err, stdout) => {
         if (err) {
           reject(
@@ -193,4 +197,68 @@ export function listSubscriptions(): Promise<AzureSubscription[]> {
       }
     )
   })
+}
+
+// Azure VM names are restricted to these characters; this also keeps the name safe to interpolate
+// into the JMESPath --query below (a quote in it would break the query, not just be a bad name).
+const VM_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+
+function vmsNamed(name: string, subscription: AzureSubscription): Promise<AzureVmMatch[]> {
+  return new Promise((resolve) => {
+    execFile(
+      'az',
+      [
+        'vm',
+        'list',
+        '--only-show-errors',
+        '--subscription',
+        subscription.id,
+        '--query',
+        `[?name=='${name}'].{resourceGroup:resourceGroup, id:id}`,
+        '--output',
+        'json'
+      ],
+      // A subscription that hangs (a stale token quietly retrying, an unreachable management
+      // endpoint) must not hang the whole search - bound it so one bad subscription can't sit
+      // there forever with the button stuck on "Searching...".
+      { timeout: 20_000 },
+      (err, stdout) => {
+        // A subscription this account can't list VMs in (RBAC), or one that timed out, shouldn't
+        // sink the whole search - it's just one of potentially many subscriptions being checked.
+        if (err) {
+          resolve([])
+          return
+        }
+        try {
+          const matches = JSON.parse(stdout) as { resourceGroup: string; id: string }[]
+          resolve(
+            matches.map((m) => ({
+              subscriptionId: subscription.id,
+              subscriptionName: subscription.name,
+              resourceGroup: m.resourceGroup,
+              id: m.id
+            }))
+          )
+        } catch {
+          resolve([])
+        }
+      }
+    )
+  })
+}
+
+/** Searches every enabled subscription this account can see for a VM by name, concurrently -
+ *  there's no single `az` command for "which subscription is this VM in". Lets the cluster form
+ *  fill in Subscription/Resource group (and, for Bastion, the target resource ID) from a VM name
+ *  alone, instead of the user hunting through subscriptions by hand or in the portal. */
+export async function findVm(vmName: string): Promise<AzureVmMatch[]> {
+  const name = vmName.trim()
+  if (!VM_NAME_PATTERN.test(name)) {
+    throw new Error('VM name may only use letters, digits, and . _ -')
+  }
+  const subscriptions = await listSubscriptions()
+  const perSubscription = await Promise.all(
+    subscriptions.map((subscription) => vmsNamed(name, subscription))
+  )
+  return perSubscription.flat()
 }

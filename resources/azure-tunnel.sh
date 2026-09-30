@@ -50,8 +50,16 @@ Options (each also settable via the env var shown, or in a --config file):
   mode=bastion (az network bastion tunnel; needs Standard SKU + native client support):
       --bastion         bastion host name                        AZT_BASTION
       --target-id       full resource id of the target VM        AZT_TARGET_ID
+                        (or use --vm; resolved via `az vm show`)
+      --target-ip       target's IP address, no VM resource id    AZT_TARGET_IP
+                        needed - Bastion's "IP-based connection"
+                        must be enabled on it (alternative to
+                        --target-id/--vm; e.g. the target is in a
+                        different resource group, or isn't an
+                        Azure VM resource at all)
   mode=az-ssh (az ssh vm with Entra ID auth, then ssh -L):
       --vm              VM name                                  AZT_VM
+                        (required for az-ssh; alternative to --target-id/--target-ip for bastion)
       --remote-host     host to forward to, as seen from the VM  AZT_REMOTE_HOST (default: localhost)
       --local-user      local VM account instead of Entra ID     AZT_LOCAL_USER
   --timeout SECS        max wait for the tunnel to listen        AZT_TIMEOUT (default: 60)
@@ -83,7 +91,7 @@ is_interactive() { [[ "$NON_INTERACTIVE" != 1 && -t 0 && -t 2 ]]; }
 
 parse_args() {
   local o_name="" o_mode="" o_rg="" o_sub="" o_tenant="" o_lport="" o_rport=""
-  local o_bastion="" o_target="" o_vm="" o_rhost="" o_luser="" o_timeout=""
+  local o_bastion="" o_target="" o_targetip="" o_vm="" o_rhost="" o_luser="" o_timeout=""
   local o_config="" o_nonint=""
   FOREGROUND=0
 
@@ -98,6 +106,7 @@ parse_args() {
       -r | --remote-port) o_rport=${2:?$1 needs a value}; shift ;;
       --bastion) o_bastion=${2:?--bastion needs a value}; shift ;;
       --target-id) o_target=${2:?--target-id needs a value}; shift ;;
+      --target-ip) o_targetip=${2:?--target-ip needs a value}; shift ;;
       --vm) o_vm=${2:?--vm needs a value}; shift ;;
       --remote-host) o_rhost=${2:?--remote-host needs a value}; shift ;;
       --local-user) o_luser=${2:?--local-user needs a value}; shift ;;
@@ -128,6 +137,7 @@ parse_args() {
   REMOTE_PORT=${o_rport:-${AZT_REMOTE_PORT:-22}}
   BASTION_NAME=${o_bastion:-${AZT_BASTION:-}}
   TARGET_ID=${o_target:-${AZT_TARGET_ID:-}}
+  TARGET_IP=${o_targetip:-${AZT_TARGET_IP:-}}
   VM_NAME=${o_vm:-${AZT_VM:-}}
   REMOTE_HOST=${o_rhost:-${AZT_REMOTE_HOST:-localhost}}
   LOCAL_USER=${o_luser:-${AZT_LOCAL_USER:-}}
@@ -163,7 +173,9 @@ validate_up_args() {
     bastion)
       require RESOURCE_GROUP --resource-group
       require BASTION_NAME --bastion
-      require TARGET_ID --target-id
+      if [[ -z "$TARGET_ID" && -z "$VM_NAME" && -z "$TARGET_IP" ]]; then
+        die "$EXIT_USAGE" "--target-id, --vm, or --target-ip is required for mode 'bastion'"
+      fi
       ;;
     az-ssh)
       require RESOURCE_GROUP --resource-group
@@ -232,6 +244,19 @@ prompt_subscription() {
   done
 }
 
+# Bastion needs a full ARM resource id; a bare VM name (as a person would type it, or as a
+# manual bastion-tunnel script resolves with the same `az vm show` call) is looked up once here so
+# the form field can take either.
+resolve_target_id() {
+  [[ "$MODE" == bastion && -z "$TARGET_ID" && -z "$TARGET_IP" ]] || return 0
+  status tunnel "Resolving VM '$VM_NAME' to its resource ID"
+  TARGET_ID=$(az vm show --only-show-errors --subscription "$SUBSCRIPTION" \
+    -g "$RESOURCE_GROUP" -n "$VM_NAME" --query id --output tsv) ||
+    die "$EXIT_TUNNEL" "Could not resolve VM '$VM_NAME' in resource group '$RESOURCE_GROUP' to a resource ID"
+  [[ -n "$TARGET_ID" ]] ||
+    die "$EXIT_TUNNEL" "VM '$VM_NAME' not found in resource group '$RESOURCE_GROUP'"
+}
+
 select_subscription() {
   status subscription "Selecting subscription"
   local wanted=$SUBSCRIPTION
@@ -256,9 +281,15 @@ select_subscription() {
     esac
   fi
 
-  az account set --only-show-errors --subscription "$wanted" ||
-    die "$EXIT_SUBSCRIPTION" "Could not select subscription '$wanted'"
-  status subscription "Using subscription '$(az account show --query name --output tsv)'"
+  # Scoped via --subscription on each later az call instead of `az account set`, which would
+  # mutate the CLI's shared, machine-wide default subscription - surprising for anything else
+  # using `az` (another terminal, another cluster's tunnel opening at the same time) and racy if
+  # two tunnels for different subscriptions start concurrently.
+  local name
+  name=$(az account show --only-show-errors --subscription "$wanted" --query name --output tsv) ||
+    die "$EXIT_SUBSCRIPTION" "Could not use subscription '$wanted'"
+  SUBSCRIPTION=$wanted
+  status subscription "Using subscription '$name'"
 }
 
 # ---------------------------------------------------------------------------
@@ -317,14 +348,23 @@ stop_tunnel() {
 build_tunnel_cmd() {
   case "$MODE" in
     bastion)
-      TUNNEL_CMD=(az network bastion tunnel --only-show-errors
+      TUNNEL_CMD=(az network bastion tunnel --only-show-errors --subscription "$SUBSCRIPTION"
         --name "$BASTION_NAME" --resource-group "$RESOURCE_GROUP"
-        --target-resource-id "$TARGET_ID"
         --resource-port "$REMOTE_PORT" --port "$LOCAL_PORT")
-      TUNNEL_DESC="127.0.0.1:$LOCAL_PORT -> ${TARGET_ID##*/}:$REMOTE_PORT via bastion $BASTION_NAME"
+      if [[ -n "$TARGET_ID" ]]; then
+        TUNNEL_CMD+=(--target-resource-id "$TARGET_ID")
+        TUNNEL_DESC="127.0.0.1:$LOCAL_PORT -> ${TARGET_ID##*/}:$REMOTE_PORT via bastion $BASTION_NAME"
+      else
+        # IP-based connection: no VM resource id at all, so this also works for a target in a
+        # different resource group (even a different subscription/tenant) than the Bastion host,
+        # or one that isn't an Azure VM resource Gate-H could look up. Needs "IP-based connection"
+        # (--enable-ip-connect) turned on for this Bastion host.
+        TUNNEL_CMD+=(--target-ip-address "$TARGET_IP")
+        TUNNEL_DESC="127.0.0.1:$LOCAL_PORT -> $TARGET_IP:$REMOTE_PORT via bastion $BASTION_NAME"
+      fi
       ;;
     az-ssh)
-      TUNNEL_CMD=(az ssh vm --only-show-errors
+      TUNNEL_CMD=(az ssh vm --only-show-errors --subscription "$SUBSCRIPTION"
         --resource-group "$RESOURCE_GROUP" --name "$VM_NAME")
       if [[ -n "$LOCAL_USER" ]]; then TUNNEL_CMD+=(--local-user "$LOCAL_USER"); fi
       # ExitOnForwardFailure makes ssh die (instead of idling uselessly) if the
@@ -397,6 +437,7 @@ cmd_up() {
 
   ensure_login
   select_subscription
+  resolve_target_id
   build_tunnel_cmd
   start_tunnel
 
