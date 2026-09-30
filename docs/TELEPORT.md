@@ -150,8 +150,11 @@ xterm ──ssh:write/resize──▶ main: ptyManager (src/main/pty/manager.ts)
 - **Setup.** In the cluster form, tick **Behind Teleport** and enter the proxy address, plus a
   leaf cluster, Teleport user or auth connector if needed. Host becomes the Teleport node name
   (as `tsh ls` shows it) and Username the login. Port, auth method and jump host don't apply.
-  `tsh` must be on the app's `PATH`. For a proxy with a private or self-signed CA, start Gate-H
-  with `SSL_CERT_FILE` pointing at the CA bundle, as for `tsh` itself.
+  `tsh` must be on the app's `PATH`. A proxy behind your organisation's own CA needs `SSL_CERT_FILE`
+  (or `SSL_CERT_DIR`) set to the CA bundle, as for `tsh` itself. A self-signed or lab proxy with no
+  real CA to point that at instead has its own **Skip certificate verification** checkbox in the
+  cluster form (`tsh`'s own `--insecure`) - off by default, since it drops TLS verification
+  entirely; only turn it on for a proxy you know is self-signed.
 
 ### Testing the PTY session
 

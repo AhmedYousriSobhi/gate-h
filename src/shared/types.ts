@@ -121,6 +121,11 @@ export interface TeleportConfig {
   user?: string
   /** Auth connector name (e.g. an SSO connector), if not the cluster's default. */
   authConnector?: string
+  /** Skips verifying the proxy's TLS certificate (tsh's own --insecure) - only for a self-signed
+   *  or lab proxy with no real CA to point SSL_CERT_FILE at instead. Off by default: this is a
+   *  real reduction in protection against a machine-in-the-middle, not a default anyone should
+   *  opt into without knowing that's the trade. */
+  insecure?: boolean
 }
 
 export type SchedulerScope = 'mine' | 'partitions'
