@@ -25,9 +25,15 @@ const MIN_SWEEP_GAP_MS = 15_000
 function setStatus(
   clusterId: string,
   clusterName: string,
-  status: ClusterReachability['status']
+  status: ClusterReachability['status'],
+  latencyMs?: number
 ): void {
-  const entry: ClusterReachability = { clusterId, status, checkedAt: new Date().toISOString() }
+  const entry: ClusterReachability = {
+    clusterId,
+    status,
+    checkedAt: new Date().toISOString(),
+    latencyMs: status === 'online' ? latencyMs : undefined
+  }
   state.set(clusterId, entry)
   broadcast?.(entry)
 
@@ -64,8 +70,9 @@ async function isReachable(cluster: ClusterSummary): Promise<boolean> {
 
 async function checkOne(cluster: ClusterSummary): Promise<void> {
   setStatus(cluster.id, cluster.name, 'checking')
+  const startedAt = Date.now()
   const reachable = await isReachable(cluster)
-  setStatus(cluster.id, cluster.name, reachable ? 'online' : 'offline')
+  setStatus(cluster.id, cluster.name, reachable ? 'online' : 'offline', Date.now() - startedAt)
 }
 
 async function sweep(): Promise<void> {

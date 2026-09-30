@@ -9,6 +9,7 @@ import type {
   FileTransferEvent,
   GateHApi,
   JobTemplateInput,
+  SnippetInput,
   PanelLayout,
   PanelOrientation,
   SchedulerSnapshot,
@@ -29,7 +30,8 @@ const api: GateHApi = {
     update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
     remove: (id: string) => ipcRenderer.invoke('clusters:remove', id),
     setActiveMonitoring: (id: string, active: boolean) =>
-      ipcRenderer.invoke('clusters:setActiveMonitoring', id, active)
+      ipcRenderer.invoke('clusters:setActiveMonitoring', id, active),
+    importFromSshConfig: () => ipcRenderer.invoke('clusters:importFromSshConfig')
   },
   grafana: {
     getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId),
@@ -131,11 +133,17 @@ const api: GateHApi = {
     save: (input: JobTemplateInput) => ipcRenderer.invoke('templates:save', input),
     remove: (id: string) => ipcRenderer.invoke('templates:remove', id)
   },
+  snippets: {
+    list: () => ipcRenderer.invoke('snippets:list'),
+    save: (input: SnippetInput) => ipcRenderer.invoke('snippets:save', input),
+    remove: (id: string) => ipcRenderer.invoke('snippets:remove', id)
+  },
   storage: {
     usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
+    findVm: (vmName: string) => ipcRenderer.invoke('azure:findVm', vmName),
     onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AzureTunnelStatusEvent): void =>
         callback(payload)

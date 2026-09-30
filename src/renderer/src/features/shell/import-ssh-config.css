@@ -1,0 +1,67 @@
+.import-ssh-modal {
+  max-width: 480px;
+}
+
+.import-ssh-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 320px;
+  overflow-y: auto;
+  margin-top: var(--space-3);
+}
+
+.import-ssh-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.import-ssh-row:has(input:disabled) {
+  cursor: default;
+}
+
+.import-ssh-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.import-ssh-row-name {
+  font-size: 13px;
+  color: var(--color-text-1);
+}
+
+.import-ssh-row-host {
+  font-size: 11px;
+  color: var(--color-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-ssh-row-warning {
+  display: inline-flex;
+  color: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.import-ssh-row-ok {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--color-online);
+}
+
+.import-ssh-row-error {
+  flex-shrink: 0;
+  max-width: 160px;
+  font-size: 11px;
+  color: var(--color-offline);
+  text-align: right;
+}
