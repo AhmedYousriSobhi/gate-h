@@ -553,7 +553,12 @@ export default function ClusterForm({
             />
 
             {form.connectionMode === 'direct' && (
-              <p className="hint connection-panel" id="connection-panel-direct" role="tabpanel">
+              <p
+                className="hint connection-panel"
+                id="connection-panel-direct"
+                role="tabpanel"
+                aria-labelledby="connection-tab-direct"
+              >
                 Connects straight to the host above over SSH. Nothing else to configure.
               </p>
             )}
