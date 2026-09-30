@@ -5,12 +5,14 @@
 
 export type SshAuthMethod = 'password' | 'private-key' | 'agent'
 
-/** An optional hop dialed before the cluster's base connection method (Direct, Azure tunnel or
- *  Teleport) reaches its own target. Composable with any base method: the base method connects to
- *  this host first, then an ssh2 `forwardOut` reaches `ConnectionProfile.host`/`port`, whose
- *  meaning as the final interactive target never changes. Its own secret is
- *  `ClusterInput.jumpHostSecret`/`ClusterSummary.hasJumpHostSecret`; when unset, falls back to
- *  reusing the connection's own secret if `authMethod` matches (legacy behavior). */
+/** An optional hop dialed before the cluster's base connection method (Direct or an Azure tunnel)
+ *  reaches its own target. Composable with either one: the base method connects to this host
+ *  first, then an ssh2 `forwardOut` reaches `ConnectionProfile.host`/`port`, whose meaning as the
+ *  final interactive target never changes. Not usable with Teleport (see TeleportConfig) - every
+ *  node Teleport can route to presents a certificate-format host key, which the `ssh2` package
+ *  this app uses cannot verify. Its own secret is `ClusterInput.jumpHostSecret`/
+ *  `ClusterSummary.hasJumpHostSecret`; when unset, falls back to reusing the connection's own
+ *  secret if `authMethod` matches (legacy behavior). */
 export interface JumpHostConfig {
   host: string
   port: number
@@ -133,12 +135,11 @@ export interface AzureVmMatch {
 
 /** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
  *  the session check and any login (password/OTP prompts, or SSO in the browser) happen in the
- *  terminal before `tsh ssh` takes over. Without a jump host, `connection.host` is the Teleport
- *  node name and `connection.username` the login; port and auth method don't apply. With
- *  `connection.jumpHost` set, `tsh` instead reaches the jump host's Teleport node (via
- *  `tsh proxy ssh`, see src/main/teleport/proxyClient.ts), and a normal ssh2 hop from there
- *  reaches `connection.host`/`port` - so those do apply to that final hop. No secrets: tsh keeps
- *  its own certificates in ~/.tsh. */
+ *  terminal before `tsh ssh` takes over. `connection.host` is the Teleport node name and
+ *  `connection.username` the login; port, auth method and jump host don't apply - every node
+ *  Teleport can route to presents a certificate-format host key that the `ssh2` package this app
+ *  uses for jump-host chaining cannot verify, so a jump host can't be layered on top (see
+ *  JumpHostConfig). No secrets: tsh keeps its own certificates in ~/.tsh. */
 export interface TeleportConfig {
   /** host[:port] of the Teleport proxy, e.g. teleport.example.com:443 */
   proxy: string
@@ -173,13 +174,12 @@ export interface SchedulerConfig {
   autoRefresh: boolean
   /** Notify when the user's jobs finish or start and when nodes go down or are drained. While
    *  the cluster is open in the background, this keeps a check every 5 minutes on its existing
-   *  SSH connection (never on bare Teleport, i.e. without a jump host). Absent in configs saved
-   *  before it existed = off. */
+   *  SSH connection (never on Teleport). Absent in configs saved before it existed = off. */
   notify?: boolean
   /** Run Slurm commands against this internal node instead of the terminal's primary target -
    *  for a bastion/login node that doesn't host Slurm itself. Reached with one more ssh2
    *  `forwardOut` hop from the cluster's existing connection (which already covers any jump host
-   *  or Azure tunnel), or `tsh ssh --no-login` to this host for a bare Teleport cluster. `port`
+   *  or Azure tunnel), or `tsh ssh --no-login` to this host for a Teleport cluster. `port`
    *  defaults to `connection.port`. Same identity/credentials as `connection` - no secrets here. */
   execTarget?: { host: string; port?: number } | null
 }
