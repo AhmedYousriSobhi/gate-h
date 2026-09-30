@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LayoutDashboard, Pencil, Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
+import { Import, LayoutDashboard, Pencil, Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
@@ -20,6 +20,7 @@ interface SidebarProps {
   onSelect: (cluster: ClusterSummary) => void
   onShowOverview: () => void
   onAdd: () => void
+  onImport: () => void
   onEdit: (cluster: ClusterSummary) => void
   onRemove: (cluster: ClusterSummary) => void
   notifications: ClusterNotification[]
@@ -53,6 +54,7 @@ export default function Sidebar({
   onSelect,
   onShowOverview,
   onAdd,
+  onImport,
   onEdit,
   onRemove,
   notifications,
@@ -81,6 +83,14 @@ export default function Sidebar({
             markAllRead={markAllNotificationsRead}
             onNavigate={onNotificationNavigate}
           />
+          <button
+            className="btn-icon"
+            title="Import from ~/.ssh/config"
+            aria-label="Import from SSH config"
+            onClick={onImport}
+          >
+            <Import size={14} strokeWidth={2} />
+          </button>
           <button className="btn btn-primary btn-sm" onClick={onAdd}>
             <Plus size={14} strokeWidth={2.5} />
             Add

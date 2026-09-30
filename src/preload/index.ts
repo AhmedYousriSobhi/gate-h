@@ -30,7 +30,8 @@ const api: GateHApi = {
     update: (id: string, input: ClusterInput) => ipcRenderer.invoke('clusters:update', id, input),
     remove: (id: string) => ipcRenderer.invoke('clusters:remove', id),
     setActiveMonitoring: (id: string, active: boolean) =>
-      ipcRenderer.invoke('clusters:setActiveMonitoring', id, active)
+      ipcRenderer.invoke('clusters:setActiveMonitoring', id, active),
+    importFromSshConfig: () => ipcRenderer.invoke('clusters:importFromSshConfig')
   },
   grafana: {
     getStatus: (clusterId: string) => ipcRenderer.invoke('grafana:status', clusterId),
