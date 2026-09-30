@@ -130,6 +130,25 @@ function safeSend(sender: WebContents, channel: string, payload: unknown): void 
   if (!sender.isDestroyed()) sender.send(channel, payload)
 }
 
+/** Records a connect-step failure (tunnel, jump host, or target) to the cross-cluster
+ *  notification feed - the Terminal's own error banner clears on every retry and eventually
+ *  gives way to a generic paused message, so this is the only place the reason survives to be
+ *  read after the fact. */
+function notifyConnectFailure(
+  clusterId: string,
+  clusterName: string,
+  err: unknown,
+  fallbackMessage: string
+): void {
+  addNotification({
+    clusterId,
+    clusterName,
+    kind: 'ssh',
+    severity: 'warning',
+    message: err instanceof Error ? err.message : fallbackMessage
+  })
+}
+
 function openForward(
   jumpClient: Client,
   targetHost: string,
@@ -169,17 +188,12 @@ export async function openSshSession(
     try {
       await ensureTunnel(cluster)
     } catch (err) {
-      // The Terminal's own error banner clears on every retry (so the reason is gone well before
-      // the backoff's next attempt) and eventually gives way to a generic paused message - this is
-      // the only place the actual failure reason survives to be read after the fact.
-      addNotification({
+      notifyConnectFailure(
         clusterId,
-        clusterName: cluster.name,
-        kind: 'ssh',
-        severity: 'warning',
-        message:
-          err instanceof Error ? err.message : `Could not open the Azure tunnel for ${cluster.name}`
-      })
+        cluster.name,
+        err,
+        `Could not open the Azure tunnel for ${cluster.name}`
+      )
       throw err
     }
   }
@@ -214,16 +228,12 @@ export async function openSshSession(
         )
       )
     } catch (err) {
-      addNotification({
+      notifyConnectFailure(
         clusterId,
-        clusterName: cluster.name,
-        kind: 'ssh',
-        severity: 'warning',
-        message:
-          err instanceof Error
-            ? err.message
-            : `Could not connect to the jump host for ${cluster.name}`
-      })
+        cluster.name,
+        err,
+        `Could not connect to the jump host for ${cluster.name}`
+      )
       throw err
     }
     // Once connected, connectClient's own error listener is gone (see its comment) - without a
@@ -234,12 +244,23 @@ export async function openSshSession(
     jumpClient.on('error', (err: Error) => {
       console.error(`[gate-h] jump host ${jump.host}:${jump.port} error:`, err.message)
     })
-    const forwardStream = await openForward(
-      jumpClient,
-      cluster.connection.host,
-      cluster.connection.port
-    )
-    targetConfig = { ...targetConfig, sock: forwardStream }
+    try {
+      const forwardStream = await openForward(
+        jumpClient,
+        cluster.connection.host,
+        cluster.connection.port
+      )
+      targetConfig = { ...targetConfig, sock: forwardStream }
+    } catch (err) {
+      jumpClient.end()
+      notifyConnectFailure(
+        clusterId,
+        cluster.name,
+        err,
+        `Could not open a forwarded connection through the jump host for ${cluster.name}`
+      )
+      throw err
+    }
   }
 
   let client: Client
@@ -249,13 +270,8 @@ export async function openSshSession(
     // A Bastion tunnel can hang with its local port still listening (azure-cli#28367), so `up`
     // would keep reusing it; tearing it down makes the Terminal's next retry open a fresh one.
     if (tunnel) await stopTunnel(clusterId)
-    addNotification({
-      clusterId,
-      clusterName: cluster.name,
-      kind: 'ssh',
-      severity: 'warning',
-      message: err instanceof Error ? err.message : `Could not connect to ${cluster.name}`
-    })
+    jumpClient?.end()
+    notifyConnectFailure(clusterId, cluster.name, err, `Could not connect to ${cluster.name}`)
     throw err
   }
   const stream = await openShell(client)
