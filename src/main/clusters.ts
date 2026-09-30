@@ -23,6 +23,7 @@ interface ClusterRow {
   tags: string
   connection: string
   connection_secret: string | null
+  jump_host_secret: string | null
   grafana: string | null
   grafana_token: string | null
   jira: string | null
@@ -56,6 +57,7 @@ function rowToSummary(row: ClusterRow): ClusterSummary {
   return {
     ...cluster,
     hasConnectionSecret: Boolean(row.connection_secret),
+    hasJumpHostSecret: Boolean(row.jump_host_secret),
     hasGrafanaToken: Boolean(row.grafana_token),
     hasJiraToken: Boolean(row.jira_token)
   }
@@ -101,8 +103,8 @@ export function createCluster(input: ClusterInput): ClusterSummary {
   getDb()
     .prepare(
       `INSERT INTO clusters
-        (id, name, description, tags, connection, connection_secret, grafana, grafana_token, jira, jira_token, azure_tunnel, teleport, scheduler, storage, active_monitoring, created_at, updated_at, profile_id)
-       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @grafana, @grafana_token, @jira, @jira_token, @azure_tunnel, @teleport, @scheduler, @storage, @active_monitoring, @created_at, @updated_at, @profile_id)`
+        (id, name, description, tags, connection, connection_secret, jump_host_secret, grafana, grafana_token, jira, jira_token, azure_tunnel, teleport, scheduler, storage, active_monitoring, created_at, updated_at, profile_id)
+       VALUES (@id, @name, @description, @tags, @connection, @connection_secret, @jump_host_secret, @grafana, @grafana_token, @jira, @jira_token, @azure_tunnel, @teleport, @scheduler, @storage, @active_monitoring, @created_at, @updated_at, @profile_id)`
     )
     .run({
       id,
@@ -112,6 +114,7 @@ export function createCluster(input: ClusterInput): ClusterSummary {
       tags: JSON.stringify(input.tags),
       connection: JSON.stringify(input.connection),
       connection_secret: input.connectionSecret ? encryptSecret(input.connectionSecret) : null,
+      jump_host_secret: input.jumpHostSecret ? encryptSecret(input.jumpHostSecret) : null,
       grafana: input.grafana ? JSON.stringify(input.grafana) : null,
       grafana_token: input.grafanaApiToken ? encryptSecret(input.grafanaApiToken) : null,
       jira: input.jira ? JSON.stringify(input.jira) : null,
@@ -143,6 +146,7 @@ export function updateCluster(id: string, input: ClusterInput): ClusterSummary {
         tags = @tags,
         connection = @connection,
         connection_secret = @connection_secret,
+        jump_host_secret = @jump_host_secret,
         grafana = @grafana,
         grafana_token = @grafana_token,
         jira = @jira,
@@ -161,6 +165,7 @@ export function updateCluster(id: string, input: ClusterInput): ClusterSummary {
       tags: JSON.stringify(input.tags),
       connection: JSON.stringify(input.connection),
       connection_secret: resolveSecret(input.connectionSecret, existing.connection_secret),
+      jump_host_secret: resolveSecret(input.jumpHostSecret, existing.jump_host_secret),
       grafana: input.grafana ? JSON.stringify(input.grafana) : null,
       grafana_token: input.grafana
         ? resolveSecret(input.grafanaApiToken, existing.grafana_token)
@@ -268,6 +273,7 @@ export function removeCluster(id: string): void {
  *  Never expose the return value of this function to the renderer. */
 export function getClusterSecrets(id: string): {
   connectionSecret: string | null
+  jumpHostSecret: string | null
   grafanaApiToken: string | null
   jiraApiToken: string | null
 } {
@@ -276,6 +282,7 @@ export function getClusterSecrets(id: string): {
   if (!row) throw new Error(`Cluster ${id} not found`)
   return {
     connectionSecret: row.connection_secret ? decryptSecret(row.connection_secret) : null,
+    jumpHostSecret: row.jump_host_secret ? decryptSecret(row.jump_host_secret) : null,
     grafanaApiToken: row.grafana_token ? decryptSecret(row.grafana_token) : null,
     jiraApiToken: row.jira_token ? decryptSecret(row.jira_token) : null
   }

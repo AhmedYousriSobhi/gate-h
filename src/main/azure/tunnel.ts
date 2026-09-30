@@ -43,6 +43,11 @@ function tunnelName(clusterId: string): string {
 function upArgs(cluster: ClusterSummary): string[] {
   const tunnel = cluster.azureTunnel
   if (!tunnel) throw new Error(`${cluster.name} has no Azure tunnel configured`)
+  // With a jump host configured, the tunnel's far end is the jump host - a further ssh2
+  // `forwardOut` hop (see ssh/manager.ts) reaches `cluster.connection` from there. Without one,
+  // the tunnel's far end is `cluster.connection` itself, unchanged from before jump hosts composed
+  // with Azure tunnels.
+  const near = cluster.connection.jumpHost ?? cluster.connection
   const args = [
     'up',
     '--non-interactive',
@@ -57,7 +62,7 @@ function upArgs(cluster: ClusterSummary): string[] {
     '--local-port',
     String(tunnel.localPort),
     '--remote-port',
-    String(cluster.connection.port)
+    String(near.port)
   ]
   if (tunnel.tenant) args.push('--tenant', tunnel.tenant)
   // Missing mode-specific values are left out rather than passed empty, so the script reports
@@ -69,7 +74,7 @@ function upArgs(cluster: ClusterSummary): string[] {
     else if (tunnel.targetIpAddress) args.push('--target-ip', tunnel.targetIpAddress)
   } else {
     if (tunnel.vmName) args.push('--vm', tunnel.vmName)
-    args.push('--remote-host', cluster.connection.host)
+    args.push('--remote-host', near.host)
     if (tunnel.localUser) args.push('--local-user', tunnel.localUser)
   }
   return args

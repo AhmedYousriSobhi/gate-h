@@ -74,11 +74,13 @@ Gate-H remembers the server's host key and warns you if it ever changes.
 
 <br/>
 
-1. Fill in the login node as for **Directly**.
-2. Tick **Connect through a jump/bastion host**, then enter the jump host's address, port,
-   username and auth method.
+1. Fill in the login node as for **Directly** (or Azure/Teleport - a jump host composes with any
+   of them).
+2. Tick **Route through a jump host / bastion hop**, then enter the jump host's address, port,
+   username, auth method, and its own password/passphrase if it needs one.
 
-A jump host can reuse the cluster's password or passphrase only if both use the same auth method.
+The jump host's password/passphrase is stored separately from the target's - it no longer needs
+to match the target's auth method or share its secret.
 
 </details>
 
@@ -92,7 +94,9 @@ either Azure Bastion (Standard/Premium SKU, *Native client support* on) or a VM 
 `az ssh vm`.
 
 1. Under *SSH connection*, enter the tunnel's **far end**, not `127.0.0.1`: the target VM
-   (Bastion), or the login node as the VM sees it (`az ssh vm`). Leave the jump host unticked.
+   (Bastion), or the login node as the VM sees it (`az ssh vm`). Leave the jump host unticked,
+   unless you also need one more hop beyond the tunnel to reach the real target - in that case the
+   tunnel reaches the jump host instead, and the jump host reaches Host/Port above.
 2. Tick **Azure tunnel** and fill in:
 
    | Field | Enter |

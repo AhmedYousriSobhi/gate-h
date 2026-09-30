@@ -1,5 +1,5 @@
 import scriptPath from '../../../resources/teleport.sh?asset&asarUnpack'
-import type { ClusterSummary } from '../../shared/types'
+import type { ClusterSummary, TeleportConfig } from '../../shared/types'
 import type { PtySpawnOptions } from '../pty/manager'
 
 // A Teleport cluster's terminal is resources/teleport.sh running on a PTY: the script checks for
@@ -12,9 +12,10 @@ import type { PtySpawnOptions } from '../pty/manager'
 /** teleport.sh's exit code for "no usable session and --no-login was given". */
 export const EXIT_NO_SESSION = 4
 
-function scopeArgs(cluster: ClusterSummary): string[] {
-  const teleport = cluster.teleport
-  if (!teleport) throw new Error(`${cluster.name} has no Teleport proxy configured`)
+/** Flags every teleport.sh subcommand shares to target one proxy/cluster/user - exported so
+ *  ../teleport/proxyClient.ts (a jump host reached through this same proxy) can build the same
+ *  scope without a whole ClusterSummary. */
+export function teleportScopeArgs(teleport: TeleportConfig): string[] {
   const args = ['--proxy', teleport.proxy]
   if (teleport.cluster) args.push('--cluster', teleport.cluster)
   if (teleport.user) args.push('--user', teleport.user)
@@ -23,7 +24,17 @@ function scopeArgs(cluster: ClusterSummary): string[] {
   return args
 }
 
-export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
+function scopeArgs(cluster: ClusterSummary): string[] {
+  if (!cluster.teleport) throw new Error(`${cluster.name} has no Teleport proxy configured`)
+  return teleportScopeArgs(cluster.teleport)
+}
+
+/** `targetHost` defaults to the cluster's own node - a Slurm execution target (see
+ *  ../scheduler/exec.ts) overrides it to reach a different internal node through the same proxy. */
+export function teleportSshCommand(
+  cluster: ClusterSummary,
+  targetHost: string = cluster.connection.host
+): PtySpawnOptions {
   return {
     file: 'bash',
     args: [
@@ -32,15 +43,19 @@ export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
       ...scopeArgs(cluster),
       '--no-login',
       '--',
-      `${cluster.connection.username}@${cluster.connection.host}`
+      `${cluster.connection.username}@${targetHost}`
     ]
   }
 }
 
 /** A one-off, non-interactive remote command (scheduler queries - see ../scheduler/exec.ts).
  *  `--no-login`: without a usable session it exits with EXIT_NO_SESSION instead of prompting. */
-export function teleportExecCommand(cluster: ClusterSummary, command: string): PtySpawnOptions {
-  const ssh = teleportSshCommand(cluster)
+export function teleportExecCommand(
+  cluster: ClusterSummary,
+  command: string,
+  targetHost?: string
+): PtySpawnOptions {
+  const ssh = teleportSshCommand(cluster, targetHost)
   return { ...ssh, args: [...ssh.args, command] }
 }
 

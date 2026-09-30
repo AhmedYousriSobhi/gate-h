@@ -1,5 +1,7 @@
 import { spawn } from 'child_process'
 import type { Client } from 'ssh2'
+import { getClusterSecrets } from '../clusters'
+import { buildConnectConfig, connectClient, openForward } from '../ssh/connect'
 import { getLiveClient } from '../ssh/manager'
 import { getTeleportSessions } from '../teleport/sessionState'
 import { EXIT_NO_SESSION, teleportExecCommand } from '../teleport/session'
@@ -8,9 +10,12 @@ import type { ClusterSummary } from '../../shared/types'
 // Runs one fixed scheduler command (built in ./slurm.ts, never text from the renderer) on a
 // session the user already has open. It never opens a connection or logs in: an ssh2 cluster
 // gets an extra channel on its terminal's connection, which also covers jump hosts and Azure
-// tunnels, and a Teleport cluster gets a `tsh ssh --no-login`, only while its tsh session is
-// valid. Runs for one cluster are queued, so a cluster never has more than one scheduler channel
-// open, and OpenSSH's MaxSessions (10 by default) is left to the terminal tabs.
+// tunnels, and a bare Teleport cluster (no jump host) gets a `tsh ssh --no-login`, only while its
+// tsh session is valid. When `scheduler.execTarget` is set, the command instead runs on that
+// internal node - one more forwarded ssh2 hop for an already-live client, or `tsh ssh --no-login`
+// to that node for a bare Teleport cluster. Runs for one cluster are queued, so a cluster never
+// has more than one scheduler channel open, and OpenSSH's MaxSessions (10 by default) is left to
+// the terminal tabs.
 
 const TIMEOUT_MS = 15_000
 const MAX_OUTPUT_BYTES = 1024 * 1024
@@ -95,13 +100,53 @@ function execOverSsh(client: Client, command: string, stdin?: string): Promise<E
   })
 }
 
-function execOverTeleport(
+/** Runs on one more ssh2 `forwardOut` hop from the cluster's already-live client to
+ *  `scheduler.execTarget` - same identity/credentials as `cluster.connection`, since the target is
+ *  just a different node reachable through the same already-authenticated chain. Opened and closed
+ *  per run, same per-run cost as execOverTeleport's fresh `tsh` spawn - not worth caching for a
+ *  30-second-minimum poll interval. */
+async function execViaForward(
+  client: Client,
   cluster: ClusterSummary,
+  target: { host: string; port?: number },
   command: string,
   stdin?: string
 ): Promise<ExecResult> {
+  const secrets = getClusterSecrets(cluster.id)
+  const forwardStream = await openForward(
+    client,
+    target.host,
+    target.port ?? cluster.connection.port
+  )
+  const targetClient = await connectClient({
+    ...buildConnectConfig(
+      {
+        host: target.host,
+        port: target.port ?? cluster.connection.port,
+        username: cluster.connection.username,
+        authMethod: cluster.connection.authMethod,
+        privateKeyPath: cluster.connection.privateKeyPath
+      },
+      secrets.connectionSecret,
+      { clusterId: cluster.id, clusterName: cluster.name, role: 'Slurm execution target' }
+    ),
+    sock: forwardStream
+  })
+  try {
+    return await execOverSsh(targetClient, command, stdin)
+  } finally {
+    targetClient.end()
+  }
+}
+
+function execOverTeleport(
+  cluster: ClusterSummary,
+  command: string,
+  stdin?: string,
+  targetHost?: string
+): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
-    const { file, args } = teleportExecCommand(cluster, command)
+    const { file, args } = teleportExecCommand(cluster, command, targetHost)
     const child = spawn(file, args, { stdio: ['pipe', 'pipe', 'pipe'] })
     const c = collector(() => child.kill('SIGTERM'), resolve, reject)
     // Closed straight away without input, as /dev/null would be.
@@ -122,14 +167,19 @@ function hasTeleportSession(clusterId: string): boolean {
 }
 
 function runNow(cluster: ClusterSummary, command: string, stdin?: string): Promise<ExecResult> {
-  if (cluster.teleport) {
+  const execTarget = cluster.scheduler?.execTarget
+  // A bare Teleport cluster (no jump host) has no ssh2 client - it needs its own tsh invocation.
+  // One with a jump host already has a real live client (see ssh/manager.ts), so it's handled by
+  // the ssh2 path below like Direct/Azure, gaining execTarget support for free.
+  if (cluster.teleport && !cluster.connection.jumpHost) {
     if (!hasTeleportSession(cluster.id)) {
       return Promise.reject(new NoSessionError('Waiting for a Teleport login.'))
     }
-    return execOverTeleport(cluster, command, stdin)
+    return execOverTeleport(cluster, command, stdin, execTarget?.host)
   }
   const client = getLiveClient(cluster.id)
   if (!client) return Promise.reject(new NoSessionError('Waiting for a terminal session.'))
+  if (execTarget) return execViaForward(client, cluster, execTarget, command, stdin)
   return execOverSsh(client, command, stdin)
 }
 
