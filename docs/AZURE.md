@@ -9,7 +9,7 @@ prerequisites and form fields), see "Through Azure" in the README's
 ```
 Gate-H terminal ──ssh2──▶ 127.0.0.1:<local port> ══ Azure tunnel ══▶ login node :22
                                     ▲
-       resources/azure-tunnel.sh up ┘  (az login → az account set → bastion tunnel | az ssh vm -L)
+       resources/azure-tunnel.sh up ┘  (az login → select subscription → bastion tunnel | az ssh vm -L)
 ```
 
 - **Connecting** (`src/main/ssh/manager.ts`): before a cluster with an Azure tunnel connects,
@@ -191,6 +191,14 @@ For debugging, or to use the tunnel with another SSH client:
      -g my-rg --bastion my-bastion \
      --target-id /subscriptions/<sub-id>/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/login01 \
      -l 2222 -s "<subscription name or id>"
+
+   # --target-id can be replaced with --vm login01 - the script resolves the name to its
+   # resource ID via `az vm show` (needs -g to know which resource group to look in)
+
+   # --target-id can also be replaced with --target-ip <ip>, needing no VM resource id at
+   # all - for a target in a different resource group (or subscription/tenant) than the
+   # Bastion host, or one that isn't an Azure VM resource. Needs "IP-based connection"
+   # enabled on the Bastion host (a separate setting from native client support).
 
    # Through a VM with `az ssh vm`, forwarding on to a login node the VM can reach:
    ./resources/azure-tunnel.sh up --name mycluster --mode az-ssh \
