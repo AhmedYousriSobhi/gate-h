@@ -32,8 +32,52 @@ export function mergePaths(...lists: Array<string | null | undefined>): string {
   return [...seen].join(':')
 }
 
+/** SSL_CERT_FILE/SSL_CERT_DIR as the login shell would export them, or null for either that isn't
+ *  set (or if the shell can't be read in time) - one combined invocation rather than two, since a
+ *  login shell can take a moment to start. Needed for exactly the same reason PATH is: `tsh`
+ *  verifying a Teleport proxy behind an internal CA reads these, and a Finder/Dock/`open`-launched
+ *  app doesn't have either unless something adopts them the same way PATH is adopted below. */
+export function loginShellSslCertEnv(shell: string): { file: string | null; dir: string | null } {
+  try {
+    const out = execFileSync(
+      shell,
+      [
+        '-ilc',
+        `printf '${MARKER}%s${MARKER}' "\${SSL_CERT_FILE:-}"; ` +
+          `printf '${MARKER}%s${MARKER}' "\${SSL_CERT_DIR:-}"`
+      ],
+      { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+    )
+    const matches = [...out.matchAll(new RegExp(`${MARKER}(.*?)${MARKER}`, 'g'))]
+    return { file: matches[0]?.[1] || null, dir: matches[1]?.[1] || null }
+  } catch {
+    return { file: null, dir: null }
+  }
+}
+
 export function adoptLoginShellPath(): void {
   if (process.platform !== 'darwin') return
-  const fromShell = loginShellPath(process.env.SHELL || '/bin/zsh')
+  const shell = process.env.SHELL || '/bin/zsh'
+  const fromShell = loginShellPath(shell)
   process.env.PATH = mergePaths(fromShell, process.env.PATH, FALLBACK_DIRS.join(':'))
+
+  // Only filling in what's missing (not merging, unlike PATH) keeps an explicit
+  // `SSL_CERT_FILE=... open ...`-style launch - which already reaches process.env normally -
+  // taking priority over whatever the login shell's own profile sets.
+  if (!process.env.SSL_CERT_FILE || !process.env.SSL_CERT_DIR) {
+    const fromShellCerts = loginShellSslCertEnv(shell)
+    if (!process.env.SSL_CERT_FILE && fromShellCerts.file) {
+      process.env.SSL_CERT_FILE = fromShellCerts.file
+    }
+    if (!process.env.SSL_CERT_DIR && fromShellCerts.dir) {
+      process.env.SSL_CERT_DIR = fromShellCerts.dir
+    }
+  }
+
+  // Visible only when run from a terminal (or in Console.app) - the one place to actually see
+  // what got adopted, since none of this has anywhere to show up in the UI itself.
+  console.error(
+    `[gate-h] shell env adopted from ${shell}: PATH has ${process.env.PATH?.split(':').length ?? 0} entries, ` +
+      `SSL_CERT_FILE=${process.env.SSL_CERT_FILE ?? '(unset)'}, SSL_CERT_DIR=${process.env.SSL_CERT_DIR ?? '(unset)'}`
+  )
 }
