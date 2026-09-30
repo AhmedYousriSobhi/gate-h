@@ -136,6 +136,7 @@ const api: GateHApi = {
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
+    findVm: (vmName: string) => ipcRenderer.invoke('azure:findVm', vmName),
     onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AzureTunnelStatusEvent): void =>
         callback(payload)

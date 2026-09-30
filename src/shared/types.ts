@@ -86,9 +86,16 @@ export interface AzureTunnelConfig {
   localPort: number
   /** mode "bastion" */
   bastionName?: string
+  /** mode "bastion": full ARM resource id of the target VM. If absent, `vmName` is resolved to
+   *  one via `az vm show` when the tunnel opens. */
   targetResourceId?: string
-  /** mode "az-ssh" */
+  /** mode "az-ssh": VM name (required). mode "bastion": alternative to `targetResourceId`. */
   vmName?: string
+  /** mode "bastion": IP address of the target, needing no VM resource id at all - for a target in
+   *  a different resource group (or subscription/tenant) than the Bastion host, or one that isn't
+   *  an Azure VM resource. Needs "IP-based connection" enabled on the Bastion host. Alternative to
+   *  `targetResourceId`/`vmName`. */
+  targetIpAddress?: string
   localUser?: string
 }
 
@@ -105,6 +112,15 @@ export interface AzureSubscription {
   id: string
   name: string
   isDefault: boolean
+}
+
+/** One VM found by `findVm`, naming which subscription/resource group it actually lives in. */
+export interface AzureVmMatch {
+  subscriptionId: string
+  subscriptionName: string
+  resourceGroup: string
+  /** Full ARM resource id - usable directly as a Bastion tunnel's target resource ID. */
+  id: string
 }
 
 /** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
@@ -590,6 +606,9 @@ export interface GateHApi {
   azure: {
     /** Subscriptions cached by the local Azure CLI - rejects if it isn't installed or logged in. */
     listSubscriptions(): Promise<AzureSubscription[]>
+    /** Searches every enabled subscription for a VM by name - there's no single `az` command for
+     *  "which subscription is this VM in". */
+    findVm(vmName: string): Promise<AzureVmMatch[]>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
   }

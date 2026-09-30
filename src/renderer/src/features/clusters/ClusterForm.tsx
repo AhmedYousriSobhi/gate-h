@@ -11,6 +11,7 @@ import {
 import type {
   AzureSubscription,
   AzureTunnelMode,
+  AzureVmMatch,
   ClusterInput,
   ClusterSummary,
   JiraAuthMode,
@@ -29,6 +30,10 @@ import './clusters.css'
 
 interface ClusterFormProps {
   initial?: ClusterSummary
+  /** Every other cluster, used only to warn about an Azure tunnel local port already claimed by
+   *  one of them - two tunnels silently sharing a port is a real, confusing failure mode (see the
+   *  "both mapped to the same localhost port" bug this was added for). */
+  existingClusters?: ClusterSummary[]
   onCancel: () => void
   onSubmit: (input: ClusterInput) => Promise<void>
 }
@@ -71,6 +76,7 @@ interface FormState {
   azureBastionName: string
   azureTargetResourceId: string
   azureVmName: string
+  azureTargetIpAddress: string
   azureLocalUser: string
   useTeleport: boolean
   teleportProxy: string
@@ -126,6 +132,7 @@ function toFormState(c?: ClusterSummary): FormState {
     azureBastionName: c?.azureTunnel?.bastionName ?? '',
     azureTargetResourceId: c?.azureTunnel?.targetResourceId ?? '',
     azureVmName: c?.azureTunnel?.vmName ?? '',
+    azureTargetIpAddress: c?.azureTunnel?.targetIpAddress ?? '',
     azureLocalUser: c?.azureTunnel?.localUser ?? '',
     useTeleport: Boolean(c?.teleport),
     teleportProxy: c?.teleport?.proxy ?? '',
@@ -190,6 +197,13 @@ function teleportError(form: FormState): string | null {
 function azureTunnelError(form: FormState): string | null {
   if (!form.useAzureTunnel) return null
   if (form.useJumpHost) return 'Use either a jump host or an Azure tunnel, not both.'
+  if (['localhost', '127.0.0.1', '::1'].includes(form.host.trim().toLowerCase())) {
+    return (
+      "Host must be the target machine's real hostname or IP, not localhost - SSH always dials " +
+      "the tunnel's local port regardless of this field, which instead identifies the machine " +
+      "for host-key trust (so it can't be shared across clusters or tunnels)."
+    )
+  }
   if (!form.azureSubscription.trim() || !form.azureResourceGroup.trim()) {
     return 'Azure tunnel needs a subscription and a resource group.'
   }
@@ -197,11 +211,15 @@ function azureTunnelError(form: FormState): string | null {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return 'Azure tunnel local port must be a number between 1 and 65535.'
   }
-  if (
-    form.azureMode === 'bastion' &&
-    (!form.azureBastionName.trim() || !form.azureTargetResourceId.trim())
-  ) {
-    return 'Azure Bastion needs the bastion name and the target VM resource ID.'
+  if (form.azureMode === 'bastion') {
+    if (!form.azureBastionName.trim()) return 'Azure Bastion needs the bastion name.'
+    if (
+      !form.azureTargetResourceId.trim() &&
+      !form.azureVmName.trim() &&
+      !form.azureTargetIpAddress.trim()
+    ) {
+      return 'Azure Bastion needs the target VM resource ID, its VM name, or its IP address.'
+    }
   }
   if (form.azureMode === 'az-ssh' && !form.azureVmName.trim()) {
     return 'az ssh vm needs the VM name.'
@@ -218,15 +236,24 @@ function splitList(value: string): string[] {
 
 export default function ClusterForm({
   initial,
+  existingClusters = [],
   onCancel,
   onSubmit
 }: ClusterFormProps): React.JSX.Element {
   const [form, setForm] = useState<FormState>(() => toFormState(initial))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Set to the port a same-port conflict was already warned about and saved through anyway;
+  // changing the port (or turning the tunnel off) clears it, so a stale confirmation can't
+  // silently cover a new conflict.
+  const [portConflictConfirmedFor, setPortConflictConfirmedFor] = useState<string | null>(null)
   const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([])
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null)
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false)
+  const [vmMatches, setVmMatches] = useState<AzureVmMatch[]>([])
+  const [vmLookupError, setVmLookupError] = useState<string | null>(null)
+  const [vmFoundMessage, setVmFoundMessage] = useState<string | null>(null)
+  const [findingVm, setFindingVm] = useState(false)
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -238,15 +265,108 @@ export default function ClusterForm({
     try {
       const list = await window.api.azure.listSubscriptions()
       setSubscriptions(list)
-      if (!form.azureSubscription) {
-        const preferred = list.find((s) => s.isDefault) ?? list[0]
-        set('azureSubscription', preferred.id)
-      }
     } catch (err) {
       setSubscriptionsError(err instanceof Error ? err.message : 'Failed to list subscriptions.')
     } finally {
       setLoadingSubscriptions(false)
     }
+  }
+
+  /** Fills Subscription/Resource group (and, for Bastion, the target resource ID) from a VM
+   *  search match, so the exact id `findVm` already found doesn't need re-resolving at connect
+   *  time. */
+  function applyVmMatch(match: AzureVmMatch): void {
+    setForm((prev) => ({
+      ...prev,
+      azureSubscription: match.subscriptionId,
+      azureResourceGroup: match.resourceGroup,
+      azureTargetResourceId: prev.azureMode === 'bastion' ? match.id : prev.azureTargetResourceId
+    }))
+    setVmMatches([])
+    setVmLookupError(null)
+    setVmFoundMessage(
+      `Found it in "${match.subscriptionName}" / ${match.resourceGroup} - filled in above.`
+    )
+  }
+
+  async function handleFindVm(): Promise<void> {
+    const name = form.azureVmName.trim()
+    if (!name) {
+      setVmLookupError('Enter a VM name first.')
+      return
+    }
+    setVmLookupError(null)
+    setVmFoundMessage(null)
+    setVmMatches([])
+    setFindingVm(true)
+    try {
+      const matches = await window.api.azure.findVm(name)
+      if (matches.length === 0) {
+        setVmLookupError(`No VM named "${name}" found in any subscription you can see.`)
+      } else if (matches.length === 1) {
+        applyVmMatch(matches[0])
+      } else {
+        setVmMatches(matches)
+      }
+    } catch (err) {
+      setVmLookupError(err instanceof Error ? err.message : 'Could not search for the VM.')
+    } finally {
+      setFindingVm(false)
+    }
+  }
+
+  /** Always shows something for the last "Find subscription" click - searching, the error, the
+   *  match found, or a picker for more than one - directly under the field it came from, so a
+   *  search never looks like it did nothing. */
+  function renderVmSearchStatus(): React.JSX.Element | null {
+    if (findingVm) {
+      return <p className="hint">Searching every subscription you can see...</p>
+    }
+    if (vmMatches.length > 0) {
+      return (
+        <div className="form-field">
+          <label htmlFor="azureVmMatches">
+            {vmMatches.length} matches found across your subscriptions - pick one
+          </label>
+          <select
+            id="azureVmMatches"
+            value=""
+            onChange={(e) => {
+              const match = vmMatches.find((m) => m.id === e.target.value)
+              if (match) applyVmMatch(match)
+            }}
+          >
+            <option value="" disabled>
+              Choose the subscription / resource group...
+            </option>
+            {vmMatches.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.subscriptionName} / {m.resourceGroup}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+    if (vmLookupError) return <p className="hint">{vmLookupError}</p>
+    if (vmFoundMessage) return <p className="hint">{vmFoundMessage}</p>
+    return null
+  }
+
+  /** Another cluster whose Azure tunnel already claims this one's local port - two tunnels
+   *  silently sharing a port is a real, confusing failure mode (TCP connects, but whichever one
+   *  didn't actually win the bind never gets real traffic - see the "both mapped to the same
+   *  localhost port" bug this was added for), not something to block on outright since the user
+   *  may know the two are never used at the same time. */
+  function findPortConflict(): ClusterSummary | null {
+    if (!form.useAzureTunnel) return null
+    const port = Number(form.azureLocalPort)
+    if (!Number.isInteger(port)) return null
+    return (
+      existingClusters.find(
+        (c) => c.id !== initial?.id && c.azureTunnel && c.azureTunnel.localPort === port
+      ) ?? null
+    )
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
@@ -265,6 +385,17 @@ export default function ClusterForm({
       gpuError(form)
     if (tunnelError) {
       setError(tunnelError)
+      return
+    }
+
+    const conflict = findPortConflict()
+    if (conflict && portConflictConfirmedFor !== form.azureLocalPort) {
+      setPortConflictConfirmedFor(form.azureLocalPort)
+      setError(
+        `Local port ${form.azureLocalPort} is already used by "${conflict.name}"'s Azure tunnel - ` +
+          'two tunnels sharing a port can silently interfere with each other. Click Save again to ' +
+          'use it anyway, or pick a different port.'
+      )
       return
     }
 
@@ -320,8 +451,17 @@ export default function ClusterForm({
             localPort: Number(form.azureLocalPort),
             bastionName: form.azureMode === 'bastion' ? form.azureBastionName.trim() : undefined,
             targetResourceId:
-              form.azureMode === 'bastion' ? form.azureTargetResourceId.trim() : undefined,
-            vmName: form.azureMode === 'az-ssh' ? form.azureVmName.trim() : undefined,
+              form.azureMode === 'bastion'
+                ? form.azureTargetResourceId.trim() || undefined
+                : undefined,
+            vmName:
+              form.azureMode === 'az-ssh' || form.azureMode === 'bastion'
+                ? form.azureVmName.trim() || undefined
+                : undefined,
+            targetIpAddress:
+              form.azureMode === 'bastion'
+                ? form.azureTargetIpAddress.trim() || undefined
+                : undefined,
             localUser:
               form.azureMode === 'az-ssh' ? form.azureLocalUser.trim() || undefined : undefined
           }
@@ -601,9 +741,11 @@ export default function ClusterForm({
                 <p className="hint">
                   Before connecting, Gate-H signs in with the Azure CLI (az), selects this
                   subscription, and opens a tunnel. SSH then connects to 127.0.0.1 on the local
-                  port, and Host/Port above are the tunnel&apos;s far end: the target VM (Bastion),
-                  or the login node as the VM reaches it (az ssh vm). Needs az on PATH. See the
-                  README section on clusters reachable only through Azure.
+                  port, and Host/Port above are the tunnel&apos;s far end: the target VM&apos;s real
+                  hostname or IP (Bastion), or the login node as the VM reaches it (az ssh vm) -
+                  never localhost, since that field is what host-key trust is pinned to, not the
+                  actual tunnel address. Needs az on PATH. See the README section on clusters
+                  reachable only through Azure.
                 </p>
                 <div className="form-row">
                   <div className="form-field">
@@ -632,7 +774,7 @@ export default function ClusterForm({
                   <div className="form-inline">
                     <input
                       id="azureSubscription"
-                      list="azureSubscriptionOptions"
+                      placeholder="Subscription ID or name"
                       value={form.azureSubscription}
                       onChange={(e) => set('azureSubscription', e.target.value)}
                     />
@@ -645,13 +787,25 @@ export default function ClusterForm({
                       {loadingSubscriptions ? 'Loading...' : 'Load from az'}
                     </button>
                   </div>
-                  <datalist id="azureSubscriptionOptions">
-                    {subscriptions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
+                  {subscriptions.length > 0 && (
+                    <select
+                      aria-label="Pick a subscription fetched from az"
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) set('azureSubscription', e.target.value)
+                      }}
+                    >
+                      <option value="">
+                        {subscriptions.length} subscription{subscriptions.length === 1 ? '' : 's'}{' '}
+                        found - pick one...
                       </option>
-                    ))}
-                  </datalist>
+                      {subscriptions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.id}){s.isDefault ? ' - az default' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {subscriptionsError && <p className="hint">{subscriptionsError}</p>}
                 </div>
                 <div className="form-row">
@@ -683,7 +837,9 @@ export default function ClusterForm({
                       />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="azureTargetResourceId">Target VM resource ID</label>
+                      <label htmlFor="azureTargetResourceId">
+                        Target VM resource ID (optional)
+                      </label>
                       <input
                         id="azureTargetResourceId"
                         placeholder="/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/virtualMachines/..."
@@ -691,16 +847,61 @@ export default function ClusterForm({
                         onChange={(e) => set('azureTargetResourceId', e.target.value)}
                       />
                     </div>
+                    <div className="form-field">
+                      <label htmlFor="azureVmName">or VM name</label>
+                      <div className="form-inline">
+                        <input
+                          id="azureVmName"
+                          placeholder="Resolved to a resource ID via `az vm show` when opened"
+                          value={form.azureVmName}
+                          onChange={(e) => set('azureVmName', e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={handleFindVm}
+                          disabled={findingVm || !form.azureVmName.trim()}
+                        >
+                          {findingVm ? 'Searching...' : 'Find subscription'}
+                        </button>
+                      </div>
+                      {renderVmSearchStatus()}
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="azureTargetIpAddress">or IP address</label>
+                      <input
+                        id="azureTargetIpAddress"
+                        placeholder="No VM resource id needed - e.g. a different resource group"
+                        value={form.azureTargetIpAddress}
+                        onChange={(e) => set('azureTargetIpAddress', e.target.value)}
+                      />
+                      <p className="hint">
+                        Needs &quot;IP-based connection&quot; enabled on this Bastion host. Use this
+                        when the target isn&apos;t in this Bastion&apos;s resource group (or
+                        subscription/tenant), or isn&apos;t an Azure VM resource at all.
+                      </p>
+                    </div>
                   </>
                 ) : (
                   <div className="form-row">
                     <div className="form-field">
                       <label htmlFor="azureVmName">VM name</label>
-                      <input
-                        id="azureVmName"
-                        value={form.azureVmName}
-                        onChange={(e) => set('azureVmName', e.target.value)}
-                      />
+                      <div className="form-inline">
+                        <input
+                          id="azureVmName"
+                          value={form.azureVmName}
+                          onChange={(e) => set('azureVmName', e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={handleFindVm}
+                          disabled={findingVm || !form.azureVmName.trim()}
+                        >
+                          {findingVm ? 'Searching...' : 'Find subscription'}
+                        </button>
+                      </div>
+                      {renderVmSearchStatus()}
                     </div>
                     <div className="form-field">
                       <label htmlFor="azureLocalUser">Local VM user (optional)</label>
