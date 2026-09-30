@@ -213,6 +213,20 @@ export interface ClusterInput {
   storage: StorageConfig | null
 }
 
+/** One `Host` block read from ~/.ssh/config, ready to become a cluster's SSH connection - no
+ *  secret ever comes from here (a password isn't in ssh_config at all, and a private key's path
+ *  is not its contents). `hasProxy` flags a ProxyJump/ProxyCommand directive that isn't imported,
+ *  so the picker can say a jump host still needs configuring by hand instead of silently
+ *  dropping it. */
+export interface SshConfigCandidate {
+  name: string
+  host: string
+  port: number
+  username?: string
+  privateKeyPath?: string
+  hasProxy: boolean
+}
+
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
 export type ClusterSummary = Cluster & {
   hasConnectionSecret: boolean
@@ -530,6 +544,9 @@ export interface GateHApi {
     remove(id: string): Promise<void>
     /** Toggles this cluster's master Active/Standby switch - see Cluster.activeMonitoring. */
     setActiveMonitoring(id: string, active: boolean): Promise<ClusterSummary>
+    /** Reads ~/.ssh/config (following Include directives) for candidate clusters - read-only,
+     *  nothing is imported until the picker calls `create` per selected entry. */
+    importFromSshConfig(): Promise<SshConfigCandidate[]>
   }
   grafana: {
     getStatus(clusterId: string): Promise<GrafanaStatusResult>
