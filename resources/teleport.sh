@@ -241,6 +241,9 @@ classify_login_failure() {
   if grep -qiE 'inappropriate ioctl|not a terminal|/dev/tty' <<<"$output"; then
     die "$EXIT_LOGIN" "This auth method needs a terminal prompt (password/OTP) - run 'tsh login --proxy=$PROXY' in a terminal, or configure an SSO connector with --auth"
   fi
+  if grep -qiE 'x509:|certificate signed by unknown authority|failed to verify certificate|--insecure flag' <<<"$output"; then
+    die "$EXIT_LOGIN" "The proxy's TLS certificate isn't trusted. If $PROXY is a self-signed/lab proxy, enable 'Skip certificate verification' in this cluster's settings; otherwise point SSL_CERT_FILE/SSL_CERT_DIR at your organization's CA"
+  fi
   local reason
   reason=$(grep -iE 'error|denied|failed|invalid' <<<"$output" | tail -n 1 || true)
   die "$EXIT_LOGIN" "tsh login failed${reason:+: $reason}"
