@@ -170,6 +170,7 @@ export function listSubscriptions(): Promise<AzureSubscription[]> {
         '--query',
         "[?state=='Enabled'].{id:id, name:name, isDefault:isDefault}"
       ],
+      { timeout: 20_000 },
       (err, stdout) => {
         if (err) {
           reject(
@@ -217,9 +218,13 @@ function vmsNamed(name: string, subscription: AzureSubscription): Promise<AzureV
         '--output',
         'json'
       ],
+      // A subscription that hangs (a stale token quietly retrying, an unreachable management
+      // endpoint) must not hang the whole search - bound it so one bad subscription can't sit
+      // there forever with the button stuck on "Searching...".
+      { timeout: 20_000 },
       (err, stdout) => {
-        // A subscription this account can't list VMs in (RBAC) shouldn't sink the whole search -
-        // it's just one of potentially many subscriptions being checked.
+        // A subscription this account can't list VMs in (RBAC), or one that timed out, shouldn't
+        // sink the whole search - it's just one of potentially many subscriptions being checked.
         if (err) {
           resolve([])
           return
