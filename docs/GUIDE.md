@@ -143,7 +143,11 @@ set a password, and scan the QR code into an authenticator app.
 💡 Proxy uses your organisation's own CA? Set `SSL_CERT_FILE=/path/to/ca.pem` (exporting it in your
 shell profile is enough on macOS - Gate-H picks it up at startup the same way it does `PATH`).
 Proxy is self-signed (a lab/test cluster with no real CA) instead? Tick **Skip certificate
-verification** in the form.
+verification** in the form. Unticked (the default), `tsh` verifies the proxy's certificate the same
+way a browser checks HTTPS, so a self-signed/untrusted cert is refused with a `certificate signed
+by unknown authority` error; ticking the box passes `tsh`'s own `--insecure` flag, which skips that
+check entirely. Only turn it on for a proxy you know is self-signed and whose network path you
+trust - it removes Gate-H's ability to tell your real proxy apart from one spoofing it.
 More: [docs/TELEPORT.md](TELEPORT.md).
 
 </details>
