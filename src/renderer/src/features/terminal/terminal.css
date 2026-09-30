@@ -370,6 +370,7 @@ body.session-dragging * {
 
 
 .terminal-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -551,6 +552,163 @@ body.session-dragging * {
   font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px;
   user-select: text;
+}
+
+/* Popover under the header's History button - every step of this session's connection
+   lifecycle, newest first, so a failure that already scrolled out of the status word is still
+   readable afterward. */
+.terminal-connection-log {
+  position: absolute;
+  top: 36px;
+  right: var(--space-2);
+  z-index: 2;
+  width: 320px;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.terminal-connection-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+
+.terminal-connection-log-header h5 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-3);
+}
+
+.terminal-connection-log-empty {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+
+.terminal-connection-log-list {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.terminal-connection-log-entry {
+  display: flex;
+  gap: var(--space-2);
+  padding: 3px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.terminal-connection-log-entry:first-child {
+  border-top: none;
+}
+
+.terminal-connection-log-time {
+  flex-shrink: 0;
+  color: var(--color-text-3);
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding-top: 1px;
+}
+
+.terminal-connection-log-message {
+  color: var(--color-text-2);
+  font-size: 12px;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* Popover under a header button - the Snippets list today, a shared shape for anything similar
+   later. */
+.terminal-popover {
+  position: absolute;
+  top: 36px;
+  right: var(--space-2);
+  z-index: 2;
+  width: 240px;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.terminal-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+
+.terminal-popover-header h5 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-3);
+}
+
+.terminal-popover-empty {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+
+.terminal-popover-list {
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-2);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.terminal-snippet-item {
+  display: block;
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-1);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-snippet-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.terminal-snippets-manage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-top: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.terminal-snippets-manage:hover {
+  color: var(--color-text-1);
 }
 
 .terminal-statusbar-teleport {

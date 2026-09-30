@@ -21,6 +21,7 @@ import { registerSchedulerIpcHandlers } from './ipc/scheduler'
 import { registerStorageIpcHandlers } from './ipc/storage'
 import { registerFileIpcHandlers } from './ipc/files'
 import { registerTemplateIpcHandlers } from './ipc/templates'
+import { registerSnippetIpcHandlers } from './ipc/snippets'
 import {
   setSchedulerBroadcaster,
   setSchedulerWindowFocused,
@@ -179,6 +180,7 @@ app.whenReady().then(() => {
   registerStorageIpcHandlers()
   registerFileIpcHandlers()
   registerTemplateIpcHandlers()
+  registerSnippetIpcHandlers()
 
   createWindow()
 
