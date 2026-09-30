@@ -32,6 +32,10 @@ Usage:
                                             (--force: sign out of --proxy first, to renew)
   teleport.sh ssh    [options] -- [ssh args] pre-flight, then tsh ssh (or ssh if no --proxy)
   teleport.sh scp    [options] -- [scp args] pre-flight, then tsh scp (or scp if no --proxy)
+  teleport.sh proxy-ssh [options] -- user@host:port
+                                            pre-flight, then `tsh proxy ssh` - emits raw SSH
+                                            protocol bytes to the target, for a jump host reached
+                                            behind this proxy
 
 Options (each also settable via the env var shown, or in a --config file):
   --proxy HOST[:PORT]   Teleport proxy; empty means a direct     TPW_PROXY
@@ -361,11 +365,28 @@ passthrough() {
 cmd_ssh() { passthrough ssh; }
 cmd_scp() { passthrough scp; }
 
+# proxy-ssh: like ssh/scp above, but execs `tsh proxy ssh` instead of `tsh ssh` - it speaks raw SSH
+# protocol on stdio (the same contract OpenSSH's ProxyCommand expects), rather than attaching a
+# shell. Used to chain a jump host on top of a Teleport session (see
+# src/main/teleport/proxyClient.ts): the caller connects its own ssh2 client over this process's
+# stdio instead of the certificate tsh would otherwise present, so stdout must stay pure protocol
+# bytes - no STATUS chatter mixed in, same as ssh/scp's own pre-flight discipline.
+cmd_proxy_ssh() {
+  require_proxy
+  require_tsh
+  tsh_scope
+  ensure_session >&2
+  local args=("${TSH_SCOPE[@]}" proxy ssh)
+  if [[ -n "$CLUSTER" ]]; then args+=(--cluster="$CLUSTER"); fi
+  exec tsh "${args[@]}" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+}
+
 main() {
   local cmd=${1:-help}
   (($#)) && shift
   case "$cmd" in
     status | login | ssh | scp) parse_args "$@" ;;
+    proxy-ssh) cmd=proxy_ssh; parse_args "$@" ;;
     help | -h | --help) usage; exit 0 ;;
     *) usage; die "$EXIT_USAGE" "Unknown command: $cmd" ;;
   esac
