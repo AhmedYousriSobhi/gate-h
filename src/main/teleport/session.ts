@@ -19,6 +19,7 @@ function scopeArgs(cluster: ClusterSummary): string[] {
   if (teleport.cluster) args.push('--cluster', teleport.cluster)
   if (teleport.user) args.push('--user', teleport.user)
   if (teleport.authConnector) args.push('--auth', teleport.authConnector)
+  if (teleport.insecure) args.push('--insecure')
   return args
 }
 

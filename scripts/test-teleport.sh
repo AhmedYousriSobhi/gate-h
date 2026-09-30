@@ -123,6 +123,10 @@ expect 0 "login without a session" login "${P[@]}" --cluster leaf --auth okta
 check "...runs tsh login scoped to the proxy, cluster, and connector" \
   grep -qx "login --proxy=teleport.example.com:443 --auth=okta --browser=none leaf" "$WORK/calls"
 check "...shows the SSO link on stderr" grep -q "127.0.0.1:40000/sso" "$WORK/err"
+reset
+expect 0 "login --insecure" login "${P[@]}" --insecure
+check "...adds --insecure to the tsh call" \
+  grep -qx "login --proxy=teleport.example.com:443 --insecure --browser=none" "$WORK/calls"
 check "...keeps tsh's output off stdout" bash -c "! grep -qv '^STATUS ' '$WORK/out'"
 check "...ends with a valid session" grep -q "STATUS valid" "$WORK/out"
 reset
