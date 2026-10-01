@@ -31,7 +31,7 @@ whole card is a focusable, clickable control (`role="button"`) that mirrors the 
 - **Insight row (Slurm/GPU/Jira) is intentionally absent.** That data is only fetched per-cluster
   on demand; fleet-wide polling would conflict with SPEC.md §3.10's scoped-polling requirement.
   Needs real infrastructure + a deliberate IPC design, not a renderer-only change.
-- **Avatar collisions** ("Compute-1" vs. "compute-node-tsh", both "C") fall back to a two-letter
+- **Avatar collisions** ("Delta-1" vs. "delta-login-node", both "D") fall back to a two-letter
   initial only when another cluster shares the same single-letter one (`lib/avatarColor.ts`).
 - **The "orphan text" bug had a concrete cause.** `cluster.tags` has always rendered with
   `className="tags"`/`"tag"`, but no CSS rule for either class existed anywhere in the app - a tag

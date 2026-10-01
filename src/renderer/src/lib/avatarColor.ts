@@ -15,10 +15,10 @@ function singleInitial(name: string): string {
   return name.trim().charAt(0).toUpperCase() || '?'
 }
 
-/** First letter of each of the name's first two words ("compute-node-tsh" -> "CN"), or its first
+/** First letter of each of the name's first two words ("delta-login-node" -> "DL"), or its first
  *  two characters when it's a single word - used to tell apart two clusters that would otherwise
- *  show the same single-letter avatar (e.g. "Compute-1" and "compute-node-tsh" both start with
- *  "C"). */
+ *  show the same single-letter avatar (e.g. "Delta-1" and "delta-login-node" both start with
+ *  "D"). */
 function doubleInitial(name: string): string {
   const trimmed = name.trim()
   const words = trimmed.split(/[\s\-_]+/).filter(Boolean)
