@@ -94,6 +94,12 @@ export interface AzureTunnelConfig {
   tenant?: string
   resourceGroup: string
   localPort: number
+  /** The port the tunnel targets on the far side (`--resource-port`/`--remote-port`). Defaults to
+   *  the jump host's port, or `connection.port` without one, when unset - but it's independently
+   *  settable because it isn't always the same number: Azure Bastion's IP-based connect
+   *  (`targetIpAddress`) only ever allows 22 or 3389 here regardless of what the real sshd port
+   *  is, so this can't be inferred from the connection profile alone. */
+  remotePort?: number
   /** mode "bastion" */
   bastionName?: string
   /** mode "bastion": full ARM resource id of the target VM. If absent, `vmName` is resolved to
@@ -116,6 +122,22 @@ export interface AzureTunnelStatusEvent {
   clusterId: string
   phase: AzureTunnelPhase
   message: string
+}
+
+/** Result of an on-demand "verify this tunnel" check: opens/reuses the cluster's real tunnel (the
+ *  same one a connect would use, not a separate test-only one), then checks whether a live sshd
+ *  banner actually arrives through it - independent of SSH auth/host-key concerns, since a known
+ *  az CLI bug can leave a tunnel's local port listening after its underlying session has silently
+ *  died (azure-cli#28367), which looks identical to a healthy tunnel until something tries to use
+ *  it. */
+export interface AzureTunnelVerifyResult {
+  tunnelOpened: boolean
+  /** Set when `tunnelOpened` is false - the real `az` CLI failure reason. */
+  tunnelError?: string
+  /** Whether an SSH banner arrived through the tunnel within the check's timeout. Only meaningful
+   *  when `tunnelOpened` is true. */
+  bannerReceived: boolean
+  latencyMs?: number
 }
 
 export interface AzureSubscription {
@@ -679,6 +701,10 @@ export interface GateHApi {
     /** Searches every enabled subscription for a VM by name - there's no single `az` command for
      *  "which subscription is this VM in". */
     findVm(vmName: string): Promise<AzureVmMatch[]>
+    /** Opens (or reuses) the cluster's tunnel and checks it actually passes traffic through to a
+     *  live sshd - see `AzureTunnelVerifyResult`. Progress streams through `onStatus` meanwhile,
+     *  same as a real connect. */
+    verifyTunnel(clusterId: string): Promise<AzureTunnelVerifyResult>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
   }
