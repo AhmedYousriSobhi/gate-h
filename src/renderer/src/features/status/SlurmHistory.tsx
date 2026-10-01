@@ -57,6 +57,7 @@ export default function SlurmHistory({ clusterId }: { clusterId: string }): Reac
                 <th>State</th>
                 <th>Exit</th>
                 <th>Elapsed</th>
+                <th>CPU eff.</th>
                 <th>Ended</th>
                 <th>Name</th>
               </tr>
@@ -73,6 +74,12 @@ export default function SlurmHistory({ clusterId }: { clusterId: string }): Reac
                   </td>
                   <td className="slurm-mono">{job.exitCode}</td>
                   <td className="slurm-mono">{job.elapsed}</td>
+                  <td
+                    className="slurm-mono"
+                    title="CPU time used (TotalCPU) as a share of reserved CPU time (AllocCPUS x Elapsed)"
+                  >
+                    {job.cpuEfficiencyPct !== null ? `${job.cpuEfficiencyPct}%` : '—'}
+                  </td>
                   <td className="slurm-mono">{job.end ? shortTime(job.end) : 'running'}</td>
                   <td className="slurm-name" title={job.name}>
                     {job.name}

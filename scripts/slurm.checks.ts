@@ -154,9 +154,9 @@ report(
 )
 const history = parseHistory(
   [
-    '100|cpu|COMPLETED|0:0|00:10:00|2026-09-28T08:00:00|2026-09-28T08:10:00|prep',
-    '101|gpu|CANCELLED by 1234|0:15|00:01:00|2026-09-28T09:00:00|2026-09-28T09:01:00|a|b',
-    '102|gpu|RUNNING|0:0|00:05:00|2026-09-29T09:00:00|Unknown|train'
+    '100|cpu|COMPLETED|0:0|00:10:00|2026-09-28T08:00:00|2026-09-28T08:10:00|00:05:00|2|prep',
+    '101|gpu|CANCELLED by 1234|0:15|00:01:00|2026-09-28T09:00:00|2026-09-28T09:01:00||1|a|b',
+    '102|gpu|RUNNING|0:0|00:05:00|2026-09-29T09:00:00|Unknown|00:20:00|4|train'
   ].join('\n')
 )
 report(history.length === 3 && history[0].id === '102', 'newest first')
@@ -167,6 +167,21 @@ report(
 report(
   history[1].state === 'CANCELLED by 1234' && history[1].name === 'a|b',
   'keeps the state suffix and a name containing |'
+)
+report(
+  history[2].id === '100' && history[2].cpuEfficiencyPct === 25,
+  '300s of 600s x 2 CPUs is 25% efficiency',
+  JSON.stringify(history[2])
+)
+report(
+  history[1].cpuEfficiencyPct === null,
+  'an empty TotalCPU (job cancelled before it ran) gives null, not 0%',
+  JSON.stringify(history[1])
+)
+report(
+  history[0].cpuEfficiencyPct === 100,
+  '1200s of 300s x 4 CPUs (still running) is 100% efficiency',
+  JSON.stringify(history[0])
 )
 
 console.log('-- changes')
