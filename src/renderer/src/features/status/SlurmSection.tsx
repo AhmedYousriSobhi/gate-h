@@ -18,6 +18,21 @@ interface SlurmSectionProps {
 
 type ArrayTasks = SlurmJob[] | 'loading' | { error: string }
 
+type SlurmSubsection = 'jobs' | 'nodes' | 'gpu'
+const ALL_SUBSECTIONS: SlurmSubsection[] = ['jobs', 'nodes', 'gpu']
+const SUBSECTION_LABELS: Record<SlurmSubsection, string> = {
+  jobs: 'Jobs',
+  nodes: 'Nodes',
+  gpu: 'GPUs'
+}
+
+function toggled<T>(set: Set<T>, value: T): Set<T> {
+  const next = new Set(set)
+  if (next.has(value)) next.delete(value)
+  else next.add(value)
+  return next
+}
+
 function age(fetchedAt: string, now: number): string {
   const seconds = Math.max(0, Math.round((now - Date.parse(fetchedAt)) / 1000))
   if (seconds < 20) return 'just now'
@@ -85,6 +100,11 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const [now, setNow] = useState(() => Date.now())
   const [arrays, setArrays] = useState<Record<string, ArrayTasks>>({})
   const [actionError, setActionError] = useState<string | null>(null)
+  const [visibleSections, setVisibleSections] = useState<Set<SlurmSubsection>>(
+    () => new Set(ALL_SUBSECTIONS)
+  )
+  const [stateFilter, setStateFilter] = useState<Set<string>>(new Set())
+  const [userFilter, setUserFilter] = useState('')
   const watching = active && scheduler !== null
   // Re-watch after the settings change, so the next snapshot reflects them.
   const configKey = scheduler ? JSON.stringify(scheduler) : null
@@ -157,16 +177,62 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const columns = showUser ? 9 : 8
   const counts = new Map<string, number>()
   for (const job of snapshot.jobs) counts.set(job.state, (counts.get(job.state) ?? 0) + 1)
+  const trimmedUserFilter = userFilter.trim().toLowerCase()
+  const filtersActive = stateFilter.size > 0 || trimmedUserFilter.length > 0
+  // Counts/pills above the table always reflect every job, even while filtered, so there's
+  // something to filter back to - only the table body is narrowed.
+  const filteredJobs = snapshot.jobs.filter(
+    (job) =>
+      (stateFilter.size === 0 || stateFilter.has(job.state)) &&
+      (!trimmedUserFilter || (job.user ?? '').toLowerCase().includes(trimmedUserFilter))
+  )
+
+  function toggleSection(key: SlurmSubsection): void {
+    setVisibleSections((prev) => toggled(prev, key))
+  }
+
+  function toggleStateFilter(state: string): void {
+    setStateFilter((prev) => toggled(prev, state))
+  }
+
+  function resetFilters(): void {
+    setStateFilter(new Set())
+    setUserFilter('')
+  }
 
   return (
     <div className="status-section">
+      <div className="slurm-section-toggles">
+        {ALL_SUBSECTIONS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            className={`btn btn-sm${visibleSections.has(key) ? ' btn-primary' : ''}`}
+            onClick={() => toggleSection(key)}
+          >
+            {SUBSECTION_LABELS[key]}
+          </button>
+        ))}
+      </div>
       <div className="slurm-toolbar">
         <div className="slurm-counts">
-          {[...counts].map(([state, count]) => (
-            <span key={state} className={`issue-status ${stateClass(state)}`}>
-              {count} {state.toLowerCase()}
-            </span>
-          ))}
+          {[...counts].map(([state, count]) => {
+            const selected = stateFilter.has(state)
+            return (
+              <button
+                key={state}
+                type="button"
+                title={`Show only ${state.toLowerCase()} jobs`}
+                aria-pressed={selected}
+                className={`issue-status ${stateClass(state)} slurm-count-pill${
+                  selected ? ' slurm-count-pill-selected' : ''
+                }${stateFilter.size > 0 && !selected ? ' slurm-count-pill-dimmed' : ''}`}
+                onClick={() => toggleStateFilter(state)}
+              >
+                {count} {state.toLowerCase()}
+              </button>
+            )
+          })}
         </div>
         <span className="slurm-dim">
           {snapshot.fetchedAt && `Updated ${age(snapshot.fetchedAt, now)}`}
@@ -186,6 +252,26 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
         </button>
       </div>
 
+      {visibleSections.has('jobs') && (showUser || filtersActive) && (
+        <div className="slurm-toolbar">
+          {showUser && (
+            <input
+              className="slurm-user-filter"
+              type="text"
+              placeholder="Filter by username..."
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+              aria-label="Filter jobs by username"
+            />
+          )}
+          {filtersActive && (
+            <button type="button" className="btn btn-sm" onClick={resetFilters}>
+              Reset filters
+            </button>
+          )}
+        </div>
+      )}
+
       {snapshot.status === 'waiting' && <p className="hint">{snapshot.message}</p>}
       {actionError && <div className="error-banner">{actionError}</div>}
       {snapshot.status !== 'ok' && snapshot.status !== 'waiting' && (
@@ -197,127 +283,134 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
 
       {snapshot.fetchedAt && (
         <>
-          {snapshot.jobs.length === 0 ? (
-            <p className="hint">
-              {showUser ? 'No jobs in these partitions.' : 'You have no jobs in the queue.'}
-            </p>
-          ) : (
-            <div className="slurm-table-wrap">
-              <table className="slurm-table">
-                <thead>
-                  <tr>
-                    <th>Job</th>
-                    <th>Partition</th>
-                    {showUser && <th>User</th>}
-                    <th>State</th>
-                    <th>Time / limit</th>
-                    <th>Nodes</th>
-                    <th>Nodes or reason</th>
-                    <th>Name</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.jobs.map((job) => {
-                    const tasks = arrays[job.id]
-                    const expander = isCollapsedArray(job.id) ? (
-                      <button
-                        className="slurm-expander"
-                        title={tasks ? 'Collapse array' : 'Show array tasks'}
-                        onClick={() => void toggleArray(job)}
-                      >
-                        {tasks ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      </button>
-                    ) : undefined
-                    return [
-                      <JobRow
-                        key={job.id}
-                        job={job}
-                        showUser={showUser}
-                        expander={expander}
-                        onCancel={cancellable(job) ? () => void cancel(job.id) : undefined}
-                      />,
-                      tasks === 'loading' && (
-                        <tr key={`${job.id}-loading`} className="slurm-subrow">
-                          <td colSpan={columns} className="slurm-dim">
-                            Loading tasks...
-                          </td>
-                        </tr>
-                      ),
-                      tasks && !Array.isArray(tasks) && tasks !== 'loading' && (
-                        <tr key={`${job.id}-error`} className="slurm-subrow">
-                          <td colSpan={columns} className="slurm-error">
-                            {tasks.error}
-                          </td>
-                        </tr>
-                      ),
-                      Array.isArray(tasks) &&
-                        tasks.map((task) => (
-                          <JobRow
-                            key={`${job.id}-${task.id}`}
-                            job={task}
-                            showUser={showUser}
-                            expander={<span className="slurm-indent" />}
-                            onCancel={cancellable(task) ? () => void cancel(task.id) : undefined}
-                          />
-                        ))
-                    ]
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {snapshot.truncated && (
+          {visibleSections.has('jobs') &&
+            (snapshot.jobs.length === 0 ? (
+              <p className="hint">
+                {showUser ? 'No jobs in these partitions.' : 'You have no jobs in the queue.'}
+              </p>
+            ) : filteredJobs.length === 0 ? (
+              <p className="hint">No jobs match the current filter.</p>
+            ) : (
+              <div className="slurm-table-wrap">
+                <table className="slurm-table">
+                  <thead>
+                    <tr>
+                      <th>Job</th>
+                      <th>Partition</th>
+                      {showUser && <th>User</th>}
+                      <th>State</th>
+                      <th>Time / limit</th>
+                      <th>Nodes</th>
+                      <th>Nodes or reason</th>
+                      <th>Name</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredJobs.map((job) => {
+                      const tasks = arrays[job.id]
+                      const expander = isCollapsedArray(job.id) ? (
+                        <button
+                          className="slurm-expander"
+                          title={tasks ? 'Collapse array' : 'Show array tasks'}
+                          onClick={() => void toggleArray(job)}
+                        >
+                          {tasks ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </button>
+                      ) : undefined
+                      return [
+                        <JobRow
+                          key={job.id}
+                          job={job}
+                          showUser={showUser}
+                          expander={expander}
+                          onCancel={cancellable(job) ? () => void cancel(job.id) : undefined}
+                        />,
+                        tasks === 'loading' && (
+                          <tr key={`${job.id}-loading`} className="slurm-subrow">
+                            <td colSpan={columns} className="slurm-dim">
+                              Loading tasks...
+                            </td>
+                          </tr>
+                        ),
+                        tasks && !Array.isArray(tasks) && tasks !== 'loading' && (
+                          <tr key={`${job.id}-error`} className="slurm-subrow">
+                            <td colSpan={columns} className="slurm-error">
+                              {tasks.error}
+                            </td>
+                          </tr>
+                        ),
+                        Array.isArray(tasks) &&
+                          tasks.map((task) => (
+                            <JobRow
+                              key={`${job.id}-${task.id}`}
+                              job={task}
+                              showUser={showUser}
+                              expander={<span className="slurm-indent" />}
+                              onCancel={cancellable(task) ? () => void cancel(task.id) : undefined}
+                            />
+                          ))
+                      ]
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          {visibleSections.has('jobs') && snapshot.truncated && (
             <p className="hint">
               Showing the first {MAX_SLURM_JOBS.toLocaleString()} jobs. Narrow the partitions in the
               cluster settings to see the rest.
             </p>
           )}
 
-          <GpuUsage cluster={cluster} snapshot={snapshot} />
+          {visibleSections.has('gpu') && <GpuUsage cluster={cluster} snapshot={snapshot} />}
 
-          <h3 className="slurm-subheading">Nodes</h3>
-          {snapshot.partitions.length === 0 ? (
-            <p className="hint">sinfo reported no partitions.</p>
-          ) : (
-            <div className="slurm-table-wrap">
-              <table className="slurm-table">
-                <thead>
-                  <tr>
-                    <th>Partition</th>
-                    <th>Available</th>
-                    <th>Nodes</th>
-                    <th>By state</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.partitions.map((partition) => (
-                    <tr key={partition.name}>
-                      <td>{partition.name}</td>
-                      <td>{partition.available}</td>
-                      <td>{partition.totalNodes}</td>
-                      <td>
-                        {Object.entries(partition.nodesByState)
-                          .map(([state, count]) => `${count} ${state}`)
-                          .join(' · ')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {snapshot.nodeIssues.length > 0 && (
-            <div className="issue-list">
-              {snapshot.nodeIssues.map((issue) => (
-                <div className="issue-row" key={`${issue.nodes}-${issue.state}`}>
-                  <div>
-                    <span className="slurm-mono">{issue.nodes}</span> {issue.reason}
-                  </div>
-                  <span className="issue-status slurm-state-failed">{issue.state}</span>
+          {visibleSections.has('nodes') && (
+            <>
+              <h3 className="slurm-subheading">Nodes</h3>
+              {snapshot.partitions.length === 0 ? (
+                <p className="hint">sinfo reported no partitions.</p>
+              ) : (
+                <div className="slurm-table-wrap">
+                  <table className="slurm-table">
+                    <thead>
+                      <tr>
+                        <th>Partition</th>
+                        <th>Available</th>
+                        <th>Nodes</th>
+                        <th>By state</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshot.partitions.map((partition) => (
+                        <tr key={partition.name}>
+                          <td>{partition.name}</td>
+                          <td>{partition.available}</td>
+                          <td>{partition.totalNodes}</td>
+                          <td>
+                            {Object.entries(partition.nodesByState)
+                              .map(([state, count]) => `${count} ${state}`)
+                              .join(' · ')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
+              )}
+              {snapshot.nodeIssues.length > 0 && (
+                <div className="issue-list">
+                  {snapshot.nodeIssues.map((issue) => (
+                    <div className="issue-row" key={`${issue.nodes}-${issue.state}`}>
+                      <div>
+                        <span className="slurm-mono">{issue.nodes}</span> {issue.reason}
+                      </div>
+                      <span className="issue-status slurm-state-failed">{issue.state}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
