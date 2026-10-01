@@ -140,6 +140,19 @@ export interface AzureTunnelVerifyResult {
   latencyMs?: number
 }
 
+export type AzureAuthStatus = 'valid' | 'expired' | 'signed-out' | 'cli-missing'
+
+/** The local Azure CLI's cached sign-in state, independent of any one cluster's subscription -
+ *  checked before a tunnel connect attempt instead of letting it fail and only then explaining
+ *  why (see `GateHApi.azure.checkAuth`). */
+export interface AzureAuthState {
+  status: AzureAuthStatus
+  /** The cached account's sign-in name. Present even when `status` is 'expired' - `az account
+   *  show` reads only the local cache and succeeds even with an expired refresh token - but
+   *  absent when signed out or when the CLI itself is missing. */
+  account?: string
+}
+
 export interface AzureSubscription {
   id: string
   name: string
@@ -711,6 +724,15 @@ export interface GateHApi {
     verifyTunnel(clusterId: string): Promise<AzureTunnelVerifyResult>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
+    /** The local Azure CLI's cached sign-in state - checked before a connect attempt (and again
+     *  on a connect failure) so the Terminal can show "Azure authentication required" instead of
+     *  a generic connection error. `clusterId` only picks which cluster's tunnel config to read
+     *  (e.g. its tenant); the result isn't scoped to that cluster's subscription. */
+    checkAuth(clusterId: string): Promise<AzureAuthState>
+    /** Runs `az login` (device-code on a headless Linux box, the system browser otherwise),
+     *  broadcasting progress through `onStatus` the same way a tunnel pre-flight does. Resolves
+     *  once signed in; never attempted automatically, only from an explicit "Authenticate" click. */
+    login(clusterId: string): Promise<void>
   }
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>

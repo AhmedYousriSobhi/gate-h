@@ -207,6 +207,7 @@
 }
 
 .session-badge-auth-required,
+.session-badge-azure-auth-required,
 .session-badge-paused {
   color: var(--color-offline);
   background-color: rgba(240, 85, 95, 0.12);

@@ -10,7 +10,8 @@ const STATUS_WORDS: Record<SessionStatus, string> = {
   connected: 'connected',
   reconnecting: 'reconnecting',
   paused: 'paused',
-  'auth-required': 'login needed'
+  'auth-required': 'login needed',
+  'azure-auth-required': 'azure sign-in needed'
 }
 
 // Matches .tab-context-menu's min-width plus a little slack, for keeping the menu on-screen.

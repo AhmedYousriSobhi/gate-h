@@ -474,7 +474,8 @@ body.session-dragging * {
 }
 
 /* Amber, not red: the session isn't broken, it's waiting on a login. */
-.session-dot-auth-required {
+.session-dot-auth-required,
+.session-dot-azure-auth-required {
   background-color: var(--color-warning);
 }
 
@@ -552,6 +553,11 @@ body.session-dragging * {
   font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px;
   user-select: text;
+}
+
+.terminal-shade-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 /* Popover under the header's History button - every step of this session's connection
