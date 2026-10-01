@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { BarChart3, Copy, MoreHorizontal, RotateCw, Ticket } from 'lucide-react'
-import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
+import { BarChart3, Copy, ListChecks, MoreHorizontal, RotateCw, Ticket } from 'lucide-react'
+import type {
+  ClusterReachability,
+  ClusterSummary,
+  SchedulerSnapshot
+} from '../../../../shared/types'
 import { avatarColorFor, initialFor } from '../../lib/avatarColor'
 import { showToast } from '../../lib/toast'
 import StatusPill from './StatusPill'
@@ -9,9 +13,25 @@ interface ClusterCardProps {
   cluster: ClusterSummary
   siblingNames: string[]
   reachability?: ClusterReachability
+  /** Last-known Slurm snapshot, if one exists - see useSchedulerSnapshots. Never fetched on the
+   *  Overview's account; absent entirely for a cluster that's never been connected. */
+  schedulerSnapshot?: SchedulerSnapshot
   unread: number
   onConnect: (cluster: ClusterSummary) => void
   onViewStatus: (cluster: ClusterSummary) => void
+}
+
+/** Compact "N running · M pending" from a snapshot's jobs - every distinct state present, most
+ *  populous first, so a long tail of one-off states doesn't bump a state with real counts out of
+ *  view on a narrow card. */
+function jobSummary(snapshot: SchedulerSnapshot): string {
+  if (snapshot.jobs.length === 0) return 'No jobs'
+  const counts = new Map<string, number>()
+  for (const job of snapshot.jobs) counts.set(job.state, (counts.get(job.state) ?? 0) + 1)
+  return [...counts]
+    .sort((a, b) => b[1] - a[1])
+    .map(([state, count]) => `${count} ${state.toLowerCase()}`)
+    .join(' · ')
 }
 
 /** One cluster's "fleet at a glance" summary: identity, live status, and a single state-aware
@@ -21,6 +41,7 @@ export default function ClusterCard({
   cluster,
   siblingNames,
   reachability,
+  schedulerSnapshot,
   unread,
   onConnect,
   onViewStatus
@@ -139,6 +160,22 @@ export default function ClusterCard({
               {tag}
             </span>
           ))}
+        </div>
+      )}
+
+      {cluster.scheduler && schedulerSnapshot?.fetchedAt && (
+        <div
+          className="cluster-card-slurm"
+          title="Slurm status (last refreshed while this cluster was open)"
+        >
+          <ListChecks size={12} strokeWidth={2} />
+          <span>{jobSummary(schedulerSnapshot)}</span>
+          {schedulerSnapshot.nodeIssues.length > 0 && (
+            <span className="cluster-card-slurm-alert">
+              {schedulerSnapshot.nodeIssues.length} node issue
+              {schedulerSnapshot.nodeIssues.length === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
       )}
 

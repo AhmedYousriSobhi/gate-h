@@ -95,6 +95,7 @@ const api: GateHApi = {
       ipcRenderer.invoke('teleport:login', clusterId, options)
   },
   scheduler: {
+    getCached: () => ipcRenderer.invoke('scheduler:getCached'),
     watch: (clusterId: string) => ipcRenderer.send('scheduler:watch', clusterId),
     unwatch: (clusterId: string) => ipcRenderer.send('scheduler:unwatch', clusterId),
     refresh: (clusterId: string) => ipcRenderer.send('scheduler:refresh', clusterId),

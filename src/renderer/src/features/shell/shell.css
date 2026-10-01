@@ -1082,6 +1082,23 @@ button.widget-picker-item:hover {
   white-space: nowrap;
 }
 
+.cluster-card-slurm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-card-slurm-alert {
+  flex-shrink: 0;
+  color: var(--color-offline);
+  font-weight: 560;
+}
+
 .cluster-card-footer {
   display: flex;
   align-items: center;

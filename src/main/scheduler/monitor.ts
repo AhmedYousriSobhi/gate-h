@@ -75,6 +75,14 @@ function cached(clusterId: string, config: SchedulerConfig): SchedulerSnapshot |
   return entry && entry.configKey === JSON.stringify(config) ? entry.snapshot : null
 }
 
+/** Every cluster's last-known snapshot, regardless of which one's Status tab is open right now -
+ *  for the Overview dashboard, which shows every cluster at once but never opens a connection
+ *  itself. A snapshot only exists here once something else (the foreground poll, or the opt-in
+ *  background check) has actually fetched one; a cluster that's never been connected has none. */
+export function getCachedSnapshots(): Record<string, SchedulerSnapshot> {
+  return Object.fromEntries([...cache].map(([clusterId, entry]) => [clusterId, entry.snapshot]))
+}
+
 function publish(clusterId: string, config: SchedulerConfig, snapshot: SchedulerSnapshot): void {
   cache.set(clusterId, { configKey: JSON.stringify(config), snapshot })
   broadcast?.(snapshot)

@@ -8,6 +8,7 @@ import Toaster from '../toast/Toaster'
 import OverviewDashboard from './OverviewDashboard'
 import ImportSshConfigDialog from './ImportSshConfigDialog'
 import { useReachability } from '../../hooks/useReachability'
+import { useSchedulerSnapshots } from '../../hooks/useSchedulerSnapshots'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useProfiles } from '../../hooks/useProfiles'
 import { usePanelLayout } from '../../hooks/usePanelLayout'
@@ -39,6 +40,7 @@ export default function AppShell(): React.JSX.Element {
   // pauses (nothing to flip). Reading the live value directly lets a paused session recheck it on
   // every push (roughly every 60s - see clusterMonitor's sweep interval), not just on a flip.
   const reachability = useReachability()
+  const schedulerSnapshots = useSchedulerSnapshots()
 
   // Open clusters stay mounted (hidden when not selected) so their sessions stay connected in the
   // background - see MainPanel's `hidden` prop.
@@ -176,6 +178,7 @@ export default function AppShell(): React.JSX.Element {
                 profileName={profilesState.activeProfile?.name ?? ''}
                 clusters={clusters}
                 reachability={reachability}
+                schedulerSnapshots={schedulerSnapshots}
                 notifications={notifications}
                 onConnect={handleConnect}
                 onViewStatus={handleViewStatus}

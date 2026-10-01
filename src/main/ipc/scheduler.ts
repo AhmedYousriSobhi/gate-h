@@ -3,6 +3,7 @@ import { cancelJob, submitScript } from '../scheduler/submit'
 import {
   fetchArrayTasks,
   fetchJobHistory,
+  getCachedSnapshots,
   sampleJobGpus,
   refreshScheduler,
   unwatchScheduler,
@@ -10,6 +11,7 @@ import {
 } from '../scheduler/monitor'
 
 export function registerSchedulerIpcHandlers(): void {
+  ipcMain.handle('scheduler:getCached', () => getCachedSnapshots())
   ipcMain.on('scheduler:watch', (_event, clusterId: string) => watchScheduler(clusterId))
   ipcMain.on('scheduler:unwatch', (_event, clusterId: string) => unwatchScheduler(clusterId))
   ipcMain.on('scheduler:refresh', (_event, clusterId: string) => refreshScheduler(clusterId))

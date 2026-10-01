@@ -3,7 +3,8 @@ import { Plus, Search } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
-  ClusterSummary
+  ClusterSummary,
+  SchedulerSnapshot
 } from '../../../../shared/types'
 import ClusterCard from './ClusterCard'
 
@@ -11,6 +12,7 @@ interface OverviewDashboardProps {
   profileName: string
   clusters: ClusterSummary[]
   reachability: Record<string, ClusterReachability>
+  schedulerSnapshots: Record<string, SchedulerSnapshot>
   notifications: ClusterNotification[]
   onConnect: (cluster: ClusterSummary) => void
   onViewStatus: (cluster: ClusterSummary) => void
@@ -30,6 +32,7 @@ export default function OverviewDashboard({
   profileName,
   clusters,
   reachability,
+  schedulerSnapshots,
   notifications,
   onConnect,
   onViewStatus,
@@ -207,6 +210,7 @@ export default function OverviewDashboard({
                   cluster={cluster}
                   siblingNames={siblingNames}
                   reachability={reachability[cluster.id]}
+                  schedulerSnapshot={schedulerSnapshots[cluster.id]}
                   unread={unreadByCluster[cluster.id] ?? 0}
                   onConnect={onConnect}
                   onViewStatus={onViewStatus}
