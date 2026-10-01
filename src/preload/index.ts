@@ -166,6 +166,8 @@ const api: GateHApi = {
     list: () => ipcRenderer.invoke('notifications:list'),
     markRead: (id: string) => ipcRenderer.send('notifications:markRead', id),
     markAllRead: () => ipcRenderer.send('notifications:markAllRead'),
+    delete: (id: string) => ipcRenderer.send('notifications:delete', id),
+    clearAll: () => ipcRenderer.send('notifications:clearAll'),
     onCreated: (callback: (notification: ClusterNotification) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: ClusterNotification): void =>
         callback(payload)

@@ -161,5 +161,18 @@ export function getDb(): Database.Database {
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      cluster_id TEXT NOT NULL,
+      cluster_name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      message TEXT NOT NULL,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `)
+
   return db
 }
