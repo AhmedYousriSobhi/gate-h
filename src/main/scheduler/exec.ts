@@ -165,18 +165,30 @@ function hasTeleportSession(clusterId: string): boolean {
   return Boolean(validUntil && Date.parse(validUntil) > Date.now())
 }
 
+/** An ssh2/Teleport `exec` runs the command via the user's shell non-interactively *and*
+ *  non-login, which on many HPC login nodes skips exactly where Slurm's PATH gets set up
+ *  (`/etc/profile.d/*.sh`, environment modules, etc. - all sourced by a login shell, none of them
+ *  by a bare non-interactive one). Running it one layer inside `bash -lc` instead forces a login
+ *  shell for just this command, picking up that setup without needing any change to the cluster's
+ *  own shell config. */
+function asLoginShell(command: string): string {
+  const escaped = command.replace(/'/g, `'\\''`)
+  return `bash -lc '${escaped}'`
+}
+
 function runNow(cluster: ClusterSummary, command: string, stdin?: string): Promise<ExecResult> {
   const execTarget = cluster.scheduler?.execTarget
+  const wrapped = asLoginShell(command)
   if (cluster.teleport) {
     if (!hasTeleportSession(cluster.id)) {
       return Promise.reject(new NoSessionError('Waiting for a Teleport login.'))
     }
-    return execOverTeleport(cluster, command, stdin, execTarget?.host)
+    return execOverTeleport(cluster, wrapped, stdin, execTarget?.host)
   }
   const client = getLiveClient(cluster.id)
   if (!client) return Promise.reject(new NoSessionError('Waiting for a terminal session.'))
-  if (execTarget) return execViaForward(client, cluster, execTarget, command, stdin)
-  return execOverSsh(client, command, stdin)
+  if (execTarget) return execViaForward(client, cluster, execTarget, wrapped, stdin)
+  return execOverSsh(client, wrapped, stdin)
 }
 
 /** Whether an ssh2 cluster has a terminal connection a command could run on right now. */
