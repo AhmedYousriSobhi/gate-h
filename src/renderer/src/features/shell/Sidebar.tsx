@@ -44,7 +44,8 @@ const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
   connected: 'Connected',
   reconnecting: 'Reconnecting',
   paused: 'Paused',
-  'auth-required': 'Login needed'
+  'auth-required': 'Login needed',
+  'azure-auth-required': 'Azure sign-in needed'
 }
 
 export default function Sidebar({

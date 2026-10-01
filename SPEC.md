@@ -111,9 +111,17 @@ never the plaintext or ciphertext.
   from a popover in the terminal header, without retyping it or searching shell history.
 
 ### 3.3.1 Azure tunnel pre-flight
-- A cluster may require an Azure tunnel. Before its SSH session connects, the app signs in with
-  the Azure CLI (a device-code prompt if needed), selects the configured subscription, and opens
-  the tunnel. Each step shows in the terminal view. Every `az` call is scoped to the configured
+- A cluster may require an Azure tunnel. Before attempting one, the app checks the local Azure
+  CLI's cached sign-in itself (not scoped to any one cluster's subscription) - unlike Teleport
+  (§3.3.2), this is a point-in-time pre-flight check, not a continuously watched session. A
+  missing or expired sign-in shows a distinct "Azure authentication required" terminal state (the
+  cached account and why, when known) instead of a generic connection failure, with an explicit
+  "Authenticate" action and a "Retry connection" action; like Teleport, nothing retries
+  automatically and the app never signs in by itself. Authenticating runs `az login` (a
+  device-code prompt on a headless Linux box, the system browser otherwise), streamed into the
+  terminal view the same way the rest of this pre-flight is.
+- Once signed in, selecting the configured subscription and opening the tunnel follow the same
+  way, each step shown in the terminal view. Every `az` call is scoped to the configured
   subscription per-invocation (`--subscription`), never through the CLI's own process-wide
   `az account set`, so configuring one cluster never changes what another cluster (or a manual
   `az` session elsewhere) resolves against.
