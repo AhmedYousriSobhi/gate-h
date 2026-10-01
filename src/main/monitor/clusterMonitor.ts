@@ -2,12 +2,18 @@ import { listClusters } from '../clusters'
 import { checkTcpReachable, checkTeleportProxyReachable } from './reachability'
 import { addNotification } from '../notifications/store'
 import { isTunnelUp } from '../azure/tunnel'
+import { runWithConcurrency } from './concurrencyLimit'
 import type { ClusterReachability, ClusterSummary } from '../../shared/types'
 
 // 60s matches the default check interval of standard SSH-aware monitoring tools (e.g.
 // Nagios/Icinga's check_ssh) - frequent enough for a "live" LED, conservative enough not to look
 // like abuse to a cluster's intrusion detection.
 const SWEEP_INTERVAL_MS = 60_000
+
+// A sweep probes every cluster in every profile at once (see sweep() below) - without a cap, a
+// large fleet would open this many connections in the same instant, every minute, forever. A
+// small fleet (the common case) never reaches this limit, so its sweep latency is unaffected.
+const SWEEP_CONCURRENCY = 20
 
 const state = new Map<string, ClusterReachability>()
 // Tracks the last *settled* (non-"checking") status per cluster, separately from `state` above,
@@ -85,7 +91,7 @@ async function sweep(): Promise<void> {
       lastSettledStatus.delete(id)
     }
   }
-  await Promise.all(clusters.map((c) => checkOne(c)))
+  await runWithConcurrency(clusters, SWEEP_CONCURRENCY, checkOne)
 }
 
 export function getAllReachability(): Record<string, ClusterReachability> {

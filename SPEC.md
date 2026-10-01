@@ -269,7 +269,10 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
 - **No connection-attempt storms** — every reconnect/re-poll path (Terminal, Grafana) is bounded
   and backed off (§3.3, §3.4); a target that's genuinely down must degrade to a slow, capped retry
   cadence, not sustained pressure. This matters specifically because the "clusters" on the other
-  end are real HPC login nodes and shared infrastructure, not disposable test endpoints.
+  end are real HPC login nodes and shared infrastructure, not disposable test endpoints. The
+  reachability sweep (§3.2) and Jira polling, which run against every cluster in every profile at
+  once, cap how many checks run concurrently rather than firing all of them in the same instant -
+  needed once a fleet reaches into the tens or hundreds of clusters.
 - **Linux and macOS** — developed and verified on Linux. macOS (Apple Silicon and Intel) is
   built, tested and smoke-tested per architecture in CI (`.github/workflows/macos.yml`) and
   follows its conventions: native window controls, an app menu, Cmd shortcuts, and the login
