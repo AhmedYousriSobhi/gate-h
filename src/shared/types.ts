@@ -392,6 +392,10 @@ export interface SlurmHistoryJob {
   /** Null while the job is still running. */
   end: string | null
   name: string
+  /** CPU time actually used (sacct's TotalCPU) as a percentage of what was reserved (AllocCPUS x
+   *  Elapsed) - the same figure `seff` reports. Null when Slurm didn't report enough to compute
+   *  it (e.g. the job never started, or AllocCPUS/TotalCPU came back empty). */
+  cpuEfficiencyPct: number | null
 }
 
 export interface SlurmPartition {

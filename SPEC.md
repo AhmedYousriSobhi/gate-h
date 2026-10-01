@@ -217,7 +217,8 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
   state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
   collapsed until expanded. Also show per-partition node counts by state and drain reasons.
 - **Job history.** On request, the user's own finished jobs from the last 24 hours or 7 days
-  (from `sacct`), with final state and exit code. Never polled.
+  (from `sacct`), with final state, exit code, and CPU efficiency (time actually used vs. time
+  reserved - the same figure `seff` reports, computed from the same `sacct` row). Never polled.
 - **Scheduler commands never open a connection.** They run only on a session the user already has
   open: an extra `ssh2` channel on the terminal's connection, or, for Teleport, a non-interactive
   `tsh ssh` while the Teleport session is valid. With no live session, nothing runs, and a
