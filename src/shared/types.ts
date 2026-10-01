@@ -579,6 +579,11 @@ export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   splitRatio: 0.5
 }
 
+/** The Overview dashboard's layout: a card per cluster (the default), or a dense table row per
+ *  cluster for a fleet too large for cards to stay useful. Persisted like PanelLayout above. */
+export type OverviewViewMode = 'cards' | 'table'
+export const DEFAULT_OVERVIEW_VIEW_MODE: OverviewViewMode = 'cards'
+
 export interface GateHApi {
   /** `process.platform` of the main process - 'darwin', 'linux' or 'win32'. */
   platform: string
@@ -744,5 +749,11 @@ export interface GateHApi {
      *  saved yet or the saved value doesn't parse. */
     get(): Promise<PanelLayout>
     set(layout: PanelLayout): void
+  }
+  overview: {
+    /** Always resolves to a valid mode - falls back to DEFAULT_OVERVIEW_VIEW_MODE if nothing was
+     *  saved yet or the saved value doesn't parse. */
+    getViewMode(): Promise<OverviewViewMode>
+    setViewMode(mode: OverviewViewMode): void
   }
 }

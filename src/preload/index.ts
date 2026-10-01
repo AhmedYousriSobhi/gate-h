@@ -10,6 +10,7 @@ import type {
   GateHApi,
   JobTemplateInput,
   SnippetInput,
+  OverviewViewMode,
   PanelLayout,
   PanelOrientation,
   SchedulerSnapshot,
@@ -197,6 +198,10 @@ const api: GateHApi = {
   layout: {
     get: () => ipcRenderer.invoke('layout:get'),
     set: (layout: PanelLayout) => ipcRenderer.send('layout:set', layout)
+  },
+  overview: {
+    getViewMode: () => ipcRenderer.invoke('overview:getViewMode'),
+    setViewMode: (mode: OverviewViewMode) => ipcRenderer.send('overview:setViewMode', mode)
   }
 }
 

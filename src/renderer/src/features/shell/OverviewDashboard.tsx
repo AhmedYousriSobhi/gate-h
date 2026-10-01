@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { LayoutGrid, Plus, Rows3, Search } from 'lucide-react'
 import type {
   ClusterNotification,
   ClusterReachability,
@@ -7,6 +7,9 @@ import type {
   SchedulerSnapshot
 } from '../../../../shared/types'
 import ClusterCard from './ClusterCard'
+import ClusterTableRow from './ClusterTableRow'
+import { fleetJobTotals } from './jobSummary'
+import { useOverviewViewMode } from '../../hooks/useOverviewViewMode'
 
 interface OverviewDashboardProps {
   profileName: string
@@ -44,8 +47,8 @@ export default function OverviewDashboard({
   const [prevReachability, setPrevReachability] = useState(reachability)
   const gridRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
+  const { viewMode, setViewMode } = useOverviewViewMode()
 
-  const siblingNames = useMemo(() => clusters.map((c) => c.name), [clusters])
   const unreadByCluster = useMemo(() => {
     const map: Record<string, number> = {}
     for (const n of notifications) if (!n.read) map[n.clusterId] = (map[n.clusterId] ?? 0) + 1
@@ -55,6 +58,11 @@ export default function OverviewDashboard({
   const onlineCount = clusters.filter((c) => reachability[c.id]?.status === 'online').length
   const offlineCount = clusters.filter((c) => reachability[c.id]?.status === 'offline').length
   const alertCount = clusters.filter((c) => unreadByCluster[c.id] > 0).length
+  // Display-only (not a filter): sums jobs from whatever snapshots are already cached (clusters
+  // that have been opened or are background-watched - see SPEC.md §3.10), never fetching anything
+  // itself, so showing it here adds no polling.
+  const jobTotals = useMemo(() => fleetJobTotals(schedulerSnapshots), [schedulerSnapshots])
+  const hasSchedulerData = Object.keys(schedulerSnapshots).length > 0
 
   // Announces online/offline transitions for screen-reader users, since the status pill's color
   // and icon change is otherwise silent. Computed during render (the React-recommended way to
@@ -127,6 +135,28 @@ export default function OverviewDashboard({
     <div className="overview">
       <div className="overview-header">
         <h1>{profileName}</h1>
+        {clusters.length > 0 && (
+          <div className="overview-view-toggle" role="group" aria-label="Dashboard layout">
+            <button
+              className={`icon-btn${viewMode === 'cards' ? ' icon-btn-active' : ''}`}
+              title="Card view"
+              aria-label="Card view"
+              aria-pressed={viewMode === 'cards'}
+              onClick={() => setViewMode('cards')}
+            >
+              <LayoutGrid size={14} strokeWidth={2} />
+            </button>
+            <button
+              className={`icon-btn${viewMode === 'table' ? ' icon-btn-active' : ''}`}
+              title="Table view"
+              aria-label="Table view"
+              aria-pressed={viewMode === 'table'}
+              onClick={() => setViewMode('table')}
+            >
+              <Rows3 size={14} strokeWidth={2} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div aria-live="polite" className="sr-only">
@@ -177,6 +207,18 @@ export default function OverviewDashboard({
                 Clear filter
               </button>
             )}
+            {hasSchedulerData && (
+              <div className="overview-job-totals" aria-label="Fleet-wide job totals">
+                <span className="overview-stat overview-stat-static">
+                  <span className="overview-stat-value">{jobTotals.running}</span>
+                  <span className="overview-stat-label">Jobs running</span>
+                </span>
+                <span className="overview-stat overview-stat-static">
+                  <span className="overview-stat-value">{jobTotals.pending}</span>
+                  <span className="overview-stat-label">Jobs pending</span>
+                </span>
+              </div>
+            )}
             {clusters.length > SEARCH_THRESHOLD && (
               <div className="overview-search">
                 <Search size={13} strokeWidth={2} />
@@ -202,13 +244,41 @@ export default function OverviewDashboard({
             <div className="overview-empty">
               <p className="hint">No clusters match this filter.</p>
             </div>
+          ) : viewMode === 'table' ? (
+            <div className="overview-table-wrap">
+              <table className="overview-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Name</th>
+                    <th>Host</th>
+                    <th>Jobs</th>
+                    <th>Integrations</th>
+                    <th>Alerts</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((cluster) => (
+                    <ClusterTableRow
+                      key={cluster.id}
+                      cluster={cluster}
+                      reachability={reachability[cluster.id]}
+                      schedulerSnapshot={schedulerSnapshots[cluster.id]}
+                      unread={unreadByCluster[cluster.id] ?? 0}
+                      onConnect={onConnect}
+                      onViewStatus={onViewStatus}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="overview-grid" ref={gridRef} onKeyDown={handleGridKeyDown}>
               {visible.map((cluster) => (
                 <ClusterCard
                   key={cluster.id}
                   cluster={cluster}
-                  siblingNames={siblingNames}
                   reachability={reachability[cluster.id]}
                   schedulerSnapshot={schedulerSnapshots[cluster.id]}
                   unread={unreadByCluster[cluster.id] ?? 0}

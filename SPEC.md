@@ -207,7 +207,13 @@ never the plaintext or ciphertext.
 ### 3.9 Overview dashboard
 - The default view (nothing selected) is a grid of every cluster in the active profile, showing
   reachability, tags, which integrations (Grafana/Jira) are configured, and unread notification
-  count — never a blank "pick something" screen.
+  count — never a blank "pick something" screen. A summary strip above it shows fleet-wide counts
+  (total, online, unreachable, with alerts) that double as filters, plus running/pending job totals
+  from whatever Slurm snapshots are already cached (never a new poll) once at least one is.
+- The grid can be switched to a dense table (one row per cluster: status, name, host, job summary,
+  configured integrations, unread count, actions) for a fleet too large for cards to stay
+  scannable. The choice persists across restarts, the same way the Terminal/Status layout does
+  (§3.8).
 
 ### 3.10 HPC orchestration
 Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). The design is in
