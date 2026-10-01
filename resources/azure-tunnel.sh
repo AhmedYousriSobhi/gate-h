@@ -387,6 +387,9 @@ start_tunnel() {
   : >"$LOG_FILE"
 
   status tunnel "Starting tunnel $TUNNEL_DESC"
+  # Printed so a user can copy it out and run the exact same command by hand to compare - this is
+  # the one place the full invocation exists as a single string.
+  status tunnel "Command: ${TUNNEL_CMD[*]}"
   # Job control gives the background job its own process group (pgid == pid),
   # so `down` can signal az and its ssh child together.
   set -m

@@ -124,6 +124,22 @@ export interface AzureTunnelStatusEvent {
   message: string
 }
 
+/** Result of an on-demand "verify this tunnel" check: opens/reuses the cluster's real tunnel (the
+ *  same one a connect would use, not a separate test-only one), then checks whether a live sshd
+ *  banner actually arrives through it - independent of SSH auth/host-key concerns, since a known
+ *  az CLI bug can leave a tunnel's local port listening after its underlying session has silently
+ *  died (azure-cli#28367), which looks identical to a healthy tunnel until something tries to use
+ *  it. */
+export interface AzureTunnelVerifyResult {
+  tunnelOpened: boolean
+  /** Set when `tunnelOpened` is false - the real `az` CLI failure reason. */
+  tunnelError?: string
+  /** Whether an SSH banner arrived through the tunnel within the check's timeout. Only meaningful
+   *  when `tunnelOpened` is true. */
+  bannerReceived: boolean
+  latencyMs?: number
+}
+
 export interface AzureSubscription {
   id: string
   name: string
@@ -685,6 +701,10 @@ export interface GateHApi {
     /** Searches every enabled subscription for a VM by name - there's no single `az` command for
      *  "which subscription is this VM in". */
     findVm(vmName: string): Promise<AzureVmMatch[]>
+    /** Opens (or reuses) the cluster's tunnel and checks it actually passes traffic through to a
+     *  live sshd - see `AzureTunnelVerifyResult`. Progress streams through `onStatus` meanwhile,
+     *  same as a real connect. */
+    verifyTunnel(clusterId: string): Promise<AzureTunnelVerifyResult>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
   }

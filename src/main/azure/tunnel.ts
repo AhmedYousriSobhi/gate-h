@@ -1,10 +1,12 @@
 import { execFile, spawn } from 'child_process'
 import { createInterface } from 'readline'
 import scriptPath from '../../../resources/azure-tunnel.sh?asset&asarUnpack'
+import { checkTcpReachable } from '../monitor/reachability'
 import type {
   AzureSubscription,
   AzureTunnelPhase,
   AzureTunnelStatusEvent,
+  AzureTunnelVerifyResult,
   AzureVmMatch,
   ClusterSummary
 } from '../../shared/types'
@@ -137,6 +139,36 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
   const run = runUp(cluster).finally(() => pendingUps.delete(cluster.id))
   pendingUps.set(cluster.id, run)
   return run
+}
+
+/** On-demand self-check: opens (or reuses) the cluster's real tunnel, then confirms it actually
+ *  carries traffic by waiting for a live SSH banner through it - not just that its local port is
+ *  listening, which a known az CLI bug can leave true even after the session itself has silently
+ *  died (azure-cli#28367, see the comment on `stopTunnel`'s caller in ssh/manager.ts). This is the
+ *  same tunnel a real connect would use, so a user can run it before opening a terminal, or to
+ *  tell apart "the tunnel itself is broken" from "something past the tunnel is." */
+export async function verifyTunnel(cluster: ClusterSummary): Promise<AzureTunnelVerifyResult> {
+  const tunnel = cluster.azureTunnel
+  if (!tunnel) throw new Error(`${cluster.name} has no Azure tunnel configured`)
+  try {
+    await ensureTunnel(cluster)
+  } catch (err) {
+    return {
+      tunnelOpened: false,
+      tunnelError: err instanceof Error ? err.message : String(err),
+      bannerReceived: false
+    }
+  }
+  const startedAt = Date.now()
+  // Longer than the reachability monitor's default: this is a deliberate, one-off check the user
+  // is actively waiting on, not a frequent background poll, so it's worth giving a slow Bastion
+  // relay more room before calling it dead.
+  const bannerReceived = await checkTcpReachable('127.0.0.1', tunnel.localPort, 10_000)
+  return {
+    tunnelOpened: true,
+    bannerReceived,
+    latencyMs: bannerReceived ? Date.now() - startedAt : undefined
+  }
 }
 
 /** Tears the tunnel down. Spawned detached so it still completes when called on app quit. */

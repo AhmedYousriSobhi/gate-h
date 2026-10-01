@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   BarChart3,
   Cloud,
@@ -13,6 +13,7 @@ import {
 import type {
   AzureSubscription,
   AzureTunnelMode,
+  AzureTunnelVerifyResult,
   AzureVmMatch,
   ClusterInput,
   ClusterSummary,
@@ -440,6 +441,26 @@ export default function ClusterForm({
   const [vmLookupError, setVmLookupError] = useState<string | null>(null)
   const [vmFoundMessage, setVmFoundMessage] = useState<string | null>(null)
   const [findingVm, setFindingVm] = useState(false)
+  const [verifyingTunnel, setVerifyingTunnel] = useState(false)
+  const [verifyProgress, setVerifyProgress] = useState<string | null>(null)
+  // The literal `az network bastion tunnel`/`az ssh vm` invocation, parsed out of the status
+  // stream and kept separately from `verifyProgress` (which only ever shows the latest step) so it
+  // survives to the end of the check for the user to copy and run by hand.
+  const [verifyCommand, setVerifyCommand] = useState<string | null>(null)
+  const [verifyResult, setVerifyResult] = useState<AzureTunnelVerifyResult | null>(null)
+  const [verifyFailure, setVerifyFailure] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!initial) return
+    return window.api.azure.onStatus((event) => {
+      if (event.clusterId !== initial.id) return
+      if (event.message.startsWith('Command: ')) {
+        setVerifyCommand(event.message.slice('Command: '.length))
+      } else {
+        setVerifyProgress(event.message)
+      }
+    })
+  }, [initial])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -455,6 +476,27 @@ export default function ClusterForm({
       setSubscriptionsError(err instanceof Error ? err.message : 'Failed to list subscriptions.')
     } finally {
       setLoadingSubscriptions(false)
+    }
+  }
+
+  /** Opens (or reuses) the saved cluster's real Azure tunnel and checks it actually carries
+   *  traffic through to a live sshd - the same check a user would otherwise have to do by hand
+   *  with their own `az`/`ssh` commands. Only available once the cluster is saved, since it needs
+   *  a real `ClusterSummary` (and its id) to drive the tunnel the same way a connect would. */
+  async function handleVerifyTunnel(): Promise<void> {
+    if (!initial) return
+    setVerifyingTunnel(true)
+    setVerifyProgress(null)
+    setVerifyCommand(null)
+    setVerifyResult(null)
+    setVerifyFailure(null)
+    try {
+      const result = await window.api.azure.verifyTunnel(initial.id)
+      setVerifyResult(result)
+    } catch (err) {
+      setVerifyFailure(err instanceof Error ? err.message : 'Could not verify the tunnel.')
+    } finally {
+      setVerifyingTunnel(false)
     }
   }
 
@@ -996,6 +1038,62 @@ export default function ClusterForm({
                           ever allows 22 or 3389 here, regardless of the real sshd port.
                         </p>
                       </div>
+                      {initial && (
+                        <div className="form-field">
+                          <div className="form-inline">
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={handleVerifyTunnel}
+                              disabled={verifyingTunnel}
+                            >
+                              {verifyingTunnel ? 'Verifying...' : 'Verify tunnel'}
+                            </button>
+                          </div>
+                          <p className="hint">
+                            Opens (or reuses) this cluster&apos;s actual tunnel and waits for a live
+                            SSH banner through it - confirms the tunnel really carries traffic, not
+                            just that az reports it open. Uses the saved configuration, not unsaved
+                            edits above.
+                          </p>
+                          {verifyingTunnel && verifyProgress && (
+                            <p className="hint">{verifyProgress}</p>
+                          )}
+                          {verifyFailure && (
+                            <p className="hint">Could not verify: {verifyFailure}</p>
+                          )}
+                          {verifyResult && !verifyResult.tunnelOpened && (
+                            <p className="hint">
+                              Tunnel failed to open: {verifyResult.tunnelError}
+                            </p>
+                          )}
+                          {verifyResult &&
+                            verifyResult.tunnelOpened &&
+                            verifyResult.bannerReceived && (
+                              <p className="hint">
+                                Tunnel is open and an SSH banner arrived in {verifyResult.latencyMs}
+                                ms - the path to sshd is working end to end.
+                              </p>
+                            )}
+                          {verifyResult &&
+                            verifyResult.tunnelOpened &&
+                            !verifyResult.bannerReceived && (
+                              <p className="hint">
+                                Tunnel opened and az reports it listening, but no SSH banner arrived
+                                within 10s - the session may have silently died while its local port
+                                kept listening (a known az CLI issue, azure-cli#28367). Try closing
+                                the cluster and reconnecting to force a fresh tunnel; if it keeps
+                                happening, run the command below by hand and compare it against a
+                                plain `ssh` to the same local port.
+                              </p>
+                            )}
+                          {verifyCommand && (
+                            <p className="hint">
+                              <code>{verifyCommand}</code>
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <div className="form-field">
                         <label htmlFor="azureSubscription">Subscription (ID or name)</label>
                         <div className="form-inline">
