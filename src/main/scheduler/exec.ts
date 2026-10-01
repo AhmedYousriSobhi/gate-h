@@ -171,7 +171,7 @@ function hasTeleportSession(clusterId: string): boolean {
  *  by a bare non-interactive one). Running it one layer inside `bash -lc` instead forces a login
  *  shell for just this command, picking up that setup without needing any change to the cluster's
  *  own shell config. */
-function asLoginShell(command: string): string {
+export function asLoginShell(command: string): string {
   const escaped = command.replace(/'/g, `'\\''`)
   return `bash -lc '${escaped}'`
 }

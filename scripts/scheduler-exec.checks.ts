@@ -4,7 +4,7 @@
 // that nothing runs without a live session. Takes ~15s: the timeout checks wait out the real one.
 
 import { EventEmitter } from 'events'
-import { NoSessionError, runOnCluster } from '../src/main/scheduler/exec'
+import { asLoginShell, NoSessionError, runOnCluster } from '../src/main/scheduler/exec'
 
 interface Globals {
   __clients: Record<string, unknown>
@@ -131,7 +131,10 @@ async function main(): Promise<void> {
     ok.exitCode === 0 && ok.stdout === 'out\n' && ok.stderr === 'warn\n',
     'collects stdout, stderr and the exit code'
   )
-  report(client.commands[0] === 'squeue', 'runs the exact command on the existing connection')
+  report(
+    client.commands[0] === asLoginShell('squeue'),
+    'runs the exact command on the existing connection'
+  )
   const failed = await runOnCluster(ssh('c1'), 'squeue')
   report(
     failed.exitCode === 1,
@@ -204,7 +207,7 @@ async function main(): Promise<void> {
   report(etResult.stdout === 'nodes\n', 'runs on the forwarded execTarget client')
   report(primary.commands.length === 0, 'never runs the command on the primary session client')
   report(
-    execTargetClient.commands[0] === 'sinfo',
+    execTargetClient.commands[0] === asLoginShell('sinfo'),
     'the exact command reaches the execTarget client'
   )
   report(execTargetClient.ended, 'the short-lived execTarget client is closed after the run')
