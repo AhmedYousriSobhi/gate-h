@@ -23,7 +23,9 @@ import type {
 } from '../../../../shared/types'
 import {
   DEFAULT_SCHEDULER_INTERVAL_SEC,
+  DEFAULT_STORAGE_INTERVAL_SEC,
   MIN_SCHEDULER_INTERVAL_SEC,
+  MIN_STORAGE_INTERVAL_SEC,
   PROMETHEUS_LABEL_PATTERN,
   SLURM_PARTITION_PATTERN,
   STORAGE_PATH_PATTERN
@@ -101,6 +103,8 @@ interface FormState {
   schedulerExecPort: string
   useStorage: boolean
   storagePaths: string
+  storageInterval: string
+  storageAutoRefresh: boolean
 }
 
 function toFormState(c?: ClusterSummary): FormState {
@@ -161,7 +165,9 @@ function toFormState(c?: ClusterSummary): FormState {
     schedulerExecHost: c?.scheduler?.execTarget?.host ?? '',
     schedulerExecPort: c?.scheduler?.execTarget?.port ? String(c.scheduler.execTarget.port) : '',
     useStorage: Boolean(c?.storage),
-    storagePaths: c?.storage?.paths.join(', ') ?? '~'
+    storagePaths: c?.storage?.paths.join(', ') ?? '~',
+    storageInterval: String(c?.storage?.intervalSec ?? DEFAULT_STORAGE_INTERVAL_SEC),
+    storageAutoRefresh: c?.storage?.autoRefresh ?? false
   }
 }
 
@@ -180,6 +186,10 @@ function storageError(form: FormState): string | null {
   const bad = paths.find((path) => !STORAGE_PATH_PATTERN.test(path.replace(/\$(USER|HOME)/g, '')))
   if (bad)
     return `Storage paths may only use letters, digits, _ . / ~ - and $USER/$HOME ("${bad}").`
+  const interval = Number(form.storageInterval)
+  if (!Number.isInteger(interval) || interval < MIN_STORAGE_INTERVAL_SEC) {
+    return `Storage refresh interval must be a whole number of seconds, at least ${MIN_STORAGE_INTERVAL_SEC}.`
+  }
   return null
 }
 
@@ -717,7 +727,13 @@ export default function ClusterForm({
               : null
           }
         : null,
-      storage: form.useStorage ? { paths: splitList(form.storagePaths) } : null
+      storage: form.useStorage
+        ? {
+            paths: splitList(form.storagePaths),
+            autoRefresh: form.storageAutoRefresh,
+            intervalSec: Number(form.storageInterval)
+          }
+        : null
     }
 
     setSaving(true)
@@ -1572,10 +1588,35 @@ export default function ClusterForm({
                         />
                       </div>
                       <p className="hint">
-                        Checked on request from the cluster&apos;s Status, on the terminal&apos;s
-                        open session: df for each filesystem, plus your quota on Lustre (lfs quota)
-                        and GPFS (mmlsquota).
+                        Always available on request from the cluster&apos;s Status, on the
+                        terminal&apos;s open session: df for each filesystem, plus your quota on
+                        Lustre (lfs quota) and GPFS (mmlsquota).
                       </p>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="storageInterval">Refresh every (seconds)</label>
+                          <input
+                            id="storageInterval"
+                            type="number"
+                            min={MIN_STORAGE_INTERVAL_SEC}
+                            value={form.storageInterval}
+                            onChange={(e) => set('storageInterval', e.target.value)}
+                          />
+                        </div>
+                        <label className="form-field-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.storageAutoRefresh}
+                            onChange={(e) => set('storageAutoRefresh', e.target.checked)}
+                          />
+                          Refresh automatically
+                        </label>
+                      </div>
+                      {form.useTeleport && form.storageAutoRefresh && (
+                        <p className="hint">
+                          Every refresh is a new Teleport session in your site&apos;s audit log.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
