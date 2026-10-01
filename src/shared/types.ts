@@ -227,7 +227,18 @@ export const SLURM_PARTITION_PATTERN = /^[A-Za-z0-9_.-]+$/
 /** Paths whose usage and quota the Status widget can check, e.g. `~` or `/scratch/$USER`. */
 export interface StorageConfig {
   paths: string[]
+  /** Off (the default) means checked only on request. Mirrors SchedulerConfig.autoRefresh, but
+   *  optional rather than required - absent in configs saved before this existed = off, the same
+   *  convention as SchedulerConfig.notify. */
+  autoRefresh?: boolean
+  /** Only meaningful when autoRefresh is on. Absent = DEFAULT_STORAGE_INTERVAL_SEC. */
+  intervalSec?: number
 }
+
+// Longer than Slurm's floor/default: a quota check hits the filesystem's metadata servers, and
+// usage doesn't change minute to minute the way a job queue does.
+export const MIN_STORAGE_INTERVAL_SEC = 60
+export const DEFAULT_STORAGE_INTERVAL_SEC = 300
 
 /** Characters allowed in a storage path, after removing `$USER`/`$HOME` - paths are passed to the
  *  remote shell, so nothing that could end the quoting or start a command. */

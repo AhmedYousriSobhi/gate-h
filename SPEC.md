@@ -257,7 +257,10 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
   closed or standby cluster runs nothing.
 - **Storage quota.** For configured paths, show the whole filesystem's usage and the user's own
   quota where the filesystem has one (Lustre, GPFS), flagging usage over the soft limit. Checked
-  on request only, over the existing session.
+  on request by default, over the existing session; auto-refresh is opt-in per cluster (off by
+  default, a longer floor/interval than Slurm's since quota doesn't change minute to minute),
+  only while the cluster is selected and the section is visible, with the same backoff on
+  repeated failure as the rest of this section.
 - **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
   running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
   existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside
