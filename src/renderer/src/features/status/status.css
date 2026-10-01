@@ -318,6 +318,44 @@
   flex: 1;
 }
 
+.slurm-section-toggles {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.slurm-count-pill {
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.slurm-count-pill-selected {
+  box-shadow: 0 0 0 2px var(--color-text-1) inset;
+}
+
+.slurm-count-pill-dimmed {
+  opacity: 0.45;
+}
+
+.slurm-user-filter {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--color-text-1);
+  font-size: 12.5px;
+  min-width: 180px;
+}
+
+.slurm-user-filter:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
 .slurm-dim {
   color: var(--color-text-3);
   font-size: 12px;
