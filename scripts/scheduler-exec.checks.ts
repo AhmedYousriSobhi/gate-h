@@ -34,6 +34,8 @@ class FakeChannel extends EventEmitter {
 /** An ssh2 Client stand-in: each exec() plays the next script on a fresh channel. */
 function fakeClient(scripts: Script[]): {
   exec: unknown
+  end: () => void
+  ended: boolean
   commands: string[]
   channels: FakeChannel[]
   open: () => number
@@ -43,6 +45,10 @@ function fakeClient(scripts: Script[]): {
     commands: [] as string[],
     channels: [] as FakeChannel[],
     maxOpen: 0,
+    ended: false,
+    end: () => {
+      state.ended = true
+    },
     open: () => state.channels.filter((c) => !c.closed).length,
     exec: (command: string, cb: (err: Error | undefined, stream: FakeChannel) => void) => {
       state.commands.push(command)
@@ -70,6 +76,36 @@ const finish =
 const ssh = (id: string): never => ({ id, name: id, teleport: null }) as never
 const teleport = (id: string): never =>
   ({ id, name: id, teleport: { proxy: 'tp.example.com' } }) as never
+const sshWithExecTarget = (id: string, execTarget: { host: string; port?: number }): never =>
+  ({
+    id,
+    name: id,
+    teleport: null,
+    connection: { host: 'login', port: 22, username: 'u', authMethod: 'agent' },
+    scheduler: {
+      kind: 'slurm',
+      scope: 'mine',
+      partitions: [],
+      intervalSec: 60,
+      autoRefresh: true,
+      execTarget
+    }
+  }) as never
+const teleportWithExecTarget = (id: string, execTarget: { host: string; port?: number }): never =>
+  ({
+    id,
+    name: id,
+    teleport: { proxy: 'tp.example.com' },
+    connection: { host: 'primary-node', port: 22, username: 'u', authMethod: 'agent' },
+    scheduler: {
+      kind: 'slurm',
+      scope: 'mine',
+      partitions: [],
+      intervalSec: 60,
+      autoRefresh: true,
+      execTarget
+    }
+  }) as never
 
 async function rejection(p: Promise<unknown>): Promise<Error | null> {
   try {
@@ -154,6 +190,36 @@ async function main(): Promise<void> {
   report(
     noLogin instanceof NoSessionError,
     "the wrapper's no-session exit code maps to NoSessionError"
+  )
+
+  console.log('-- Slurm execTarget')
+  const primary = fakeClient([])
+  const execTargetClient = fakeClient([finish('nodes\n')])
+  g.__clients = { et1: primary }
+  g.__execTargetClient = execTargetClient
+  const etResult = await runOnCluster(
+    sshWithExecTarget('et1', { host: 'bastion', port: 2222 }),
+    'sinfo'
+  )
+  report(etResult.stdout === 'nodes\n', 'runs on the forwarded execTarget client')
+  report(primary.commands.length === 0, 'never runs the command on the primary session client')
+  report(
+    execTargetClient.commands[0] === 'sinfo',
+    'the exact command reaches the execTarget client'
+  )
+  report(execTargetClient.ended, 'the short-lived execTarget client is closed after the run')
+
+  g.__teleport = {
+    ...g.__teleport,
+    tp2: { clusterId: 'tp2', validUntil: new Date(Date.now() + 3_600_000).toISOString() }
+  }
+  const tpTarget = await runOnCluster(
+    teleportWithExecTarget('tp2', { host: 'other-node' }),
+    'echo hi'
+  )
+  report(
+    /TARGET=other-node/.test(tpTarget.stderr),
+    'a Teleport execTarget threads the target host through teleportExecCommand'
   )
 
   console.log('-- limits')

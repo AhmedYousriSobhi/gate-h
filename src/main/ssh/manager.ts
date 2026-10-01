@@ -1,12 +1,9 @@
 import { Client, type ClientChannel, type ConnectConfig } from 'ssh2'
-import { readFileSync } from 'fs'
-import { homedir } from 'os'
-import { join } from 'path'
 import { randomUUID } from 'crypto'
 import type { WebContents } from 'electron'
 import { getCluster, getClusterSecrets } from '../clusters'
 import { addNotification } from '../notifications/store'
-import { checkKnownHost } from './knownHosts'
+import { buildConnectConfig, connectClient, openForward, type HostContext } from './connect'
 import { ensureTunnel, stopTunnel } from '../azure/tunnel'
 import { ptyManager } from '../pty/manager'
 import {
@@ -19,11 +16,14 @@ import { refreshTeleportSessions } from '../teleport/sessionState'
 import type { ClusterSummary, ConnectionProfile } from '../../shared/types'
 
 // Manages live SSH sessions: connects (optionally chained through a jump/bastion host via
-// forwardOut, per the standard ssh2 jump-host pattern), opens an interactive shell channel, and
-// streams its output to the renderer over IPC. Sessions live only in memory for this process.
-// Teleport clusters are the exception: their session is `tsh ssh` on a local PTY (see
-// openTeleportSession), behind the same session ids and ssh:* events, so the renderer drives
-// both kinds identically.
+// forwardOut, per the standard ssh2 jump-host pattern - composable with Direct or an Azure
+// tunnel, see openSshSession below), opens an interactive shell channel, and streams its output
+// to the renderer over IPC. Sessions live only in memory for this process. Teleport clusters are
+// the exception: their session is `tsh ssh` on a local PTY (see openTeleportSession), behind the
+// same session ids and ssh:* events, so the renderer drives both kinds identically. A jump host
+// can't be layered on a Teleport session: every node Teleport can route to presents a
+// certificate-format host key, which the `ssh2` package this app uses cannot verify at all (see
+// docs/STATUS.md).
 
 interface Session {
   clusterId: string
@@ -37,91 +37,6 @@ const sessions = new Map<string, Session>()
 // Session ids whose closure was requested by the app (switching clusters, quitting, etc.) rather
 // than the remote end hanging up on its own - used to avoid notifying on every routine disconnect.
 const intentionalCloses = new Set<string>()
-
-function expandHome(path: string): string {
-  return path.startsWith('~') ? join(homedir(), path.slice(1)) : path
-}
-
-interface HostContext {
-  clusterId: string
-  clusterName: string
-  /** How this host is described in a mismatch notification, e.g. "login node" or "jump host". */
-  role: string
-}
-
-/** Trust-on-first-use host key verification (see `../ssh/knownHosts.ts`) plus SSH-level keepalive.
- *  ssh2 sends no keepalive and does no host verification by default - both matter specifically
- *  for HPC clusters: login nodes are frequently reached over a VPN or through firewalls/NAT that
- *  silently drop idle connections (keepalive lets the client detect that instead of sitting in a
- *  falsely "connected" state), and a cluster's public-facing login node is exactly the kind of
- *  target worth pinning a host key for. */
-function buildConnectConfig(
-  profile: ConnectionProfile,
-  secret: string | null,
-  hostContext: HostContext,
-  /** Where to actually dial, when that's a local tunnel end rather than `profile.host` - the host
-   *  key stays pinned under `profile`'s host:port, the machine it really belongs to. */
-  dial?: { host: string; port: number }
-): ConnectConfig {
-  const config: ConnectConfig = {
-    host: dial?.host ?? profile.host,
-    port: dial?.port ?? profile.port,
-    username: profile.username,
-    readyTimeout: 20000,
-    keepaliveInterval: 15000,
-    keepaliveCountMax: 3,
-    hostHash: 'sha256',
-    hostVerifier: (fingerprint: string) => {
-      const result = checkKnownHost(profile.host, profile.port, fingerprint)
-      if (result === 'mismatch') {
-        addNotification({
-          clusterId: hostContext.clusterId,
-          clusterName: hostContext.clusterName,
-          kind: 'ssh',
-          severity: 'warning',
-          message:
-            `Host key for the ${hostContext.role} (${profile.host}:${profile.port}) changed ` +
-            `since the last connection - refused to connect. This happens after a legitimate ` +
-            `reinstall, but can also mean someone is intercepting the connection; verify with ` +
-            `whoever administers the cluster before trusting the new key.`
-        })
-        return false
-      }
-      return true
-    }
-  }
-
-  if (profile.authMethod === 'password') {
-    config.password = secret ?? undefined
-  } else if (profile.authMethod === 'private-key') {
-    if (!profile.privateKeyPath) {
-      throw new Error(`Private key path is required for host ${profile.host}`)
-    }
-    config.privateKey = readFileSync(expandHome(profile.privateKeyPath))
-    if (secret) config.passphrase = secret
-  } else if (profile.authMethod === 'agent') {
-    config.agent = process.env.SSH_AUTH_SOCK
-  }
-
-  return config
-}
-
-function connectClient(config: ConnectConfig): Promise<Client> {
-  return new Promise((resolve, reject) => {
-    const client = new Client()
-    const onConnectError = (err: Error): void => reject(err)
-    client.once('ready', () => {
-      // Drop the connect-time rejection handler now that the promise has settled - otherwise it
-      // stays attached for the life of the connection, silently swallowing any later 'error'
-      // (calling reject() after a promise has settled is a no-op) instead of letting the caller's
-      // own post-connect listener see it.
-      client.removeListener('error', onConnectError)
-      resolve(client)
-    })
-    client.on('error', onConnectError)
-    client.connect(config)
-  })
-}
 
 /** Sends only if the renderer's WebContents is still alive - a session's streams can keep
  *  emitting events after the window that owns them has been destroyed (e.g. app quit while a
@@ -149,19 +64,6 @@ function notifyConnectFailure(
   })
 }
 
-function openForward(
-  jumpClient: Client,
-  targetHost: string,
-  targetPort: number
-): Promise<ClientChannel> {
-  return new Promise((resolve, reject) => {
-    jumpClient.forwardOut('127.0.0.1', 0, targetHost, targetPort, (err, stream) => {
-      if (err) reject(err)
-      else resolve(stream)
-    })
-  })
-}
-
 function openShell(client: Client): Promise<ClientChannel> {
   return new Promise((resolve, reject) => {
     client.shell({ term: 'xterm-256color' }, (err, stream) => {
@@ -178,13 +80,11 @@ export async function openSshSession(
   const cluster = getCluster(clusterId)
   if (!cluster) throw new Error('Cluster not found')
   if (cluster.teleport) return openTeleportSession(cluster, sender)
+  const jump = cluster.connection.jumpHost
   const secrets = getClusterSecrets(clusterId)
   const tunnel = cluster.azureTunnel
 
   if (tunnel) {
-    if (cluster.connection.jumpHost) {
-      throw new Error('A cluster can connect through a jump host or an Azure tunnel, not both.')
-    }
     try {
       await ensureTunnel(cluster)
     } catch (err) {
@@ -198,44 +98,57 @@ export async function openSshSession(
     }
   }
 
-  let jumpClient: Client | null = null
-  let targetConfig = buildConnectConfig(
-    cluster.connection,
-    secrets.connectionSecret,
-    { clusterId, clusterName: cluster.name, role: 'login node' },
-    tunnel ? { host: '127.0.0.1', port: tunnel.localPort } : undefined
-  )
+  // The near hop: what the base method (Direct or Azure tunnel) actually reaches first. Without a
+  // jump host this is the cluster's own target - today's no-jump behavior, unchanged. With one,
+  // the base method reaches the jump host instead, and a `forwardOut` below completes the trip to
+  // `cluster.connection`, whose meaning as the final interactive target never changes.
+  const nearProfile: ConnectionProfile = jump
+    ? {
+        host: jump.host,
+        port: jump.port,
+        username: jump.username,
+        authMethod: jump.authMethod,
+        privateKeyPath: jump.privateKeyPath
+      }
+    : cluster.connection
+  const nearRole = jump ? 'jump host' : 'login node'
+  const nearContext: HostContext = { clusterId, clusterName: cluster.name, role: nearRole }
+  // Note (v1 limitation for the fallback): a jump host with no stored secret of its own reuses
+  // the cluster's connection secret only when it shares the same auth method.
+  const nearSecret = jump
+    ? (secrets.jumpHostSecret ??
+      (jump.authMethod === cluster.connection.authMethod ? secrets.connectionSecret : null))
+    : secrets.connectionSecret
 
-  if (cluster.connection.jumpHost) {
-    const jump = cluster.connection.jumpHost
-    // Note (v1 limitation): the jump host reuses the cluster's connection secret only when it
-    // shares the same auth method; a passworded jump host with a different password than the
-    // target is not yet supported - it needs its own stored secret. Tracked for a follow-up.
-    const jumpSecret =
-      jump.authMethod === cluster.connection.authMethod ? secrets.connectionSecret : null
-    try {
-      jumpClient = await connectClient(
-        buildConnectConfig(
-          {
-            host: jump.host,
-            port: jump.port,
-            username: jump.username,
-            authMethod: jump.authMethod,
-            privateKeyPath: jump.privateKeyPath
-          },
-          jumpSecret,
-          { clusterId, clusterName: cluster.name, role: 'jump host' }
-        )
+  let nearClient: Client
+  try {
+    nearClient = await connectClient(
+      buildConnectConfig(
+        nearProfile,
+        nearSecret,
+        nearContext,
+        tunnel ? { host: '127.0.0.1', port: tunnel.localPort } : undefined
       )
-    } catch (err) {
-      notifyConnectFailure(
-        clusterId,
-        cluster.name,
-        err,
-        `Could not connect to the jump host for ${cluster.name}`
-      )
-      throw err
-    }
+    )
+  } catch (err) {
+    // A Bastion tunnel can hang with its local port still listening (azure-cli#28367), so `up`
+    // would keep reusing it; tearing it down makes the Terminal's next retry open a fresh one.
+    if (tunnel) await stopTunnel(clusterId)
+    notifyConnectFailure(
+      clusterId,
+      cluster.name,
+      err,
+      jump
+        ? `Could not connect to the jump host for ${cluster.name}`
+        : `Could not connect to ${cluster.name}`
+    )
+    throw err
+  }
+
+  let jumpClient: Client | null = null
+  let client: Client
+  if (jump) {
+    jumpClient = nearClient
     // Once connected, connectClient's own error listener is gone (see its comment) - without a
     // replacement, an error on this client (e.g. the jump host drops mid-session) would be an
     // unhandled 'error' event, which crashes the whole main process. The forwarded stream closing
@@ -244,13 +157,21 @@ export async function openSshSession(
     jumpClient.on('error', (err: Error) => {
       console.error(`[gate-h] jump host ${jump.host}:${jump.port} error:`, err.message)
     })
+    let targetConfig: ConnectConfig
     try {
       const forwardStream = await openForward(
         jumpClient,
         cluster.connection.host,
         cluster.connection.port
       )
-      targetConfig = { ...targetConfig, sock: forwardStream }
+      targetConfig = {
+        ...buildConnectConfig(cluster.connection, secrets.connectionSecret, {
+          clusterId,
+          clusterName: cluster.name,
+          role: 'login node'
+        }),
+        sock: forwardStream
+      }
     } catch (err) {
       jumpClient.end()
       notifyConnectFailure(
@@ -261,19 +182,17 @@ export async function openSshSession(
       )
       throw err
     }
+    try {
+      client = await connectClient(targetConfig)
+    } catch (err) {
+      jumpClient.end()
+      notifyConnectFailure(clusterId, cluster.name, err, `Could not connect to ${cluster.name}`)
+      throw err
+    }
+  } else {
+    client = nearClient
   }
 
-  let client: Client
-  try {
-    client = await connectClient(targetConfig)
-  } catch (err) {
-    // A Bastion tunnel can hang with its local port still listening (azure-cli#28367), so `up`
-    // would keep reusing it; tearing it down makes the Terminal's next retry open a fresh one.
-    if (tunnel) await stopTunnel(clusterId)
-    jumpClient?.end()
-    notifyConnectFailure(clusterId, cluster.name, err, `Could not connect to ${cluster.name}`)
-    throw err
-  }
   const stream = await openShell(client)
 
   const sessionId = randomUUID()

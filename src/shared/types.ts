@@ -5,6 +5,14 @@
 
 export type SshAuthMethod = 'password' | 'private-key' | 'agent'
 
+/** An optional hop dialed before the cluster's base connection method (Direct or an Azure tunnel)
+ *  reaches its own target. Composable with either one: the base method connects to this host
+ *  first, then an ssh2 `forwardOut` reaches `ConnectionProfile.host`/`port`, whose meaning as the
+ *  final interactive target never changes. Not usable with Teleport (see TeleportConfig) - every
+ *  node Teleport can route to presents a certificate-format host key, which the `ssh2` package
+ *  this app uses cannot verify. Its own secret is `ClusterInput.jumpHostSecret`/
+ *  `ClusterSummary.hasJumpHostSecret`; when unset, falls back to reusing the connection's own
+ *  secret if `authMethod` matches (legacy behavior). */
 export interface JumpHostConfig {
   host: string
   port: number
@@ -73,10 +81,12 @@ export interface JiraProfile {
 export type AzureTunnelMode = 'bastion' | 'az-ssh'
 
 /** An Azure tunnel opened (via resources/azure-tunnel.sh) before this cluster's SSH session
- *  connects. SSH then dials 127.0.0.1:`localPort` instead of `connection.host`, while
- *  `connection.host`/`port` stay the tunnel's far end - the Bastion target VM, or (az-ssh) the
- *  login node as seen from the VM - and the identity its host key is pinned under. No secrets:
- *  the Azure CLI keeps its own token cache. */
+ *  connects. SSH then dials 127.0.0.1:`localPort` instead of dialing a host directly. Without a
+ *  jump host, the tunnel's far end is `connection.host`/`port` - the Bastion target VM, or
+ *  (az-ssh) the login node as seen from the VM - and the identity its host key is pinned under.
+ *  With `connection.jumpHost` set, the tunnel's far end is the jump host instead, and a normal
+ *  ssh2 hop from there reaches `connection.host`/`port`. No secrets: the Azure CLI keeps its own
+ *  token cache. */
 export interface AzureTunnelConfig {
   mode: AzureTunnelMode
   /** Required - the app runs the script non-interactively, so it can't show the picker. */
@@ -126,8 +136,10 @@ export interface AzureVmMatch {
 /** A cluster reached through a Teleport proxy. Gate-H runs resources/teleport.sh in a PTY, so
  *  the session check and any login (password/OTP prompts, or SSO in the browser) happen in the
  *  terminal before `tsh ssh` takes over. `connection.host` is the Teleport node name and
- *  `connection.username` the login; port, auth method and jump host don't apply. No secrets:
- *  tsh keeps its own certificates in ~/.tsh. */
+ *  `connection.username` the login; port, auth method and jump host don't apply - every node
+ *  Teleport can route to presents a certificate-format host key that the `ssh2` package this app
+ *  uses for jump-host chaining cannot verify, so a jump host can't be layered on top (see
+ *  JumpHostConfig). No secrets: tsh keeps its own certificates in ~/.tsh. */
 export interface TeleportConfig {
   /** host[:port] of the Teleport proxy, e.g. teleport.example.com:443 */
   proxy: string
@@ -164,6 +176,12 @@ export interface SchedulerConfig {
    *  the cluster is open in the background, this keeps a check every 5 minutes on its existing
    *  SSH connection (never on Teleport). Absent in configs saved before it existed = off. */
   notify?: boolean
+  /** Run Slurm commands against this internal node instead of the terminal's primary target -
+   *  for a bastion/login node that doesn't host Slurm itself. Reached with one more ssh2
+   *  `forwardOut` hop from the cluster's existing connection (which already covers any jump host
+   *  or Azure tunnel), or `tsh ssh --no-login` to this host for a Teleport cluster. `port`
+   *  defaults to `connection.port`. Same identity/credentials as `connection` - no secrets here. */
+  execTarget?: { host: string; port?: number } | null
 }
 
 export const MIN_SCHEDULER_INTERVAL_SEC = 30
@@ -208,6 +226,7 @@ export interface ClusterInput {
   tags: string[]
   connection: ConnectionProfile
   connectionSecret?: string // SSH password or private-key passphrase
+  jumpHostSecret?: string // jump host's own password or private-key passphrase
   grafana: GrafanaProfile | null
   grafanaApiToken?: string
   jira: JiraProfile | null
@@ -235,6 +254,7 @@ export interface SshConfigCandidate {
 /** What the renderer receives when listing/reading clusters - secrets are never sent back. */
 export type ClusterSummary = Cluster & {
   hasConnectionSecret: boolean
+  hasJumpHostSecret: boolean
   hasGrafanaToken: boolean
   hasJiraToken: boolean
 }

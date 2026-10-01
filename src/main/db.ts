@@ -127,6 +127,10 @@ export function getDb(): Database.Database {
     db.exec('ALTER TABLE clusters ADD COLUMN storage TEXT')
   }
 
+  if (!columnExists(db, 'clusters', 'jump_host_secret')) {
+    db.exec('ALTER TABLE clusters ADD COLUMN jump_host_secret TEXT')
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS job_templates (
       id TEXT PRIMARY KEY,

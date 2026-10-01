@@ -149,7 +149,9 @@ xterm ──ssh:write/resize──▶ main: ptyManager (src/main/pty/manager.ts)
   check can't be used.
 - **Setup.** In the cluster form, tick **Behind Teleport** and enter the proxy address, plus a
   leaf cluster, Teleport user or auth connector if needed. Host becomes the Teleport node name
-  (as `tsh ls` shows it) and Username the login. Port, auth method and jump host don't apply.
+  (as `tsh ls` shows it) and Username the login. Port, auth method and jump host don't apply - a
+  jump host can't be layered on a Teleport connection, since every node Teleport routes to
+  presents a certificate-format host key that this app's SSH library (`ssh2`) can't verify.
   `tsh` must be on the app's `PATH`. A proxy behind your organisation's own CA needs `SSL_CERT_FILE`
   (and/or `SSL_CERT_DIR`) set to the CA bundle, as for `tsh` itself - on macOS, Gate-H adopts these
   from your login shell at startup the same way it already does `PATH`, so exporting them in
