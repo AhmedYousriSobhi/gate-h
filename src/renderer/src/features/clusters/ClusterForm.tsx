@@ -3,6 +3,7 @@ import {
   BarChart3,
   Cloud,
   HardDrive,
+  Info,
   KeyRound,
   ListChecks,
   ShieldCheck,
@@ -265,6 +266,132 @@ function splitList(value: string): string[] {
     .filter(Boolean)
 }
 
+/** One pane of the settings-style form below - a left-hand nav lists these, and the matching
+ *  content pane is the only one rendered at a time, so editing a cluster with many integrations
+ *  configured doesn't mean scrolling past all of them to reach the one you want (or the Save
+ *  button, which stays outside the scrolling area entirely). */
+type SectionKey =
+  | 'basics'
+  | 'ssh'
+  | 'jumpHost'
+  | 'azure'
+  | 'teleport'
+  | 'grafana'
+  | 'scheduler'
+  | 'storage'
+  | 'jira'
+
+interface SectionMeta {
+  key: SectionKey
+  label: string
+  icon: typeof KeyRound
+  /** Whether this section's own feature is currently turned on - shown as a dot next to its nav
+   *  entry, so what's configured is visible without opening every section. Omitted for Basics and
+   *  SSH connection, which aren't optional. */
+  enabled?: (form: FormState) => boolean
+}
+
+const SECTIONS: SectionMeta[] = [
+  { key: 'basics', label: 'Basics', icon: Info },
+  { key: 'ssh', label: 'SSH connection', icon: KeyRound },
+  {
+    key: 'jumpHost',
+    label: 'Jump host',
+    icon: Waypoints,
+    enabled: (f) => f.jumpHostEnabled && !f.useTeleport
+  },
+  { key: 'azure', label: 'Azure tunnel', icon: Cloud, enabled: (f) => f.useAzureTunnel },
+  { key: 'teleport', label: 'Teleport', icon: ShieldCheck, enabled: (f) => f.useTeleport },
+  { key: 'grafana', label: 'Grafana status', icon: BarChart3, enabled: (f) => f.useGrafana },
+  {
+    key: 'scheduler',
+    label: 'Slurm jobs and nodes',
+    icon: ListChecks,
+    enabled: (f) => f.useScheduler
+  },
+  { key: 'storage', label: 'Storage quota', icon: HardDrive, enabled: (f) => f.useStorage },
+  { key: 'jira', label: 'Jira', icon: Ticket, enabled: (f) => f.useJira }
+]
+
+/** The first validation problem in the same order handleSubmit used to check them, paired with
+ *  the section to switch to - so a save that fails always lands the user on the field that needs
+ *  fixing, instead of leaving them on whichever section happened to be open. */
+function firstFormError(form: FormState): { message: string; section: SectionKey } | null {
+  if (!form.name.trim())
+    return { message: 'Name, host, and username are required.', section: 'basics' }
+  if (!form.host.trim() || !form.username.trim()) {
+    return { message: 'Name, host, and username are required.', section: 'ssh' }
+  }
+  const jumpHost = jumpHostError(form)
+  if (jumpHost) return { message: jumpHost, section: 'jumpHost' }
+  const teleport = teleportError(form)
+  if (teleport) return { message: teleport, section: 'teleport' }
+  const azure = azureTunnelError(form)
+  if (azure) return { message: azure, section: 'azure' }
+  const scheduler = schedulerError(form)
+  if (scheduler) return { message: scheduler, section: 'scheduler' }
+  const storage = storageError(form)
+  if (storage) return { message: storage, section: 'storage' }
+  const gpu = gpuError(form)
+  if (gpu) return { message: gpu, section: 'grafana' }
+  return null
+}
+
+/** An optional section's heading: a toggle switch rather than a checkbox, since it turns a whole
+ *  group of fields on or off below it, not one item among independent choices - see
+ *  https://developer.apple.com/design/human-interface-guidelines/toggles ("use a switch to let
+ *  people turn on or off a group of settings"). */
+function SectionToggleHeader({
+  icon: Icon,
+  label,
+  checked,
+  disabled,
+  onChange
+}: {
+  icon: typeof KeyRound
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}): React.JSX.Element {
+  return (
+    <div className="cluster-section-header">
+      <h4>
+        <Icon size={13} strokeWidth={2} />
+        {label}
+      </h4>
+      <label className="toggle-switch">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="toggle-track">
+          <span className="toggle-thumb" />
+        </span>
+      </label>
+    </div>
+  )
+}
+
+/** What a toggled-off optional section shows instead of blank space below its header - a brief
+ *  explanation of what turning it on does, not nothing. */
+function SectionEmptyState({
+  icon: Icon,
+  children
+}: {
+  icon: typeof KeyRound
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="cluster-section-empty">
+      <Icon size={28} strokeWidth={1.5} />
+      <p>{children}</p>
+    </div>
+  )
+}
+
 export default function ClusterForm({
   initial,
   existingClusters = [],
@@ -272,6 +399,7 @@ export default function ClusterForm({
   onSubmit
 }: ClusterFormProps): React.JSX.Element {
   const [form, setForm] = useState<FormState>(() => toFormState(initial))
+  const [activeSection, setActiveSection] = useState<SectionKey>('basics')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   // Set to the port a same-port conflict was already warned about and saved through anyway;
@@ -404,25 +532,17 @@ export default function ClusterForm({
     e.preventDefault()
     setError(null)
 
-    if (!form.name.trim() || !form.host.trim() || !form.username.trim()) {
-      setError('Name, host, and username are required.')
-      return
-    }
-    const tunnelError =
-      jumpHostError(form) ??
-      teleportError(form) ??
-      azureTunnelError(form) ??
-      schedulerError(form) ??
-      storageError(form) ??
-      gpuError(form)
-    if (tunnelError) {
-      setError(tunnelError)
+    const validation = firstFormError(form)
+    if (validation) {
+      setError(validation.message)
+      setActiveSection(validation.section)
       return
     }
 
     const conflict = findPortConflict()
     if (conflict && portConflictConfirmedFor !== form.azureLocalPort) {
       setPortConflictConfirmedFor(form.azureLocalPort)
+      setActiveSection('azure')
       setError(
         `Local port ${form.azureLocalPort} is already used by "${conflict.name}"'s Azure tunnel - ` +
           'two tunnels sharing a port can silently interfere with each other. Click Save again to ' +
@@ -542,160 +662,99 @@ export default function ClusterForm({
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true">
-      <div className="modal">
+      <div className="modal cluster-modal">
         <h2>{initial ? `Edit ${initial.name}` : 'Add cluster'}</h2>
         {error && <div className="error-banner">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-field">
-            <label htmlFor="name">Name</label>
-            <input id="name" value={form.name} onChange={(e) => set('name', e.target.value)} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="description">Description</label>
-            <textarea
-              id="description"
-              rows={2}
-              value={form.description}
-              onChange={(e) => set('description', e.target.value)}
-            />
-          </div>
-          <div className="form-field">
-            <label htmlFor="tags">Tags (comma separated)</label>
-            <input id="tags" value={form.tags} onChange={(e) => set('tags', e.target.value)} />
-          </div>
-
-          <div className="form-section">
-            <h4>
-              <KeyRound size={13} strokeWidth={2} />
-              SSH connection
-            </h4>
-            <div className="form-row">
-              <div className="form-field">
-                <label htmlFor="host">Host</label>
-                <input id="host" value={form.host} onChange={(e) => set('host', e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label htmlFor="port">Port</label>
-                <input id="port" value={form.port} onChange={(e) => set('port', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-field">
-                <label htmlFor="username">Username</label>
-                <input
-                  id="username"
-                  value={form.username}
-                  onChange={(e) => set('username', e.target.value)}
-                />
-              </div>
-              <div className="form-field">
-                <label htmlFor="authMethod">Auth method</label>
-                <select
-                  id="authMethod"
-                  value={form.authMethod}
-                  onChange={(e) => set('authMethod', e.target.value as SshAuthMethod)}
-                >
-                  <option value="private-key">Private key</option>
-                  <option value="password">Password</option>
-                  <option value="agent">SSH agent</option>
-                </select>
-              </div>
-            </div>
-            {form.authMethod === 'private-key' && (
-              <div className="form-field">
-                <label htmlFor="privateKeyPath">Private key path</label>
-                <input
-                  id="privateKeyPath"
-                  placeholder="~/.ssh/id_ed25519"
-                  value={form.privateKeyPath}
-                  onChange={(e) => set('privateKeyPath', e.target.value)}
-                />
-              </div>
-            )}
-            {form.authMethod !== 'agent' && (
-              <div className="form-field">
-                <label htmlFor="connectionSecret">
-                  {form.authMethod === 'password' ? 'Password' : 'Key passphrase (if any)'}
-                </label>
-                <input
-                  id="connectionSecret"
-                  type="password"
-                  value={form.connectionSecret}
-                  onChange={(e) => set('connectionSecret', e.target.value)}
-                  placeholder={
-                    initial?.hasConnectionSecret ? 'Unchanged - leave blank to keep' : ''
-                  }
-                />
-              </div>
-            )}
-            {form.useTeleport && (
-              <p className="hint">
-                Connecting through Teleport (below): Host above is the Teleport node name and
-                Username the login. Port, auth method, private key and password aren&apos;t used for
-                that hop.
-              </p>
-            )}
-          </div>
-
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.jumpHostEnabled && !form.useTeleport}
-                disabled={form.useTeleport}
-                onChange={(e) => set('jumpHostEnabled', e.target.checked)}
-              />
-              <h4 style={{ margin: 0 }}>
-                <Waypoints size={13} strokeWidth={2} />
-                Route through a jump host / bastion hop
-              </h4>
-            </label>
-            {form.useTeleport ? (
-              <p className="hint">
-                Not available when connecting through Teleport (below) - every node it routes to
-                presents a certificate host key this app&apos;s SSH library can&apos;t verify.
-              </p>
-            ) : (
-              form.jumpHostEnabled && (
+        <form onSubmit={handleSubmit} className="cluster-form-body">
+          <div className="cluster-form-panes">
+            <nav className="cluster-form-nav" aria-label="Cluster settings sections">
+              {SECTIONS.map((s) => {
+                const Icon = s.icon
+                const on = s.enabled?.(form)
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={`cluster-form-nav-item${activeSection === s.key ? ' active' : ''}`}
+                    onClick={() => setActiveSection(s.key)}
+                  >
+                    <Icon size={14} strokeWidth={2} />
+                    <span className="cluster-form-nav-label">{s.label}</span>
+                    {on && <span className="cluster-form-nav-dot" aria-hidden="true" />}
+                  </button>
+                )
+              })}
+            </nav>
+            <div className="cluster-form-content">
+              {activeSection === 'basics' && (
                 <>
-                  <p className="hint">
-                    Reached first - directly, or through the Azure tunnel below if one&apos;s
-                    configured (the tunnel then reaches this jump host, not the target directly) -
-                    then a normal SSH hop from there reaches Host/Port above.
-                  </p>
+                  <div className="form-field">
+                    <label htmlFor="name">Name</label>
+                    <input
+                      id="name"
+                      value={form.name}
+                      onChange={(e) => set('name', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="description">Description</label>
+                    <textarea
+                      id="description"
+                      rows={2}
+                      value={form.description}
+                      onChange={(e) => set('description', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="tags">Tags (comma separated)</label>
+                    <input
+                      id="tags"
+                      value={form.tags}
+                      onChange={(e) => set('tags', e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeSection === 'ssh' && (
+                <div className="form-section">
+                  <h4>
+                    <KeyRound size={13} strokeWidth={2} />
+                    SSH connection
+                  </h4>
                   <div className="form-row">
                     <div className="form-field">
-                      <label htmlFor="jumpHost">Jump host</label>
+                      <label htmlFor="host">Host</label>
                       <input
-                        id="jumpHost"
-                        value={form.jumpHost}
-                        onChange={(e) => set('jumpHost', e.target.value)}
+                        id="host"
+                        value={form.host}
+                        onChange={(e) => set('host', e.target.value)}
                       />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="jumpPort">Jump port</label>
+                      <label htmlFor="port">Port</label>
                       <input
-                        id="jumpPort"
-                        value={form.jumpPort}
-                        onChange={(e) => set('jumpPort', e.target.value)}
+                        id="port"
+                        value={form.port}
+                        onChange={(e) => set('port', e.target.value)}
                       />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-field">
-                      <label htmlFor="jumpUsername">Jump username</label>
+                      <label htmlFor="username">Username</label>
                       <input
-                        id="jumpUsername"
-                        value={form.jumpUsername}
-                        onChange={(e) => set('jumpUsername', e.target.value)}
+                        id="username"
+                        value={form.username}
+                        onChange={(e) => set('username', e.target.value)}
                       />
                     </div>
                     <div className="form-field">
-                      <label htmlFor="jumpAuthMethod">Jump auth method</label>
+                      <label htmlFor="authMethod">Auth method</label>
                       <select
-                        id="jumpAuthMethod"
-                        value={form.jumpAuthMethod}
-                        onChange={(e) => set('jumpAuthMethod', e.target.value as SshAuthMethod)}
+                        id="authMethod"
+                        value={form.authMethod}
+                        onChange={(e) => set('authMethod', e.target.value as SshAuthMethod)}
                       >
                         <option value="private-key">Private key</option>
                         <option value="password">Password</option>
@@ -703,641 +762,772 @@ export default function ClusterForm({
                       </select>
                     </div>
                   </div>
-                  {form.jumpAuthMethod === 'private-key' && (
+                  {form.authMethod === 'private-key' && (
                     <div className="form-field">
-                      <label htmlFor="jumpPrivateKeyPath">Jump host private key path</label>
+                      <label htmlFor="privateKeyPath">Private key path</label>
                       <input
-                        id="jumpPrivateKeyPath"
-                        value={form.jumpPrivateKeyPath}
-                        onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
+                        id="privateKeyPath"
+                        placeholder="~/.ssh/id_ed25519"
+                        value={form.privateKeyPath}
+                        onChange={(e) => set('privateKeyPath', e.target.value)}
                       />
                     </div>
                   )}
-                  {form.jumpAuthMethod !== 'agent' && (
+                  {form.authMethod !== 'agent' && (
                     <div className="form-field">
-                      <label htmlFor="jumpHostSecret">
-                        {form.jumpAuthMethod === 'password'
-                          ? 'Jump host password'
-                          : 'Jump host key passphrase (if any)'}
+                      <label htmlFor="connectionSecret">
+                        {form.authMethod === 'password' ? 'Password' : 'Key passphrase (if any)'}
                       </label>
                       <input
-                        id="jumpHostSecret"
+                        id="connectionSecret"
                         type="password"
-                        value={form.jumpHostSecret}
-                        onChange={(e) => set('jumpHostSecret', e.target.value)}
+                        value={form.connectionSecret}
+                        onChange={(e) => set('connectionSecret', e.target.value)}
                         placeholder={
-                          initial?.hasJumpHostSecret ? 'Unchanged - leave blank to keep' : ''
+                          initial?.hasConnectionSecret ? 'Unchanged - leave blank to keep' : ''
                         }
                       />
                     </div>
                   )}
-                </>
-              )
-            )}
-          </div>
-
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useAzureTunnel}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    useAzureTunnel: e.target.checked,
-                    useTeleport: e.target.checked ? false : prev.useTeleport
-                  }))
-                }
-              />
-              <h4 style={{ margin: 0 }}>
-                <Cloud size={13} strokeWidth={2} />
-                Azure tunnel
-              </h4>
-            </label>
-            {form.useAzureTunnel && (
-              <>
-                <p className="hint">
-                  Before connecting, Gate-H signs in with the Azure CLI (az), selects this
-                  subscription, and opens a tunnel. SSH then connects to 127.0.0.1 on the local
-                  port. Without a jump host above, Host/Port above are the tunnel&apos;s far end -
-                  the target VM&apos;s real hostname or IP (Bastion), or the login node as the VM
-                  reaches it (az ssh vm). With a jump host above, the tunnel reaches the jump host
-                  instead, and Host/Port above stay the final target, reached from there. Either
-                  way, never localhost - that field is what host-key trust is pinned to, not the
-                  actual tunnel address. Needs az on PATH. See the README section on clusters
-                  reachable only through Azure.
-                </p>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="azureMode">Tunnel through</label>
-                    <select
-                      id="azureMode"
-                      value={form.azureMode}
-                      onChange={(e) => set('azureMode', e.target.value as AzureTunnelMode)}
-                    >
-                      <option value="bastion">Azure Bastion</option>
-                      <option value="az-ssh">VM via az ssh vm</option>
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="azureLocalPort">Local port</label>
-                    <input
-                      id="azureLocalPort"
-                      placeholder="2222"
-                      value={form.azureLocalPort}
-                      onChange={(e) => set('azureLocalPort', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-field">
-                  <label htmlFor="azureSubscription">Subscription (ID or name)</label>
-                  <div className="form-inline">
-                    <input
-                      id="azureSubscription"
-                      placeholder="Subscription ID or name"
-                      value={form.azureSubscription}
-                      onChange={(e) => set('azureSubscription', e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={loadSubscriptions}
-                      disabled={loadingSubscriptions}
-                    >
-                      {loadingSubscriptions ? 'Loading...' : 'Load from az'}
-                    </button>
-                  </div>
-                  {subscriptions.length > 0 && (
-                    <select
-                      aria-label="Pick a subscription fetched from az"
-                      value=""
-                      onChange={(e) => {
-                        if (e.target.value) set('azureSubscription', e.target.value)
-                      }}
-                    >
-                      <option value="">
-                        {subscriptions.length} subscription{subscriptions.length === 1 ? '' : 's'}{' '}
-                        found - pick one...
-                      </option>
-                      {subscriptions.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.id}){s.isDefault ? ' - az default' : ''}
-                        </option>
-                      ))}
-                    </select>
+                  {form.useTeleport && (
+                    <p className="hint">
+                      Connecting through Teleport (below): Host above is the Teleport node name and
+                      Username the login. Port, auth method, private key and password aren&apos;t
+                      used for that hop.
+                    </p>
                   )}
-                  {subscriptionsError && <p className="hint">{subscriptionsError}</p>}
                 </div>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="azureResourceGroup">Resource group</label>
-                    <input
-                      id="azureResourceGroup"
-                      value={form.azureResourceGroup}
-                      onChange={(e) => set('azureResourceGroup', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="azureTenant">Tenant ID (optional)</label>
-                    <input
-                      id="azureTenant"
-                      value={form.azureTenant}
-                      onChange={(e) => set('azureTenant', e.target.value)}
-                    />
-                  </div>
-                </div>
-                {form.azureMode === 'bastion' ? (
-                  <>
-                    <div className="form-field">
-                      <label htmlFor="azureBastionName">Bastion name</label>
-                      <input
-                        id="azureBastionName"
-                        value={form.azureBastionName}
-                        onChange={(e) => set('azureBastionName', e.target.value)}
-                      />
-                    </div>
-                    <div className="form-field">
-                      <label htmlFor="azureTargetResourceId">
-                        Target VM resource ID (optional)
-                      </label>
-                      <input
-                        id="azureTargetResourceId"
-                        placeholder="/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/virtualMachines/..."
-                        value={form.azureTargetResourceId}
-                        onChange={(e) => set('azureTargetResourceId', e.target.value)}
-                      />
-                    </div>
-                    <div className="form-field">
-                      <label htmlFor="azureVmName">or VM name</label>
-                      <div className="form-inline">
-                        <input
-                          id="azureVmName"
-                          placeholder="Resolved to a resource ID via `az vm show` when opened"
-                          value={form.azureVmName}
-                          onChange={(e) => set('azureVmName', e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          onClick={handleFindVm}
-                          disabled={findingVm || !form.azureVmName.trim()}
-                        >
-                          {findingVm ? 'Searching...' : 'Find subscription'}
-                        </button>
-                      </div>
-                      {renderVmSearchStatus()}
-                    </div>
-                    <div className="form-field">
-                      <label htmlFor="azureTargetIpAddress">or IP address</label>
-                      <input
-                        id="azureTargetIpAddress"
-                        placeholder="No VM resource id needed - e.g. a different resource group"
-                        value={form.azureTargetIpAddress}
-                        onChange={(e) => set('azureTargetIpAddress', e.target.value)}
-                      />
+              )}
+
+              {activeSection === 'jumpHost' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={Waypoints}
+                    label="Route through a jump host / bastion hop"
+                    checked={form.jumpHostEnabled && !form.useTeleport}
+                    disabled={form.useTeleport}
+                    onChange={(checked) => set('jumpHostEnabled', checked)}
+                  />
+                  {form.useTeleport ? (
+                    <p className="hint">
+                      Not available when connecting through Teleport (below) - every node it routes
+                      to presents a certificate host key this app&apos;s SSH library can&apos;t
+                      verify.
+                    </p>
+                  ) : !form.jumpHostEnabled ? (
+                    <SectionEmptyState icon={Waypoints}>
+                      Adds an intermediate SSH hop before reaching Host/Port above - for a bastion
+                      or firewall between you and the login node.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
                       <p className="hint">
-                        Needs &quot;IP-based connection&quot; enabled on this Bastion host. Use this
-                        when the target isn&apos;t in this Bastion&apos;s resource group (or
-                        subscription/tenant), or isn&apos;t an Azure VM resource at all.
+                        Reached first - directly, or through the Azure tunnel below if one&apos;s
+                        configured (the tunnel then reaches this jump host, not the target directly)
+                        - then a normal SSH hop from there reaches Host/Port above.
                       </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="form-row">
-                    <div className="form-field">
-                      <label htmlFor="azureVmName">VM name</label>
-                      <div className="form-inline">
-                        <input
-                          id="azureVmName"
-                          value={form.azureVmName}
-                          onChange={(e) => set('azureVmName', e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          onClick={handleFindVm}
-                          disabled={findingVm || !form.azureVmName.trim()}
-                        >
-                          {findingVm ? 'Searching...' : 'Find subscription'}
-                        </button>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="jumpHost">Jump host</label>
+                          <input
+                            id="jumpHost"
+                            value={form.jumpHost}
+                            onChange={(e) => set('jumpHost', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="jumpPort">Jump port</label>
+                          <input
+                            id="jumpPort"
+                            value={form.jumpPort}
+                            onChange={(e) => set('jumpPort', e.target.value)}
+                          />
+                        </div>
                       </div>
-                      {renderVmSearchStatus()}
-                    </div>
-                    <div className="form-field">
-                      <label htmlFor="azureLocalUser">Local VM user (optional)</label>
-                      <input
-                        id="azureLocalUser"
-                        placeholder="Blank = Entra ID login"
-                        value={form.azureLocalUser}
-                        onChange={(e) => set('azureLocalUser', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useTeleport}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    useTeleport: e.target.checked,
-                    useAzureTunnel: e.target.checked ? false : prev.useAzureTunnel,
-                    // A jump host can't be combined with Teleport (see JumpHostConfig).
-                    jumpHostEnabled: e.target.checked ? false : prev.jumpHostEnabled
-                  }))
-                }
-              />
-              <h4 style={{ margin: 0 }}>
-                <ShieldCheck size={13} strokeWidth={2} />
-                Teleport
-              </h4>
-            </label>
-            {form.useTeleport && (
-              <>
-                <p className="hint">
-                  The terminal runs tsh ssh through this proxy. If there&apos;s no valid tsh
-                  session, you log in right in the terminal: password and OTP prompts appear there,
-                  or your browser opens for SSO. Needs tsh on PATH. See docs/TELEPORT.md.
-                </p>
-                <div className="form-field">
-                  <label htmlFor="teleportProxy">Proxy address</label>
-                  <input
-                    id="teleportProxy"
-                    placeholder="teleport.example.com:443"
-                    value={form.teleportProxy}
-                    onChange={(e) => set('teleportProxy', e.target.value)}
-                  />
-                </div>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="teleportCluster">Leaf cluster (optional)</label>
-                    <input
-                      id="teleportCluster"
-                      value={form.teleportCluster}
-                      onChange={(e) => set('teleportCluster', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="teleportUser">Teleport user (optional)</label>
-                    <input
-                      id="teleportUser"
-                      placeholder="Blank = your OS user"
-                      value={form.teleportUser}
-                      onChange={(e) => set('teleportUser', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-field">
-                  <label htmlFor="teleportAuthConnector">Auth connector (optional)</label>
-                  <input
-                    id="teleportAuthConnector"
-                    placeholder="Blank = the cluster's default"
-                    value={form.teleportAuthConnector}
-                    onChange={(e) => set('teleportAuthConnector', e.target.value)}
-                  />
-                </div>
-                <label className="form-field-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={form.teleportInsecure}
-                    onChange={(e) => set('teleportInsecure', e.target.checked)}
-                  />
-                  Skip certificate verification (self-signed/lab proxy, no real CA)
-                </label>
-                {form.teleportInsecure && (
-                  <p className="hint">
-                    tsh won&apos;t verify this proxy&apos;s TLS certificate at all - only use this
-                    for a proxy you know is self-signed (a lab/test cluster), never on a network you
-                    don&apos;t trust. For a real organisation CA, use <code>SSL_CERT_FILE</code>{' '}
-                    instead and leave this off.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useGrafana}
-                onChange={(e) => set('useGrafana', e.target.checked)}
-              />
-              <h4 style={{ margin: 0 }}>
-                <BarChart3 size={13} strokeWidth={2} />
-                Grafana status
-              </h4>
-            </label>
-            {form.useGrafana && (
-              <>
-                <div className="form-field">
-                  <label htmlFor="grafanaBaseUrl">Grafana base URL</label>
-                  <input
-                    id="grafanaBaseUrl"
-                    placeholder="https://grafana.example.org"
-                    value={form.grafanaBaseUrl}
-                    onChange={(e) => set('grafanaBaseUrl', e.target.value)}
-                  />
-                </div>
-                <div className="form-field">
-                  <label htmlFor="grafanaDashboardUids">Dashboard UIDs (comma separated)</label>
-                  <input
-                    id="grafanaDashboardUids"
-                    value={form.grafanaDashboardUids}
-                    onChange={(e) => set('grafanaDashboardUids', e.target.value)}
-                  />
-                </div>
-                <div className="form-field">
-                  <label htmlFor="grafanaApiToken">Service account API token</label>
-                  <input
-                    id="grafanaApiToken"
-                    type="password"
-                    value={form.grafanaApiToken}
-                    onChange={(e) => set('grafanaApiToken', e.target.value)}
-                    placeholder={initial?.hasGrafanaToken ? 'Unchanged - leave blank to keep' : ''}
-                  />
-                </div>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="grafanaGpuDatasourceUid">
-                      GPU metrics datasource UID (optional)
-                    </label>
-                    <input
-                      id="grafanaGpuDatasourceUid"
-                      placeholder="Prometheus datasource with DCGM metrics"
-                      value={form.grafanaGpuDatasourceUid}
-                      onChange={(e) => set('grafanaGpuDatasourceUid', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="grafanaGpuHostLabel">Node label</label>
-                    <input
-                      id="grafanaGpuHostLabel"
-                      placeholder="Hostname"
-                      value={form.grafanaGpuHostLabel}
-                      onChange={(e) => set('grafanaGpuHostLabel', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <p className="hint">
-                  With a datasource set, the Slurm section shows GPU utilization, memory and
-                  temperature for your running jobs&apos; nodes from NVIDIA&apos;s DCGM exporter
-                  metrics. The node label must hold the node name as Slurm prints it.
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useScheduler}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    useScheduler: e.target.checked,
-                    // Each run on a Teleport cluster is an audited session - opt in explicitly.
-                    schedulerAutoRefresh: e.target.checked
-                      ? !prev.useTeleport
-                      : prev.schedulerAutoRefresh
-                  }))
-                }
-              />
-              <h4 style={{ margin: 0 }}>
-                <ListChecks size={13} strokeWidth={2} />
-                Slurm jobs and nodes
-              </h4>
-            </label>
-            {form.useScheduler && (
-              <>
-                <p className="hint">
-                  Runs squeue and sinfo on the terminal&apos;s open session - never a new login -
-                  and only while this cluster&apos;s Status is showing. See
-                  docs/HPC_ORCHESTRATION.md.
-                </p>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="schedulerScope">Show</label>
-                    <select
-                      id="schedulerScope"
-                      value={form.schedulerScope}
-                      onChange={(e) => set('schedulerScope', e.target.value as SchedulerScope)}
-                    >
-                      <option value="mine">My jobs</option>
-                      <option value="partitions">Everyone&apos;s jobs in these partitions</option>
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="schedulerPartitions">
-                      Partitions{form.schedulerScope === 'mine' ? ' (optional)' : ''}
-                    </label>
-                    <input
-                      id="schedulerPartitions"
-                      placeholder="gpu, cpu"
-                      value={form.schedulerPartitions}
-                      onChange={(e) => set('schedulerPartitions', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="schedulerInterval">Refresh every (seconds)</label>
-                    <input
-                      id="schedulerInterval"
-                      type="number"
-                      min={MIN_SCHEDULER_INTERVAL_SEC}
-                      value={form.schedulerInterval}
-                      onChange={(e) => set('schedulerInterval', e.target.value)}
-                    />
-                  </div>
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.schedulerAutoRefresh}
-                      onChange={(e) => set('schedulerAutoRefresh', e.target.checked)}
-                    />
-                    Refresh automatically
-                  </label>
-                </div>
-                {!form.useTeleport && (
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.schedulerNotify}
-                      onChange={(e) => set('schedulerNotify', e.target.checked)}
-                    />
-                    Notify me when my jobs finish or start, and when nodes go down
-                  </label>
-                )}
-                {!form.useTeleport && form.schedulerNotify && (
-                  <p className="hint">
-                    While this cluster is open in the background, Gate-H keeps checking every 5
-                    minutes on its terminal&apos;s connection. Closed or in standby, nothing runs.
-                  </p>
-                )}
-                {form.useTeleport && form.schedulerAutoRefresh && (
-                  <p className="hint">
-                    Every refresh is a new Teleport session in your site&apos;s audit log.
-                  </p>
-                )}
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="schedulerExecHost">
-                      Run Slurm commands on a different node (optional)
-                    </label>
-                    <input
-                      id="schedulerExecHost"
-                      placeholder="Blank = the terminal's own node"
-                      value={form.schedulerExecHost}
-                      onChange={(e) => set('schedulerExecHost', e.target.value)}
-                    />
-                  </div>
-                  {form.schedulerExecHost.trim() && (
-                    <div className="form-field">
-                      <label htmlFor="schedulerExecPort">Port (optional)</label>
-                      <input
-                        id="schedulerExecPort"
-                        placeholder={form.port || '22'}
-                        value={form.schedulerExecPort}
-                        onChange={(e) => set('schedulerExecPort', e.target.value)}
-                      />
-                    </div>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="jumpUsername">Jump username</label>
+                          <input
+                            id="jumpUsername"
+                            value={form.jumpUsername}
+                            onChange={(e) => set('jumpUsername', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="jumpAuthMethod">Jump auth method</label>
+                          <select
+                            id="jumpAuthMethod"
+                            value={form.jumpAuthMethod}
+                            onChange={(e) => set('jumpAuthMethod', e.target.value as SshAuthMethod)}
+                          >
+                            <option value="private-key">Private key</option>
+                            <option value="password">Password</option>
+                            <option value="agent">SSH agent</option>
+                          </select>
+                        </div>
+                      </div>
+                      {form.jumpAuthMethod === 'private-key' && (
+                        <div className="form-field">
+                          <label htmlFor="jumpPrivateKeyPath">Jump host private key path</label>
+                          <input
+                            id="jumpPrivateKeyPath"
+                            value={form.jumpPrivateKeyPath}
+                            onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
+                          />
+                        </div>
+                      )}
+                      {form.jumpAuthMethod !== 'agent' && (
+                        <div className="form-field">
+                          <label htmlFor="jumpHostSecret">
+                            {form.jumpAuthMethod === 'password'
+                              ? 'Jump host password'
+                              : 'Jump host key passphrase (if any)'}
+                          </label>
+                          <input
+                            id="jumpHostSecret"
+                            type="password"
+                            value={form.jumpHostSecret}
+                            onChange={(e) => set('jumpHostSecret', e.target.value)}
+                            placeholder={
+                              initial?.hasJumpHostSecret ? 'Unchanged - leave blank to keep' : ''
+                            }
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-                {form.schedulerExecHost.trim() && (
-                  <p className="hint">
-                    For a bastion/login node that doesn&apos;t host Slurm itself - squeue/sinfo run
-                    here instead, through whatever jump host or tunnel is already configured above.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+              )}
 
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useStorage}
-                onChange={(e) => set('useStorage', e.target.checked)}
-              />
-              <h4 style={{ margin: 0 }}>
-                <HardDrive size={13} strokeWidth={2} />
-                Storage quota
-              </h4>
-            </label>
-            {form.useStorage && (
-              <>
-                <div className="form-field">
-                  <label htmlFor="storagePaths">Paths (comma separated)</label>
-                  <input
-                    id="storagePaths"
-                    placeholder="~, /scratch/$USER"
-                    value={form.storagePaths}
-                    onChange={(e) => set('storagePaths', e.target.value)}
+              {activeSection === 'azure' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={Cloud}
+                    label="Azure tunnel"
+                    checked={form.useAzureTunnel}
+                    onChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useAzureTunnel: checked,
+                        useTeleport: checked ? false : prev.useTeleport
+                      }))
+                    }
                   />
+                  {!form.useAzureTunnel ? (
+                    <SectionEmptyState icon={Cloud}>
+                      Reach the target through an Azure Bastion or <code>az ssh vm</code> tunnel -
+                      for a VM with no direct SSH access.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
+                      <p className="hint">
+                        Before connecting, Gate-H signs in with the Azure CLI (az), selects this
+                        subscription, and opens a tunnel. SSH then connects to 127.0.0.1 on the
+                        local port. Without a jump host above, Host/Port above are the tunnel&apos;s
+                        far end - the target VM&apos;s real hostname or IP (Bastion), or the login
+                        node as the VM reaches it (az ssh vm). With a jump host above, the tunnel
+                        reaches the jump host instead, and Host/Port above stay the final target,
+                        reached from there. Either way, never localhost - that field is what
+                        host-key trust is pinned to, not the actual tunnel address. Needs az on
+                        PATH. See the README section on clusters reachable only through Azure.
+                      </p>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="azureMode">Tunnel through</label>
+                          <select
+                            id="azureMode"
+                            value={form.azureMode}
+                            onChange={(e) => set('azureMode', e.target.value as AzureTunnelMode)}
+                          >
+                            <option value="bastion">Azure Bastion</option>
+                            <option value="az-ssh">VM via az ssh vm</option>
+                          </select>
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="azureLocalPort">Local port</label>
+                          <input
+                            id="azureLocalPort"
+                            placeholder="2222"
+                            value={form.azureLocalPort}
+                            onChange={(e) => set('azureLocalPort', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="azureSubscription">Subscription (ID or name)</label>
+                        <div className="form-inline">
+                          <input
+                            id="azureSubscription"
+                            placeholder="Subscription ID or name"
+                            value={form.azureSubscription}
+                            onChange={(e) => set('azureSubscription', e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={loadSubscriptions}
+                            disabled={loadingSubscriptions}
+                          >
+                            {loadingSubscriptions ? 'Loading...' : 'Load from az'}
+                          </button>
+                        </div>
+                        {subscriptions.length > 0 && (
+                          <select
+                            aria-label="Pick a subscription fetched from az"
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) set('azureSubscription', e.target.value)
+                            }}
+                          >
+                            <option value="">
+                              {subscriptions.length} subscription
+                              {subscriptions.length === 1 ? '' : 's'} found - pick one...
+                            </option>
+                            {subscriptions.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} ({s.id}){s.isDefault ? ' - az default' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {subscriptionsError && <p className="hint">{subscriptionsError}</p>}
+                      </div>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="azureResourceGroup">Resource group</label>
+                          <input
+                            id="azureResourceGroup"
+                            value={form.azureResourceGroup}
+                            onChange={(e) => set('azureResourceGroup', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="azureTenant">Tenant ID (optional)</label>
+                          <input
+                            id="azureTenant"
+                            value={form.azureTenant}
+                            onChange={(e) => set('azureTenant', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      {form.azureMode === 'bastion' ? (
+                        <>
+                          <div className="form-field">
+                            <label htmlFor="azureBastionName">Bastion name</label>
+                            <input
+                              id="azureBastionName"
+                              value={form.azureBastionName}
+                              onChange={(e) => set('azureBastionName', e.target.value)}
+                            />
+                          </div>
+                          <div className="form-field">
+                            <label htmlFor="azureTargetResourceId">
+                              Target VM resource ID (optional)
+                            </label>
+                            <input
+                              id="azureTargetResourceId"
+                              placeholder="/subscriptions/.../resourceGroups/.../providers/Microsoft.Compute/virtualMachines/..."
+                              value={form.azureTargetResourceId}
+                              onChange={(e) => set('azureTargetResourceId', e.target.value)}
+                            />
+                          </div>
+                          <div className="form-field">
+                            <label htmlFor="azureVmName">or VM name</label>
+                            <div className="form-inline">
+                              <input
+                                id="azureVmName"
+                                placeholder="Resolved to a resource ID via `az vm show` when opened"
+                                value={form.azureVmName}
+                                onChange={(e) => set('azureVmName', e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                onClick={handleFindVm}
+                                disabled={findingVm || !form.azureVmName.trim()}
+                              >
+                                {findingVm ? 'Searching...' : 'Find subscription'}
+                              </button>
+                            </div>
+                            {renderVmSearchStatus()}
+                          </div>
+                          <div className="form-field">
+                            <label htmlFor="azureTargetIpAddress">or IP address</label>
+                            <input
+                              id="azureTargetIpAddress"
+                              placeholder="No VM resource id needed - e.g. a different resource group"
+                              value={form.azureTargetIpAddress}
+                              onChange={(e) => set('azureTargetIpAddress', e.target.value)}
+                            />
+                            <p className="hint">
+                              Needs &quot;IP-based connection&quot; enabled on this Bastion host.
+                              Use this when the target isn&apos;t in this Bastion&apos;s resource
+                              group (or subscription/tenant), or isn&apos;t an Azure VM resource at
+                              all.
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="form-row">
+                          <div className="form-field">
+                            <label htmlFor="azureVmName">VM name</label>
+                            <div className="form-inline">
+                              <input
+                                id="azureVmName"
+                                value={form.azureVmName}
+                                onChange={(e) => set('azureVmName', e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                onClick={handleFindVm}
+                                disabled={findingVm || !form.azureVmName.trim()}
+                              >
+                                {findingVm ? 'Searching...' : 'Find subscription'}
+                              </button>
+                            </div>
+                            {renderVmSearchStatus()}
+                          </div>
+                          <div className="form-field">
+                            <label htmlFor="azureLocalUser">Local VM user (optional)</label>
+                            <input
+                              id="azureLocalUser"
+                              placeholder="Blank = Entra ID login"
+                              value={form.azureLocalUser}
+                              onChange={(e) => set('azureLocalUser', e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                <p className="hint">
-                  Checked on request from the cluster&apos;s Status, on the terminal&apos;s open
-                  session: df for each filesystem, plus your quota on Lustre (lfs quota) and GPFS
-                  (mmlsquota).
-                </p>
-              </>
-            )}
-          </div>
+              )}
 
-          <div className="form-section">
-            <label className="form-field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.useJira}
-                onChange={(e) => set('useJira', e.target.checked)}
-              />
-              <h4 style={{ margin: 0 }}>
-                <Ticket size={13} strokeWidth={2} />
-                Jira
-              </h4>
-            </label>
-            {form.useJira && (
-              <>
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="jiraBaseUrl">Jira base URL</label>
-                    <input
-                      id="jiraBaseUrl"
-                      placeholder="https://yourorg.atlassian.net"
-                      value={form.jiraBaseUrl}
-                      onChange={(e) => set('jiraBaseUrl', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="jiraAuthMode">Auth mode</label>
-                    <select
-                      id="jiraAuthMode"
-                      value={form.jiraAuthMode}
-                      onChange={(e) => set('jiraAuthMode', e.target.value as JiraAuthMode)}
-                    >
-                      <option value="cloud">Jira Cloud (email + API token)</option>
-                      <option value="datacenter">Jira Data Center (PAT)</option>
-                    </select>
-                  </div>
-                </div>
-                {form.jiraAuthMode === 'cloud' && (
-                  <div className="form-field">
-                    <label htmlFor="jiraEmail">Account email</label>
-                    <input
-                      id="jiraEmail"
-                      value={form.jiraEmail}
-                      onChange={(e) => set('jiraEmail', e.target.value)}
-                    />
-                  </div>
-                )}
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="jiraProjectKey">Default project key</label>
-                    <input
-                      id="jiraProjectKey"
-                      value={form.jiraProjectKey}
-                      onChange={(e) => set('jiraProjectKey', e.target.value)}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="jiraJql">Default JQL filter</label>
-                    <input
-                      id="jiraJql"
-                      value={form.jiraJql}
-                      onChange={(e) => set('jiraJql', e.target.value)}
-                      placeholder={`project = ${form.jiraProjectKey || 'HPC'} AND labels = "${toClusterSlug(form.name)}"`}
-                    />
-                  </div>
-                </div>
-                <p className="hint">
-                  Multiple clusters sharing one Jira project will show identical tickets unless you
-                  scope this JQL by something unique to the cluster (a label or component) - login,
-                  compute, and controller hostnames differ per cluster and aren&apos;t a useful Jira
-                  key. See docs/JIRA_GUIDE.md for the recommended pattern.
-                </p>
-                <div className="form-field">
-                  <label htmlFor="jiraApiToken">
-                    {form.jiraAuthMode === 'cloud' ? 'API token' : 'Personal access token'}
-                  </label>
-                  <input
-                    id="jiraApiToken"
-                    type="password"
-                    value={form.jiraApiToken}
-                    onChange={(e) => set('jiraApiToken', e.target.value)}
-                    placeholder={initial?.hasJiraToken ? 'Unchanged - leave blank to keep' : ''}
+              {activeSection === 'teleport' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={ShieldCheck}
+                    label="Teleport"
+                    checked={form.useTeleport}
+                    onChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useTeleport: checked,
+                        useAzureTunnel: checked ? false : prev.useAzureTunnel,
+                        // A jump host can't be combined with Teleport (see JumpHostConfig).
+                        jumpHostEnabled: checked ? false : prev.jumpHostEnabled
+                      }))
+                    }
                   />
+                  {!form.useTeleport ? (
+                    <SectionEmptyState icon={ShieldCheck}>
+                      Reach the target through a Teleport proxy instead of connecting directly - for
+                      a cluster behind Teleport&apos;s access gateway.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
+                      <p className="hint">
+                        The terminal runs tsh ssh through this proxy. If there&apos;s no valid tsh
+                        session, you log in right in the terminal: password and OTP prompts appear
+                        there, or your browser opens for SSO. Needs tsh on PATH. See
+                        docs/TELEPORT.md.
+                      </p>
+                      <div className="form-field">
+                        <label htmlFor="teleportProxy">Proxy address</label>
+                        <input
+                          id="teleportProxy"
+                          placeholder="teleport.example.com:443"
+                          value={form.teleportProxy}
+                          onChange={(e) => set('teleportProxy', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="teleportCluster">Leaf cluster (optional)</label>
+                          <input
+                            id="teleportCluster"
+                            value={form.teleportCluster}
+                            onChange={(e) => set('teleportCluster', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="teleportUser">Teleport user (optional)</label>
+                          <input
+                            id="teleportUser"
+                            placeholder="Blank = your OS user"
+                            value={form.teleportUser}
+                            onChange={(e) => set('teleportUser', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="teleportAuthConnector">Auth connector (optional)</label>
+                        <input
+                          id="teleportAuthConnector"
+                          placeholder="Blank = the cluster's default"
+                          value={form.teleportAuthConnector}
+                          onChange={(e) => set('teleportAuthConnector', e.target.value)}
+                        />
+                      </div>
+                      <label className="form-field-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={form.teleportInsecure}
+                          onChange={(e) => set('teleportInsecure', e.target.checked)}
+                        />
+                        Skip certificate verification (self-signed/lab proxy, no real CA)
+                      </label>
+                      {form.teleportInsecure && (
+                        <p className="hint">
+                          tsh won&apos;t verify this proxy&apos;s TLS certificate at all - only use
+                          this for a proxy you know is self-signed (a lab/test cluster), never on a
+                          network you don&apos;t trust. For a real organisation CA, use{' '}
+                          <code>SSL_CERT_FILE</code> instead and leave this off.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
-              </>
-            )}
+              )}
+
+              {activeSection === 'grafana' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={BarChart3}
+                    label="Grafana status"
+                    checked={form.useGrafana}
+                    onChange={(checked) => set('useGrafana', checked)}
+                  />
+                  {!form.useGrafana ? (
+                    <SectionEmptyState icon={BarChart3}>
+                      Show this cluster&apos;s dashboards and a health check from a Grafana
+                      instance.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
+                      <div className="form-field">
+                        <label htmlFor="grafanaBaseUrl">Grafana base URL</label>
+                        <input
+                          id="grafanaBaseUrl"
+                          placeholder="https://grafana.example.org"
+                          value={form.grafanaBaseUrl}
+                          onChange={(e) => set('grafanaBaseUrl', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="grafanaDashboardUids">
+                          Dashboard UIDs (comma separated)
+                        </label>
+                        <input
+                          id="grafanaDashboardUids"
+                          value={form.grafanaDashboardUids}
+                          onChange={(e) => set('grafanaDashboardUids', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="grafanaApiToken">Service account API token</label>
+                        <input
+                          id="grafanaApiToken"
+                          type="password"
+                          value={form.grafanaApiToken}
+                          onChange={(e) => set('grafanaApiToken', e.target.value)}
+                          placeholder={
+                            initial?.hasGrafanaToken ? 'Unchanged - leave blank to keep' : ''
+                          }
+                        />
+                      </div>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="grafanaGpuDatasourceUid">
+                            GPU metrics datasource UID (optional)
+                          </label>
+                          <input
+                            id="grafanaGpuDatasourceUid"
+                            placeholder="Prometheus datasource with DCGM metrics"
+                            value={form.grafanaGpuDatasourceUid}
+                            onChange={(e) => set('grafanaGpuDatasourceUid', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="grafanaGpuHostLabel">Node label</label>
+                          <input
+                            id="grafanaGpuHostLabel"
+                            placeholder="Hostname"
+                            value={form.grafanaGpuHostLabel}
+                            onChange={(e) => set('grafanaGpuHostLabel', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <p className="hint">
+                        With a datasource set, the Slurm section shows GPU utilization, memory and
+                        temperature for your running jobs&apos; nodes from NVIDIA&apos;s DCGM
+                        exporter metrics. The node label must hold the node name as Slurm prints it.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {activeSection === 'scheduler' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={ListChecks}
+                    label="Slurm jobs and nodes"
+                    checked={form.useScheduler}
+                    onChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useScheduler: checked,
+                        // Each run on a Teleport cluster is an audited session - opt in explicitly.
+                        schedulerAutoRefresh: checked
+                          ? !prev.useTeleport
+                          : prev.schedulerAutoRefresh
+                      }))
+                    }
+                  />
+                  {!form.useScheduler ? (
+                    <SectionEmptyState icon={ListChecks}>
+                      Show the user&apos;s Slurm jobs and node health from this cluster&apos;s
+                      terminal session.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
+                      <p className="hint">
+                        Runs squeue and sinfo on the terminal&apos;s open session - never a new
+                        login - and only while this cluster&apos;s Status is showing. See
+                        docs/HPC_ORCHESTRATION.md.
+                      </p>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="schedulerScope">Show</label>
+                          <select
+                            id="schedulerScope"
+                            value={form.schedulerScope}
+                            onChange={(e) =>
+                              set('schedulerScope', e.target.value as SchedulerScope)
+                            }
+                          >
+                            <option value="mine">My jobs</option>
+                            <option value="partitions">
+                              Everyone&apos;s jobs in these partitions
+                            </option>
+                          </select>
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="schedulerPartitions">
+                            Partitions{form.schedulerScope === 'mine' ? ' (optional)' : ''}
+                          </label>
+                          <input
+                            id="schedulerPartitions"
+                            placeholder="gpu, cpu"
+                            value={form.schedulerPartitions}
+                            onChange={(e) => set('schedulerPartitions', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="schedulerInterval">Refresh every (seconds)</label>
+                          <input
+                            id="schedulerInterval"
+                            type="number"
+                            min={MIN_SCHEDULER_INTERVAL_SEC}
+                            value={form.schedulerInterval}
+                            onChange={(e) => set('schedulerInterval', e.target.value)}
+                          />
+                        </div>
+                        <label className="form-field-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.schedulerAutoRefresh}
+                            onChange={(e) => set('schedulerAutoRefresh', e.target.checked)}
+                          />
+                          Refresh automatically
+                        </label>
+                      </div>
+                      {!form.useTeleport && (
+                        <label className="form-field-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.schedulerNotify}
+                            onChange={(e) => set('schedulerNotify', e.target.checked)}
+                          />
+                          Notify me when my jobs finish or start, and when nodes go down
+                        </label>
+                      )}
+                      {!form.useTeleport && form.schedulerNotify && (
+                        <p className="hint">
+                          While this cluster is open in the background, Gate-H keeps checking every
+                          5 minutes on its terminal&apos;s connection. Closed or in standby, nothing
+                          runs.
+                        </p>
+                      )}
+                      {form.useTeleport && form.schedulerAutoRefresh && (
+                        <p className="hint">
+                          Every refresh is a new Teleport session in your site&apos;s audit log.
+                        </p>
+                      )}
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="schedulerExecHost">
+                            Run Slurm commands on a different node (optional)
+                          </label>
+                          <input
+                            id="schedulerExecHost"
+                            placeholder="Blank = the terminal's own node"
+                            value={form.schedulerExecHost}
+                            onChange={(e) => set('schedulerExecHost', e.target.value)}
+                          />
+                        </div>
+                        {form.schedulerExecHost.trim() && (
+                          <div className="form-field">
+                            <label htmlFor="schedulerExecPort">Port (optional)</label>
+                            <input
+                              id="schedulerExecPort"
+                              placeholder={form.port || '22'}
+                              value={form.schedulerExecPort}
+                              onChange={(e) => set('schedulerExecPort', e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {form.schedulerExecHost.trim() && (
+                        <p className="hint">
+                          For a bastion/login node that doesn&apos;t host Slurm itself -
+                          squeue/sinfo run here instead, through whatever jump host or tunnel is
+                          already configured above.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {activeSection === 'storage' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={HardDrive}
+                    label="Storage quota"
+                    checked={form.useStorage}
+                    onChange={(checked) => set('useStorage', checked)}
+                  />
+                  {!form.useStorage ? (
+                    <SectionEmptyState icon={HardDrive}>
+                      Check filesystem usage and quota for specific paths on this cluster.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
+                      <div className="form-field">
+                        <label htmlFor="storagePaths">Paths (comma separated)</label>
+                        <input
+                          id="storagePaths"
+                          placeholder="~, /scratch/$USER"
+                          value={form.storagePaths}
+                          onChange={(e) => set('storagePaths', e.target.value)}
+                        />
+                      </div>
+                      <p className="hint">
+                        Checked on request from the cluster&apos;s Status, on the terminal&apos;s
+                        open session: df for each filesystem, plus your quota on Lustre (lfs quota)
+                        and GPFS (mmlsquota).
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {activeSection === 'jira' && (
+                <div className="form-section">
+                  <SectionToggleHeader
+                    icon={Ticket}
+                    label="Jira"
+                    checked={form.useJira}
+                    onChange={(checked) => set('useJira', checked)}
+                  />
+                  {!form.useJira ? (
+                    <SectionEmptyState icon={Ticket}>
+                      List and file Jira tickets scoped to this cluster.
+                    </SectionEmptyState>
+                  ) : (
+                    <>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="jiraBaseUrl">Jira base URL</label>
+                          <input
+                            id="jiraBaseUrl"
+                            placeholder="https://yourorg.atlassian.net"
+                            value={form.jiraBaseUrl}
+                            onChange={(e) => set('jiraBaseUrl', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="jiraAuthMode">Auth mode</label>
+                          <select
+                            id="jiraAuthMode"
+                            value={form.jiraAuthMode}
+                            onChange={(e) => set('jiraAuthMode', e.target.value as JiraAuthMode)}
+                          >
+                            <option value="cloud">Jira Cloud (email + API token)</option>
+                            <option value="datacenter">Jira Data Center (PAT)</option>
+                          </select>
+                        </div>
+                      </div>
+                      {form.jiraAuthMode === 'cloud' && (
+                        <div className="form-field">
+                          <label htmlFor="jiraEmail">Account email</label>
+                          <input
+                            id="jiraEmail"
+                            value={form.jiraEmail}
+                            onChange={(e) => set('jiraEmail', e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="jiraProjectKey">Default project key</label>
+                          <input
+                            id="jiraProjectKey"
+                            value={form.jiraProjectKey}
+                            onChange={(e) => set('jiraProjectKey', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="jiraJql">Default JQL filter</label>
+                          <input
+                            id="jiraJql"
+                            value={form.jiraJql}
+                            onChange={(e) => set('jiraJql', e.target.value)}
+                            placeholder={`project = ${form.jiraProjectKey || 'HPC'} AND labels = "${toClusterSlug(form.name)}"`}
+                          />
+                        </div>
+                      </div>
+                      <p className="hint">
+                        Multiple clusters sharing one Jira project will show identical tickets
+                        unless you scope this JQL by something unique to the cluster (a label or
+                        component) - login, compute, and controller hostnames differ per cluster and
+                        aren&apos;t a useful Jira key. See docs/JIRA_GUIDE.md for the recommended
+                        pattern.
+                      </p>
+                      <div className="form-field">
+                        <label htmlFor="jiraApiToken">
+                          {form.jiraAuthMode === 'cloud' ? 'API token' : 'Personal access token'}
+                        </label>
+                        <input
+                          id="jiraApiToken"
+                          type="password"
+                          value={form.jiraApiToken}
+                          onChange={(e) => set('jiraApiToken', e.target.value)}
+                          placeholder={
+                            initial?.hasJiraToken ? 'Unchanged - leave blank to keep' : ''
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="modal-actions">
