@@ -649,6 +649,10 @@ export interface GateHApi {
     login(clusterId: string, options: { renew: boolean }): Promise<{ sessionId: string }>
   }
   scheduler: {
+    /** Every cluster's last-known snapshot (keyed by cluster id), for the Overview dashboard -
+     *  which shows every cluster at once but never opens a connection itself, so a cluster that's
+     *  never been connected simply has no entry. */
+    getCached(): Promise<Record<string, SchedulerSnapshot>>
     /** Starts pushing this cluster's snapshots over onSnapshot (the cached one straight away) and
      *  polls while at least one watcher remains - call unwatch when the section is hidden. */
     watch(clusterId: string): void
