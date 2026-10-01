@@ -127,7 +127,10 @@ export default function Sidebar({
               className="cluster-avatar"
               style={{ backgroundColor: avatarColorFor(cluster.name) }}
             >
-              {initialFor(cluster.name)}
+              {initialFor(
+                cluster.name,
+                clusters.map((c) => c.name)
+              )}
               <StatusLed
                 status={reachability[cluster.id]?.status}
                 latencyMs={reachability[cluster.id]?.latencyMs}
@@ -155,6 +158,11 @@ export default function Sidebar({
                     ? 'Turn off Active Monitoring (standby - no connections at all)'
                     : 'Turn on Active Monitoring'
                 }
+                aria-label={
+                  cluster.activeMonitoring
+                    ? 'Turn off active monitoring'
+                    : 'Turn on active monitoring'
+                }
                 onClick={(e) => {
                   e.stopPropagation()
                   onToggleActiveMonitoring(cluster)
@@ -172,6 +180,7 @@ export default function Sidebar({
                     confirmCloseId === cluster.id ? ' close-confirm' : ''
                   }`}
                   title="Close sessions"
+                  aria-label={`Close ${cluster.name} sessions`}
                   onClick={(e) => {
                     e.stopPropagation()
                     const live = liveSessionCounts[cluster.id] ?? 0
@@ -193,6 +202,7 @@ export default function Sidebar({
               <button
                 className="icon-btn"
                 title="Edit"
+                aria-label={`Edit ${cluster.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   onEdit(cluster)
@@ -203,6 +213,7 @@ export default function Sidebar({
               <button
                 className="icon-btn icon-btn-danger"
                 title="Remove"
+                aria-label={`Remove ${cluster.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   onRemove(cluster)
