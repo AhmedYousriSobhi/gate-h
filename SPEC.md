@@ -203,6 +203,10 @@ never the plaintext or ciphertext.
   tabs, so both are visible at once.
 - The user can toggle either widget on/off, swap their pane order, switch orientation, and
   drag-resize the split between them; the layout choice persists across restarts.
+- Independently, the Status widget's own sections (Grafana, Slurm, Storage, Jira) can each be
+  shown or hidden from a picker in its toolbar - a user who only cares about some of them doesn't
+  see a placeholder for the rest. This choice persists the same way as the Terminal/Status layout
+  above, one shared preference for the whole app rather than per cluster.
 
 ### 3.9 Overview dashboard
 - The default view (nothing selected) is a grid of every cluster in the active profile, showing

@@ -1,5 +1,12 @@
 import { getDb } from './db'
-import { ALL_WIDGET_TYPES, DEFAULT_PANEL_LAYOUT, type PanelLayout } from '../shared/types'
+import {
+  ALL_STATUS_WIDGET_TYPES,
+  ALL_WIDGET_TYPES,
+  DEFAULT_PANEL_LAYOUT,
+  DEFAULT_STATUS_LAYOUT,
+  type PanelLayout,
+  type StatusLayout
+} from '../shared/types'
 
 // Generic key/value storage backed by the `app_settings` table (created in db.ts's profiles
 // migration) - profiles.ts's active-profile-id and the panel layout below both live here rather
@@ -51,4 +58,32 @@ export function getPanelLayout(): PanelLayout {
 
 export function setPanelLayout(layout: PanelLayout): void {
   setSetting(PANEL_LAYOUT_KEY, JSON.stringify(layout))
+}
+
+const STATUS_LAYOUT_KEY = 'statusLayout'
+
+function isValidStatusLayout(value: unknown): value is StatusLayout {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<StatusLayout>
+  return (
+    Array.isArray(candidate.visible) &&
+    candidate.visible.every((w) => (ALL_STATUS_WIDGET_TYPES as string[]).includes(w))
+  )
+}
+
+/** Falls back to the default (every section shown) if nothing was saved yet, or the saved JSON
+ *  doesn't parse or no longer matches the shape - same reasoning as getPanelLayout above. */
+export function getStatusLayout(): StatusLayout {
+  const raw = getSetting(STATUS_LAYOUT_KEY)
+  if (!raw) return DEFAULT_STATUS_LAYOUT
+  try {
+    const parsed = JSON.parse(raw)
+    return isValidStatusLayout(parsed) ? parsed : DEFAULT_STATUS_LAYOUT
+  } catch {
+    return DEFAULT_STATUS_LAYOUT
+  }
+}
+
+export function setStatusLayout(layout: StatusLayout): void {
+  setSetting(STATUS_LAYOUT_KEY, JSON.stringify(layout))
 }
