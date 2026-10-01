@@ -742,6 +742,8 @@ export interface GateHApi {
     list(): Promise<ClusterNotification[]>
     markRead(id: string): void
     markAllRead(): void
+    delete(id: string): void
+    clearAll(): void
     onCreated(callback: (notification: ClusterNotification) => void): () => void
   }
   windowControls: {

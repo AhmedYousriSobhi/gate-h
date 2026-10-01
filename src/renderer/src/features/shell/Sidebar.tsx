@@ -26,6 +26,8 @@ interface SidebarProps {
   notifications: ClusterNotification[]
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
+  deleteNotification: (id: string) => void
+  clearAllNotifications: () => void
   onNotificationNavigate: (clusterId: string, widget?: WidgetType) => void
   profilesState: ReturnType<typeof useProfiles>
   onProfileChanged: () => void
@@ -61,6 +63,8 @@ export default function Sidebar({
   notifications,
   markNotificationRead,
   markAllNotificationsRead,
+  deleteNotification,
+  clearAllNotifications,
   onNotificationNavigate,
   profilesState,
   onProfileChanged,
@@ -82,6 +86,8 @@ export default function Sidebar({
             notifications={notifications}
             markRead={markNotificationRead}
             markAllRead={markAllNotificationsRead}
+            deleteNotification={deleteNotification}
+            clearAll={clearAllNotifications}
             onNavigate={onNotificationNavigate}
           />
           <button

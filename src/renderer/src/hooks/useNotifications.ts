@@ -14,6 +14,8 @@ export function useNotifications(): {
   notifications: ClusterNotification[]
   markRead: (id: string) => void
   markAllRead: () => void
+  deleteNotification: (id: string) => void
+  clearAll: () => void
 } {
   const [notifications, setNotifications] = useState<ClusterNotification[]>([])
 
@@ -45,5 +47,15 @@ export function useNotifications(): {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
   }
 
-  return { notifications, markRead, markAllRead }
+  function deleteNotification(id: string): void {
+    window.api.notifications.delete(id)
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }
+
+  function clearAll(): void {
+    window.api.notifications.clearAll()
+    setNotifications([])
+  }
+
+  return { notifications, markRead, markAllRead, deleteNotification, clearAll }
 }
