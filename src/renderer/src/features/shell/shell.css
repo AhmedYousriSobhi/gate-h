@@ -789,48 +789,21 @@ button.widget-picker-item:hover {
 
 .overview-header h1 {
   font-size: 20px;
-  margin-bottom: 4px;
-}
-
-.overview-stat-online {
-  color: var(--color-online);
-}
-
-.overview-stat-offline {
-  color: var(--color-offline);
 }
 
 .overview-empty {
   padding: var(--space-6) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
   text-align: center;
 }
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--space-4);
-}
-
-.overview-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  background-color: var(--color-surface);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  transition: border-color var(--duration-fast) var(--ease-out);
-}
-
-.overview-card:hover {
-  border-color: var(--color-border-strong);
-}
-
-.overview-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  position: relative;
 }
 
 .overview-card-avatar {
@@ -839,18 +812,8 @@ button.widget-picker-item:hover {
   font-size: 15px;
 }
 
-.overview-card-name {
-  font-size: 14px;
-  font-weight: 560;
-}
-
-.overview-card-host {
-  font-size: 11px;
-  color: var(--color-text-3);
-}
-
 .overview-card-badge {
-  margin-left: auto;
+  flex-shrink: 0;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -863,22 +826,295 @@ button.widget-picker-item:hover {
   text-align: center;
 }
 
-.overview-card-meta {
+/* Summary strip - doubles as the filter control, so the fleet counts aren't repeated as a
+   separate All/Needs attention/Online selector. */
+
+.overview-summary {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  font-size: 11.5px;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.overview-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-text-1);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.overview-stat:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.overview-stat-active {
+  background-color: var(--color-surface-active);
+  border-color: var(--color-border-strong);
+}
+
+.overview-stat-value {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.overview-stat-label {
+  font-size: 12px;
   color: var(--color-text-2);
 }
 
-.overview-card-integration {
-  display: inline-flex;
+.overview-stat-online {
+  color: var(--color-online);
+}
+
+.overview-stat-offline {
+  color: var(--color-offline);
+}
+
+.overview-filter-clear {
+  margin-left: var(--space-2);
+}
+
+.overview-search {
+  display: flex;
   align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-3);
+}
+
+.overview-search input {
+  background: none;
+  border: none;
+  color: var(--color-text-1);
+  font-size: 12.5px;
+  font-family: inherit;
+  width: 160px;
+}
+
+.overview-search input:focus {
+  outline: none;
+}
+
+/* Cluster card */
+
+.cluster-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.cluster-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.cluster-card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.cluster-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  position: relative;
+}
+
+.cluster-card-identity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
 }
 
-.overview-card-actions {
+.cluster-card-name-row {
   display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cluster-card-name {
+  font-size: 14px;
+  font-weight: 560;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  font-size: 11.5px;
+}
+
+.status-pill-online {
+  color: var(--color-online);
+}
+
+.status-pill-offline {
+  color: var(--color-offline);
+}
+
+.status-pill-checking {
+  color: var(--color-checking);
+}
+
+.status-pill-detail {
+  color: var(--color-text-3);
+}
+
+.status-pill .spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cluster-card-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.cluster-card-menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 140px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  padding: var(--space-1);
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+
+.cluster-card-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-1);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.cluster-card-menu-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.cluster-card-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--color-text-2);
+  cursor: pointer;
+}
+
+.cluster-card-host:hover {
+  color: var(--color-text-1);
+}
+
+.cluster-card-host-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cluster tags - previously rendered with these class names but no matching rule anywhere in the
+   app, so a tag showed as unstyled plain text (this was the "orphan text" bug: a cluster's tag
+   read as an unlabeled, un-styled line with no visual relation to the rest of the card). */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  font-size: 10.5px;
+  font-weight: 510;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  color: var(--color-text-2);
+  background-color: var(--color-surface-active);
+}
+
+.cluster-card-description {
+  font-size: 11.5px;
+  color: var(--color-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
   margin-top: auto;
+}
+
+.cluster-card-integrations {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-3);
+}
+
+.cluster-card-skeleton {
+  height: 142px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    100deg,
+    var(--color-surface) 40%,
+    var(--color-surface-hover) 50%,
+    var(--color-surface) 60%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
 }
