@@ -24,9 +24,14 @@ export function registerClusterIpcHandlers(): void {
     return created
   })
   ipcMain.handle('clusters:update', async (_event, id: string, input: ClusterInput) => {
-    // A running tunnel keeps the settings it was started with - drop it so the next connect
-    // opens one matching the edited config.
-    if (getCluster(id)?.azureTunnel) await stopTunnel(id)
+    const existing = getCluster(id)
+    // A running tunnel keeps the settings it was started with, so it only needs dropping when
+    // those settings actually changed - not on every edit of the cluster, which would otherwise
+    // sever any SSH session already running through it (e.g. editing Slurm or Grafana settings on
+    // an Azure-tunneled cluster had no business tearing down its tunnel).
+    const azureTunnelChanged =
+      JSON.stringify(existing?.azureTunnel ?? null) !== JSON.stringify(input.azureTunnel ?? null)
+    if (existing?.azureTunnel && azureTunnelChanged) await stopTunnel(id)
     const updated = updateCluster(id, input)
     refreshCluster(updated)
     // Also when Teleport was just turned off, so the cluster drops out of the session state.

@@ -1533,13 +1533,16 @@ export default function ClusterForm({
                           </div>
                         )}
                       </div>
-                      {form.schedulerExecHost.trim() && (
-                        <p className="hint">
-                          For a bastion/login node that doesn&apos;t host Slurm itself -
-                          squeue/sinfo run here instead, through whatever jump host or tunnel is
-                          already configured above.
-                        </p>
-                      )}
+                      <p className="hint">
+                        A hostname, not a command - leave this blank unless squeue/sinfo need to run
+                        on a different node than the terminal&apos;s own (e.g. a bastion/login node
+                        that doesn&apos;t host Slurm itself). Gate-H already runs sinfo/squeue
+                        automatically above once Slurm is enabled; this field doesn&apos;t change
+                        what runs, only which node it runs on. The name is resolved by the
+                        already-connected node reached through whatever jump host or tunnel is
+                        configured above, not by your own machine - it must be resolvable from
+                        there.
+                      </p>
                     </>
                   )}
                 </div>
