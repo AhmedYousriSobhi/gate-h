@@ -100,12 +100,18 @@ const stubScheduler = {
 }
 
 // The command runner looks up live sessions and Teleport state; the checks supply both, and
-// run "Teleport" commands with a local bash instead of teleport.sh.
+// run "Teleport" commands with a local bash instead of teleport.sh. `ssh/connect` and `clusters`
+// back a Slurm execTarget's extra forwarded hop - stubbed the same way, with a second fake client
+// (globalThis.__execTargetClient) standing in for the one `connectClient` would return over the
+// forwarded stream.
 const stubExecDeps = {
   name: 'stub-exec-deps',
   setup(b) {
     b.onResolve(
-      { filter: /^\.\.\/(ssh\/manager|teleport\/sessionState|teleport\/session)$/ },
+      {
+        filter:
+          /^\.\.\/(ssh\/manager|ssh\/connect|clusters|teleport\/sessionState|teleport\/session)$/
+      },
       (args) => ({
         path: args.path,
         namespace: 'stub-exec'
@@ -115,6 +121,20 @@ const stubExecDeps = {
       contents: 'module.exports = { getLiveClient: (id) => globalThis.__clients[id] ?? null }',
       loader: 'js'
     }))
+    b.onLoad({ filter: /connect$/, namespace: 'stub-exec' }, () => ({
+      contents:
+        'module.exports = { ' +
+        'buildConnectConfig: (profile, secret, ctx) => ({ profile, secret, ctx }), ' +
+        'connectClient: () => Promise.resolve(globalThis.__execTargetClient), ' +
+        'openForward: (_client, host, port) => Promise.resolve({ host, port }) }',
+      loader: 'js'
+    }))
+    b.onLoad({ filter: /clusters$/, namespace: 'stub-exec' }, () => ({
+      contents:
+        'module.exports = { getClusterSecrets: (id) => (globalThis.__secrets ?? {})[id] ?? ' +
+        '{ connectionSecret: null, jumpHostSecret: null, grafanaApiToken: null, jiraApiToken: null } }',
+      loader: 'js'
+    }))
     b.onLoad({ filter: /sessionState$/, namespace: 'stub-exec' }, () => ({
       contents: 'module.exports = { getTeleportSessions: () => globalThis.__teleport }',
       loader: 'js'
@@ -122,7 +142,8 @@ const stubExecDeps = {
     b.onLoad({ filter: /session$/, namespace: 'stub-exec' }, () => ({
       contents:
         'module.exports = { EXIT_NO_SESSION: 4, ' +
-        "teleportExecCommand: (_c, command) => ({ file: 'bash', args: ['-c', command] }) }",
+        "teleportExecCommand: (_c, command, targetHost) => ({ file: 'bash', " +
+        "args: ['-c', targetHost ? `echo TARGET=${targetHost} 1>&2; ${command}` : command] }) }",
       loader: 'js'
     }))
   }
