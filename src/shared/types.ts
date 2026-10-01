@@ -94,6 +94,12 @@ export interface AzureTunnelConfig {
   tenant?: string
   resourceGroup: string
   localPort: number
+  /** The port the tunnel targets on the far side (`--resource-port`/`--remote-port`). Defaults to
+   *  the jump host's port, or `connection.port` without one, when unset - but it's independently
+   *  settable because it isn't always the same number: Azure Bastion's IP-based connect
+   *  (`targetIpAddress`) only ever allows 22 or 3389 here regardless of what the real sshd port
+   *  is, so this can't be inferred from the connection profile alone. */
+  remotePort?: number
   /** mode "bastion" */
   bastionName?: string
   /** mode "bastion": full ARM resource id of the target VM. If absent, `vmName` is resolved to

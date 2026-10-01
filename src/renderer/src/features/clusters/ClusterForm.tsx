@@ -79,6 +79,7 @@ interface FormState {
   azureTenant: string
   azureResourceGroup: string
   azureLocalPort: string
+  azureRemotePort: string
   azureBastionName: string
   azureTargetResourceId: string
   azureVmName: string
@@ -139,6 +140,7 @@ function toFormState(c?: ClusterSummary): FormState {
     azureTenant: c?.azureTunnel?.tenant ?? '',
     azureResourceGroup: c?.azureTunnel?.resourceGroup ?? '',
     azureLocalPort: c?.azureTunnel ? String(c.azureTunnel.localPort) : '',
+    azureRemotePort: c?.azureTunnel?.remotePort ? String(c.azureTunnel.remotePort) : '',
     azureBastionName: c?.azureTunnel?.bastionName ?? '',
     azureTargetResourceId: c?.azureTunnel?.targetResourceId ?? '',
     azureVmName: c?.azureTunnel?.vmName ?? '',
@@ -243,6 +245,12 @@ function azureTunnelError(form: FormState): string | null {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return 'Azure tunnel local port must be a number between 1 and 65535.'
   }
+  if (form.azureRemotePort.trim()) {
+    const remotePort = Number(form.azureRemotePort)
+    if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) {
+      return 'Azure tunnel remote port must be a number between 1 and 65535.'
+    }
+  }
   if (form.azureMode === 'bastion') {
     if (!form.azureBastionName.trim()) return 'Azure Bastion needs the bastion name.'
     if (
@@ -251,6 +259,25 @@ function azureTunnelError(form: FormState): string | null {
       !form.azureTargetIpAddress.trim()
     ) {
       return 'Azure Bastion needs the target VM resource ID, its VM name, or its IP address.'
+    }
+    // IP-based connect (no VM resource id/name at all) is a separate Bastion feature from
+    // resource-id-based tunneling, and Azure rejects any other remote port for it outright - this
+    // isn't a Gate-H restriction, so catching it here beats a buried `az` CLI failure.
+    const isIpConnect =
+      !form.azureTargetResourceId.trim() &&
+      !form.azureVmName.trim() &&
+      Boolean(form.azureTargetIpAddress.trim())
+    if (isIpConnect) {
+      const effectiveRemotePort = form.azureRemotePort.trim()
+        ? Number(form.azureRemotePort)
+        : Number(form.jumpHostEnabled && !form.useTeleport ? form.jumpPort : form.port)
+      if (effectiveRemotePort !== 22 && effectiveRemotePort !== 3389) {
+        return (
+          "Azure Bastion's IP-based connect only allows remote port 22 or 3389 - set the Azure " +
+          'tunnel remote port above to one of those, or use the target VM resource ID/name ' +
+          'instead of its IP address to tunnel to any port.'
+        )
+      }
     }
   }
   if (form.azureMode === 'az-ssh' && !form.azureVmName.trim()) {
@@ -605,6 +632,7 @@ export default function ClusterForm({
             tenant: form.azureTenant.trim() || undefined,
             resourceGroup: form.azureResourceGroup.trim(),
             localPort: Number(form.azureLocalPort),
+            remotePort: form.azureRemotePort.trim() ? Number(form.azureRemotePort) : undefined,
             bastionName: form.azureMode === 'bastion' ? form.azureBastionName.trim() : undefined,
             targetResourceId:
               form.azureMode === 'bastion'
@@ -952,6 +980,21 @@ export default function ClusterForm({
                             onChange={(e) => set('azureLocalPort', e.target.value)}
                           />
                         </div>
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="azureRemotePort">Remote port (optional)</label>
+                        <input
+                          id="azureRemotePort"
+                          placeholder={`Defaults to ${form.jumpHostEnabled && !form.useTeleport ? 'jump host' : 'Host/Port above'}'s port`}
+                          value={form.azureRemotePort}
+                          onChange={(e) => set('azureRemotePort', e.target.value)}
+                        />
+                        <p className="hint">
+                          The port the tunnel targets on the far side - usually the same as the SSH
+                          port above, so you rarely need to set this. Set it independently when it
+                          isn&apos;t: Bastion&apos;s IP-based connect (no resource ID/VM name) only
+                          ever allows 22 or 3389 here, regardless of the real sshd port.
+                        </p>
                       </div>
                       <div className="form-field">
                         <label htmlFor="azureSubscription">Subscription (ID or name)</label>

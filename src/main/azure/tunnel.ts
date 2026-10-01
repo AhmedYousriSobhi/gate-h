@@ -62,7 +62,7 @@ function upArgs(cluster: ClusterSummary): string[] {
     '--local-port',
     String(tunnel.localPort),
     '--remote-port',
-    String(near.port)
+    String(tunnel.remotePort ?? near.port)
   ]
   if (tunnel.tenant) args.push('--tenant', tunnel.tenant)
   // Missing mode-specific values are left out rather than passed empty, so the script reports
