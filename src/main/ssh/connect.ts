@@ -32,9 +32,13 @@ export function buildConnectConfig(
   secret: string | null,
   hostContext: HostContext,
   /** Where to actually dial, when that's a local tunnel end rather than `profile.host` - the host
-   *  key stays pinned under `profile`'s host:port, the machine it really belongs to. */
+   *  key stays pinned under `profile`'s host:port, the machine it really belongs to. When set,
+   *  `profile.host` is just a label (not a routable address), so different clusters can
+   *  legitimately declare the same one for different real machines reached through different
+   *  tunnels - the pin is scoped per-cluster in that case to keep those from colliding. */
   dial?: { host: string; port: number }
 ): ConnectConfig {
+  const pinHost = dial ? `${profile.host}#${hostContext.clusterId}` : profile.host
   const config: ConnectConfig = {
     host: dial?.host ?? profile.host,
     port: dial?.port ?? profile.port,
@@ -44,7 +48,7 @@ export function buildConnectConfig(
     keepaliveCountMax: 3,
     hostHash: 'sha256',
     hostVerifier: (fingerprint: string) => {
-      const result = checkKnownHost(profile.host, profile.port, fingerprint)
+      const result = checkKnownHost(pinHost, profile.port, fingerprint)
       if (result === 'mismatch') {
         addNotification({
           clusterId: hostContext.clusterId,
