@@ -60,6 +60,7 @@ export default function NotificationBell({
       <button
         className="icon-btn notification-bell-trigger"
         title="Notifications"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
         onClick={() => setOpen((v) => !v)}
       >
         <Bell size={16} strokeWidth={2} />
@@ -73,7 +74,12 @@ export default function NotificationBell({
           <div className="notification-panel-header">
             <span>Notifications</span>
             {notifications.length > 0 && (
-              <button className="icon-btn" title="Mark all read" onClick={markAllRead}>
+              <button
+                className="icon-btn"
+                title="Mark all read"
+                aria-label="Mark all notifications read"
+                onClick={markAllRead}
+              >
                 <CheckCheck size={14} strokeWidth={2} />
               </button>
             )}
