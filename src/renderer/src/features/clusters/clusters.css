@@ -144,6 +144,99 @@
   margin-bottom: var(--space-3);
 }
 
+/* An optional section's title + toggle switch, replacing the old checkbox-in-a-label pattern -
+   see SectionToggleHeader in ClusterForm.tsx for why a switch, not a checkbox, is right here. */
+.cluster-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.cluster-section-header h4 {
+  margin-bottom: 0;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-border);
+  border-radius: 999px;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color-text-1);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.toggle-switch input:checked ~ .toggle-track {
+  background-color: var(--color-accent);
+}
+
+.toggle-switch input:checked ~ .toggle-track .toggle-thumb {
+  transform: translateX(16px);
+  background-color: #fff;
+}
+
+.toggle-switch input:disabled ~ .toggle-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-switch input:disabled {
+  cursor: not-allowed;
+}
+
+.toggle-switch input:focus-visible ~ .toggle-track {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* What a toggled-off section shows instead of blank space - see SectionEmptyState. */
+.cluster-section-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  color: var(--color-text-2);
+}
+
+.cluster-section-empty svg {
+  opacity: 0.5;
+}
+
+.cluster-section-empty p {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

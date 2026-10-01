@@ -337,6 +337,61 @@ function firstFormError(form: FormState): { message: string; section: SectionKey
   return null
 }
 
+/** An optional section's heading: a toggle switch rather than a checkbox, since it turns a whole
+ *  group of fields on or off below it, not one item among independent choices - see
+ *  https://developer.apple.com/design/human-interface-guidelines/toggles ("use a switch to let
+ *  people turn on or off a group of settings"). */
+function SectionToggleHeader({
+  icon: Icon,
+  label,
+  checked,
+  disabled,
+  onChange
+}: {
+  icon: typeof KeyRound
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}): React.JSX.Element {
+  return (
+    <div className="cluster-section-header">
+      <h4>
+        <Icon size={13} strokeWidth={2} />
+        {label}
+      </h4>
+      <label className="toggle-switch">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="toggle-track">
+          <span className="toggle-thumb" />
+        </span>
+      </label>
+    </div>
+  )
+}
+
+/** What a toggled-off optional section shows instead of blank space below its header - a brief
+ *  explanation of what turning it on does, not nothing. */
+function SectionEmptyState({
+  icon: Icon,
+  children
+}: {
+  icon: typeof KeyRound
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="cluster-section-empty">
+      <Icon size={28} strokeWidth={1.5} />
+      <p>{children}</p>
+    </div>
+  )
+}
+
 export default function ClusterForm({
   initial,
   existingClusters = [],
@@ -746,128 +801,124 @@ export default function ClusterForm({
 
               {activeSection === 'jumpHost' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.jumpHostEnabled && !form.useTeleport}
-                      disabled={form.useTeleport}
-                      onChange={(e) => set('jumpHostEnabled', e.target.checked)}
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <Waypoints size={13} strokeWidth={2} />
-                      Route through a jump host / bastion hop
-                    </h4>
-                  </label>
+                  <SectionToggleHeader
+                    icon={Waypoints}
+                    label="Route through a jump host / bastion hop"
+                    checked={form.jumpHostEnabled && !form.useTeleport}
+                    disabled={form.useTeleport}
+                    onChange={(checked) => set('jumpHostEnabled', checked)}
+                  />
                   {form.useTeleport ? (
                     <p className="hint">
                       Not available when connecting through Teleport (below) - every node it routes
                       to presents a certificate host key this app&apos;s SSH library can&apos;t
                       verify.
                     </p>
+                  ) : !form.jumpHostEnabled ? (
+                    <SectionEmptyState icon={Waypoints}>
+                      Adds an intermediate SSH hop before reaching Host/Port above - for a bastion
+                      or firewall between you and the login node.
+                    </SectionEmptyState>
                   ) : (
-                    form.jumpHostEnabled && (
-                      <>
-                        <p className="hint">
-                          Reached first - directly, or through the Azure tunnel below if one&apos;s
-                          configured (the tunnel then reaches this jump host, not the target
-                          directly) - then a normal SSH hop from there reaches Host/Port above.
-                        </p>
-                        <div className="form-row">
-                          <div className="form-field">
-                            <label htmlFor="jumpHost">Jump host</label>
-                            <input
-                              id="jumpHost"
-                              value={form.jumpHost}
-                              onChange={(e) => set('jumpHost', e.target.value)}
-                            />
-                          </div>
-                          <div className="form-field">
-                            <label htmlFor="jumpPort">Jump port</label>
-                            <input
-                              id="jumpPort"
-                              value={form.jumpPort}
-                              onChange={(e) => set('jumpPort', e.target.value)}
-                            />
-                          </div>
+                    <>
+                      <p className="hint">
+                        Reached first - directly, or through the Azure tunnel below if one&apos;s
+                        configured (the tunnel then reaches this jump host, not the target directly)
+                        - then a normal SSH hop from there reaches Host/Port above.
+                      </p>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="jumpHost">Jump host</label>
+                          <input
+                            id="jumpHost"
+                            value={form.jumpHost}
+                            onChange={(e) => set('jumpHost', e.target.value)}
+                          />
                         </div>
-                        <div className="form-row">
-                          <div className="form-field">
-                            <label htmlFor="jumpUsername">Jump username</label>
-                            <input
-                              id="jumpUsername"
-                              value={form.jumpUsername}
-                              onChange={(e) => set('jumpUsername', e.target.value)}
-                            />
-                          </div>
-                          <div className="form-field">
-                            <label htmlFor="jumpAuthMethod">Jump auth method</label>
-                            <select
-                              id="jumpAuthMethod"
-                              value={form.jumpAuthMethod}
-                              onChange={(e) =>
-                                set('jumpAuthMethod', e.target.value as SshAuthMethod)
-                              }
-                            >
-                              <option value="private-key">Private key</option>
-                              <option value="password">Password</option>
-                              <option value="agent">SSH agent</option>
-                            </select>
-                          </div>
+                        <div className="form-field">
+                          <label htmlFor="jumpPort">Jump port</label>
+                          <input
+                            id="jumpPort"
+                            value={form.jumpPort}
+                            onChange={(e) => set('jumpPort', e.target.value)}
+                          />
                         </div>
-                        {form.jumpAuthMethod === 'private-key' && (
-                          <div className="form-field">
-                            <label htmlFor="jumpPrivateKeyPath">Jump host private key path</label>
-                            <input
-                              id="jumpPrivateKeyPath"
-                              value={form.jumpPrivateKeyPath}
-                              onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
-                            />
-                          </div>
-                        )}
-                        {form.jumpAuthMethod !== 'agent' && (
-                          <div className="form-field">
-                            <label htmlFor="jumpHostSecret">
-                              {form.jumpAuthMethod === 'password'
-                                ? 'Jump host password'
-                                : 'Jump host key passphrase (if any)'}
-                            </label>
-                            <input
-                              id="jumpHostSecret"
-                              type="password"
-                              value={form.jumpHostSecret}
-                              onChange={(e) => set('jumpHostSecret', e.target.value)}
-                              placeholder={
-                                initial?.hasJumpHostSecret ? 'Unchanged - leave blank to keep' : ''
-                              }
-                            />
-                          </div>
-                        )}
-                      </>
-                    )
+                      </div>
+                      <div className="form-row">
+                        <div className="form-field">
+                          <label htmlFor="jumpUsername">Jump username</label>
+                          <input
+                            id="jumpUsername"
+                            value={form.jumpUsername}
+                            onChange={(e) => set('jumpUsername', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="jumpAuthMethod">Jump auth method</label>
+                          <select
+                            id="jumpAuthMethod"
+                            value={form.jumpAuthMethod}
+                            onChange={(e) => set('jumpAuthMethod', e.target.value as SshAuthMethod)}
+                          >
+                            <option value="private-key">Private key</option>
+                            <option value="password">Password</option>
+                            <option value="agent">SSH agent</option>
+                          </select>
+                        </div>
+                      </div>
+                      {form.jumpAuthMethod === 'private-key' && (
+                        <div className="form-field">
+                          <label htmlFor="jumpPrivateKeyPath">Jump host private key path</label>
+                          <input
+                            id="jumpPrivateKeyPath"
+                            value={form.jumpPrivateKeyPath}
+                            onChange={(e) => set('jumpPrivateKeyPath', e.target.value)}
+                          />
+                        </div>
+                      )}
+                      {form.jumpAuthMethod !== 'agent' && (
+                        <div className="form-field">
+                          <label htmlFor="jumpHostSecret">
+                            {form.jumpAuthMethod === 'password'
+                              ? 'Jump host password'
+                              : 'Jump host key passphrase (if any)'}
+                          </label>
+                          <input
+                            id="jumpHostSecret"
+                            type="password"
+                            value={form.jumpHostSecret}
+                            onChange={(e) => set('jumpHostSecret', e.target.value)}
+                            placeholder={
+                              initial?.hasJumpHostSecret ? 'Unchanged - leave blank to keep' : ''
+                            }
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
 
               {activeSection === 'azure' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.useAzureTunnel}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          useAzureTunnel: e.target.checked,
-                          useTeleport: e.target.checked ? false : prev.useTeleport
-                        }))
-                      }
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <Cloud size={13} strokeWidth={2} />
-                      Azure tunnel
-                    </h4>
-                  </label>
-                  {form.useAzureTunnel && (
+                  <SectionToggleHeader
+                    icon={Cloud}
+                    label="Azure tunnel"
+                    checked={form.useAzureTunnel}
+                    onChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useAzureTunnel: checked,
+                        useTeleport: checked ? false : prev.useTeleport
+                      }))
+                    }
+                  />
+                  {!form.useAzureTunnel ? (
+                    <SectionEmptyState icon={Cloud}>
+                      Reach the target through an Azure Bastion or <code>az ssh vm</code> tunnel -
+                      for a VM with no direct SSH access.
+                    </SectionEmptyState>
+                  ) : (
                     <>
                       <p className="hint">
                         Before connecting, Gate-H signs in with the Azure CLI (az), selects this
@@ -1055,26 +1106,26 @@ export default function ClusterForm({
 
               {activeSection === 'teleport' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.useTeleport}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          useTeleport: e.target.checked,
-                          useAzureTunnel: e.target.checked ? false : prev.useAzureTunnel,
-                          // A jump host can't be combined with Teleport (see JumpHostConfig).
-                          jumpHostEnabled: e.target.checked ? false : prev.jumpHostEnabled
-                        }))
-                      }
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <ShieldCheck size={13} strokeWidth={2} />
-                      Teleport
-                    </h4>
-                  </label>
-                  {form.useTeleport && (
+                  <SectionToggleHeader
+                    icon={ShieldCheck}
+                    label="Teleport"
+                    checked={form.useTeleport}
+                    onChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useTeleport: checked,
+                        useAzureTunnel: checked ? false : prev.useAzureTunnel,
+                        // A jump host can't be combined with Teleport (see JumpHostConfig).
+                        jumpHostEnabled: checked ? false : prev.jumpHostEnabled
+                      }))
+                    }
+                  />
+                  {!form.useTeleport ? (
+                    <SectionEmptyState icon={ShieldCheck}>
+                      Reach the target through a Teleport proxy instead of connecting directly - for
+                      a cluster behind Teleport&apos;s access gateway.
+                    </SectionEmptyState>
+                  ) : (
                     <>
                       <p className="hint">
                         The terminal runs tsh ssh through this proxy. If there&apos;s no valid tsh
@@ -1142,18 +1193,18 @@ export default function ClusterForm({
 
               {activeSection === 'grafana' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.useGrafana}
-                      onChange={(e) => set('useGrafana', e.target.checked)}
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <BarChart3 size={13} strokeWidth={2} />
-                      Grafana status
-                    </h4>
-                  </label>
-                  {form.useGrafana && (
+                  <SectionToggleHeader
+                    icon={BarChart3}
+                    label="Grafana status"
+                    checked={form.useGrafana}
+                    onChange={(checked) => set('useGrafana', checked)}
+                  />
+                  {!form.useGrafana ? (
+                    <SectionEmptyState icon={BarChart3}>
+                      Show this cluster&apos;s dashboards and a health check from a Grafana
+                      instance.
+                    </SectionEmptyState>
+                  ) : (
                     <>
                       <div className="form-field">
                         <label htmlFor="grafanaBaseUrl">Grafana base URL</label>
@@ -1220,27 +1271,27 @@ export default function ClusterForm({
 
               {activeSection === 'scheduler' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.useScheduler}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          useScheduler: e.target.checked,
-                          // Each run on a Teleport cluster is an audited session - opt in explicitly.
-                          schedulerAutoRefresh: e.target.checked
-                            ? !prev.useTeleport
-                            : prev.schedulerAutoRefresh
-                        }))
-                      }
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <ListChecks size={13} strokeWidth={2} />
-                      Slurm jobs and nodes
-                    </h4>
-                  </label>
-                  {form.useScheduler && (
+                  <SectionToggleHeader
+                    icon={ListChecks}
+                    label="Slurm jobs and nodes"
+                    checked={form.useScheduler}
+                    onChange={(checked) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        useScheduler: checked,
+                        // Each run on a Teleport cluster is an audited session - opt in explicitly.
+                        schedulerAutoRefresh: checked
+                          ? !prev.useTeleport
+                          : prev.schedulerAutoRefresh
+                      }))
+                    }
+                  />
+                  {!form.useScheduler ? (
+                    <SectionEmptyState icon={ListChecks}>
+                      Show the user&apos;s Slurm jobs and node health from this cluster&apos;s
+                      terminal session.
+                    </SectionEmptyState>
+                  ) : (
                     <>
                       <p className="hint">
                         Runs squeue and sinfo on the terminal&apos;s open session - never a new
@@ -1355,18 +1406,17 @@ export default function ClusterForm({
 
               {activeSection === 'storage' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.useStorage}
-                      onChange={(e) => set('useStorage', e.target.checked)}
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <HardDrive size={13} strokeWidth={2} />
-                      Storage quota
-                    </h4>
-                  </label>
-                  {form.useStorage && (
+                  <SectionToggleHeader
+                    icon={HardDrive}
+                    label="Storage quota"
+                    checked={form.useStorage}
+                    onChange={(checked) => set('useStorage', checked)}
+                  />
+                  {!form.useStorage ? (
+                    <SectionEmptyState icon={HardDrive}>
+                      Check filesystem usage and quota for specific paths on this cluster.
+                    </SectionEmptyState>
+                  ) : (
                     <>
                       <div className="form-field">
                         <label htmlFor="storagePaths">Paths (comma separated)</label>
@@ -1389,18 +1439,17 @@ export default function ClusterForm({
 
               {activeSection === 'jira' && (
                 <div className="form-section">
-                  <label className="form-field-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.useJira}
-                      onChange={(e) => set('useJira', e.target.checked)}
-                    />
-                    <h4 style={{ margin: 0 }}>
-                      <Ticket size={13} strokeWidth={2} />
-                      Jira
-                    </h4>
-                  </label>
-                  {form.useJira && (
+                  <SectionToggleHeader
+                    icon={Ticket}
+                    label="Jira"
+                    checked={form.useJira}
+                    onChange={(checked) => set('useJira', checked)}
+                  />
+                  {!form.useJira ? (
+                    <SectionEmptyState icon={Ticket}>
+                      List and file Jira tickets scoped to this cluster.
+                    </SectionEmptyState>
+                  ) : (
                     <>
                       <div className="form-row">
                         <div className="form-field">
