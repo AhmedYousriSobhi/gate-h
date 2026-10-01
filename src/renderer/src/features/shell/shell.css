@@ -875,10 +875,90 @@ button.widget-picker-item:hover {
   gap: var(--space-4);
 }
 
-.overview-card-avatar {
-  width: 36px;
-  height: 36px;
-  font-size: 15px;
+/* Dense table view - an alternative to the card grid above for a fleet too large for cards to
+   stay scannable (see OverviewDashboard's view toggle). */
+
+.overview-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.overview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.overview-table th {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 560;
+  color: var(--color-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.overview-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.overview-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cluster-row {
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.cluster-row:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.cluster-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.cluster-row-name {
+  font-weight: 560;
+  white-space: nowrap;
+}
+
+.cluster-row-host {
+  color: var(--color-text-2);
+  white-space: nowrap;
+}
+
+.cluster-row-jobs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--color-text-2);
+}
+
+.cluster-row-muted {
+  color: var(--color-text-3);
+}
+
+.cluster-row-actions {
+  display: flex;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.overview-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .overview-card-badge {
@@ -951,6 +1031,23 @@ button.widget-picker-item:hover {
 
 .overview-filter-clear {
   margin-left: var(--space-2);
+}
+
+.overview-job-totals {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: var(--space-2);
+  margin-left: var(--space-2);
+  border-left: 1px solid var(--color-border);
+}
+
+.overview-stat-static {
+  cursor: default;
+}
+
+.overview-stat-static:hover {
+  background-color: transparent;
 }
 
 .overview-search {

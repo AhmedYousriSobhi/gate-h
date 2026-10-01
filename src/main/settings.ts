@@ -1,5 +1,11 @@
 import { getDb } from './db'
-import { ALL_WIDGET_TYPES, DEFAULT_PANEL_LAYOUT, type PanelLayout } from '../shared/types'
+import {
+  ALL_WIDGET_TYPES,
+  DEFAULT_OVERVIEW_VIEW_MODE,
+  DEFAULT_PANEL_LAYOUT,
+  type OverviewViewMode,
+  type PanelLayout
+} from '../shared/types'
 
 // Generic key/value storage backed by the `app_settings` table (created in db.ts's profiles
 // migration) - profiles.ts's active-profile-id and the panel layout below both live here rather
@@ -51,4 +57,17 @@ export function getPanelLayout(): PanelLayout {
 
 export function setPanelLayout(layout: PanelLayout): void {
   setSetting(PANEL_LAYOUT_KEY, JSON.stringify(layout))
+}
+
+const OVERVIEW_VIEW_MODE_KEY = 'overviewViewMode'
+
+/** Falls back to the default (cards) if nothing was saved yet or the value is stale/corrupt -
+ *  same reasoning as getPanelLayout above. */
+export function getOverviewViewMode(): OverviewViewMode {
+  const raw = getSetting(OVERVIEW_VIEW_MODE_KEY)
+  return raw === 'cards' || raw === 'table' ? raw : DEFAULT_OVERVIEW_VIEW_MODE
+}
+
+export function setOverviewViewMode(mode: OverviewViewMode): void {
+  setSetting(OVERVIEW_VIEW_MODE_KEY, mode)
 }
