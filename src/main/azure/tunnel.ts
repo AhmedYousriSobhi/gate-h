@@ -118,7 +118,13 @@ function runUp(cluster: ClusterSummary): Promise<void> {
         return
       }
       console.error(`[gate-h] azure tunnel for ${cluster.name} failed:\n${stderrTail.join('\n')}`)
-      reject(new Error(lastError || `Azure tunnel failed to start (exit code ${code})`))
+      const summary = lastError || `Azure tunnel failed to start (exit code ${code})`
+      // `az`'s own failure reason (its stderr, conventionally "ERROR: ...") only reaches this far -
+      // our own die() message above is just a generic wrapper ("exited before it started
+      // listening") that doesn't say why. Fold the real reason in so it reaches the notification
+      // feed instead of only the main process's console/log file.
+      const azError = [...stderrTail].reverse().find((line) => /^ERROR:/i.test(line.trim()))
+      reject(new Error(azError ? `${summary} - ${azError.trim()}` : summary))
     })
   })
 }
