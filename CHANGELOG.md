@@ -761,3 +761,56 @@ auto-refresh.
   since storage checks already run through the same Teleport-aware command runner Slurm uses).
 - `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified** in a live
   window - the timer/backoff logic only, not an actual multi-minute observation.
+
+### 2026-10-02 — `feat/slurm-history-cpu-efficiency`: show CPU efficiency in job history
+
+Searched for what established HPC portals (Open OnDemand, Bright Cluster Manager) and HPC-site
+docs commonly offer. Most of it is either already in Gate-H (snippets, multi-session terminal, job
+submission/queue/history, GPU telemetry) or explicitly out of scope per SPEC.md §5 (interactive
+app hosting, container orchestration). One concrete, in-scope gap turned up: a near-universal,
+specifically-requested feature (Slurm's own `seff`, Princeton's Jobstats) that Gate-H's job
+history didn't have - per-job CPU efficiency, how much CPU time a job actually used versus what it
+reserved.
+
+- Added `TotalCPU`/`AllocCPUS` to the existing `sacct --format=` list (`historyCommand()`,
+  `src/main/scheduler/slurm.ts`) - no second remote command - inserted *before* `JobName`, which
+  has to stay last (the parser relies on the free-text job name being the final field so an
+  embedded `|` doesn't break parsing, per that file's own header comment).
+- `cpuEfficiencyPct = TotalCPU / (Elapsed x AllocCPUS) x 100`, the same thing `seff` reports,
+  via a small new duration parser for Slurm's `[DD-[HH:]]MM:SS` format. Null (not 0%) whenever a
+  field doesn't parse or elapsed/CPUs are zero - a job that never started shouldn't show a
+  misleading number.
+- Added a "CPU eff." column to `SlurmHistory.tsx`, and 3 new assertions to `slurm.checks.ts`
+  (computed, null-on-missing-data, and a still-running job).
+- Deliberately not pursuing memory efficiency in the same pass - it needs `MaxRSS`, which
+  `sacct --allocations` doesn't reliably report at the parent-job rollup level (it lives on job
+  steps), so getting it means a second, steps-level query.
+- `npm run typecheck`, `npm run lint`, `npm run build`, and the full `test-pty-manager.mjs` suite
+  (173 assertions, including the 3 new ones) all pass. **Not verified** against a real Slurm
+  installation - the local Vagrant lab (next entry) doesn't run one.
+
+### 2026-10-02 — live-testing the merged review branch against a local Vagrant lab
+
+With a real two-VM Vagrant lab already set up on this machine for Gate-H (`hgate-testlab/` -
+a plain Ubuntu "compute-node" plus a "grafana-node" running Prometheus+Grafana), this session
+turned out to be able to render a real Electron window after all: `CLAUDE.md`'s "no X server"
+note was actually about this environment's `ELECTRON_RUN_AS_NODE=1` forcing Electron to run as
+plain Node, not a missing display. Unset for one `npm run dev` run, a real window opened and was
+screenshotted (via `xwd` + a hand-decoded BGRX buffer, since no screenshot tool or ImageMagick was
+installed) - confirming the Overview redesign renders as intended against the user's own existing
+profile. Synthetic X11 clicks (via `ctypes` against `libX11`/`libXtst`, already on the system) move
+the pointer and fire real button events, but Electron isn't acting on them - likely filtered at
+the Chromium input layer - so interactive click-through testing still needs a real mouse or a
+tool like `xdotool` (not installed, and installing it wasn't asked for).
+
+What *was* verified against the real lab: the exact remote command `fetchStorageUsage` builds for
+a path (`stat -f` + `df -Pk`, markers and all) was run by hand over SSH against `compute-node` and
+produced output that matches what `parseUsage` expects, byte for byte - genuine end-to-end
+confirmation of the storage feature (and the auto-refresh wrapping it) against a real non-mocked
+host, not just the local-bash test. `grafana-node`'s `/api/health` responded 200, confirming the
+Grafana integration's assumptions hold too. (No real Slurm installation in this lab, so the
+previous entry's CPU-efficiency feature couldn't be exercised against a live scheduler - same
+caveat as the rest of the Slurm feature set.)
+
+No screenshot was kept or committed anywhere - this environment's real, pre-existing cluster data
+stays out of the repo; any future documentation screenshots use fabricated example data instead.
