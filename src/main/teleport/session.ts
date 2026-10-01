@@ -23,7 +23,12 @@ function scopeArgs(cluster: ClusterSummary): string[] {
   return args
 }
 
-export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
+/** `targetHost` defaults to the cluster's own node - a Slurm execution target (see
+ *  ../scheduler/exec.ts) overrides it to reach a different internal node through the same proxy. */
+export function teleportSshCommand(
+  cluster: ClusterSummary,
+  targetHost: string = cluster.connection.host
+): PtySpawnOptions {
   return {
     file: 'bash',
     args: [
@@ -32,15 +37,19 @@ export function teleportSshCommand(cluster: ClusterSummary): PtySpawnOptions {
       ...scopeArgs(cluster),
       '--no-login',
       '--',
-      `${cluster.connection.username}@${cluster.connection.host}`
+      `${cluster.connection.username}@${targetHost}`
     ]
   }
 }
 
 /** A one-off, non-interactive remote command (scheduler queries - see ../scheduler/exec.ts).
  *  `--no-login`: without a usable session it exits with EXIT_NO_SESSION instead of prompting. */
-export function teleportExecCommand(cluster: ClusterSummary, command: string): PtySpawnOptions {
-  const ssh = teleportSshCommand(cluster)
+export function teleportExecCommand(
+  cluster: ClusterSummary,
+  command: string,
+  targetHost?: string
+): PtySpawnOptions {
+  const ssh = teleportSshCommand(cluster, targetHost)
   return { ...ssh, args: [...ssh.args, command] }
 }
 
