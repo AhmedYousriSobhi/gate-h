@@ -597,6 +597,19 @@ export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
 export type OverviewViewMode = 'cards' | 'table'
 export const DEFAULT_OVERVIEW_VIEW_MODE: OverviewViewMode = 'cards'
 
+// Which sections the Status widget itself shows - independent of whether Status as a whole is
+// visible in PanelLayout above. Same shape and persistence pattern as PanelLayout, one layer down.
+export type StatusWidgetType = 'grafana' | 'slurm' | 'storage' | 'jira'
+export const ALL_STATUS_WIDGET_TYPES: StatusWidgetType[] = ['grafana', 'slurm', 'storage', 'jira']
+
+export interface StatusLayout {
+  visible: StatusWidgetType[]
+}
+
+export const DEFAULT_STATUS_LAYOUT: StatusLayout = {
+  visible: ALL_STATUS_WIDGET_TYPES
+}
+
 export interface GateHApi {
   /** `process.platform` of the main process - 'darwin', 'linux' or 'win32'. */
   platform: string
@@ -779,5 +792,11 @@ export interface GateHApi {
      *  saved yet or the saved value doesn't parse. */
     getViewMode(): Promise<OverviewViewMode>
     setViewMode(mode: OverviewViewMode): void
+  }
+  statusLayout: {
+    /** Always resolves to a valid layout - falls back to DEFAULT_STATUS_LAYOUT if nothing was
+     *  saved yet or the saved value doesn't parse. */
+    get(): Promise<StatusLayout>
+    set(layout: StatusLayout): void
   }
 }

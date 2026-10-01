@@ -1,10 +1,13 @@
 import { getDb } from './db'
 import {
+  ALL_STATUS_WIDGET_TYPES,
   ALL_WIDGET_TYPES,
   DEFAULT_OVERVIEW_VIEW_MODE,
   DEFAULT_PANEL_LAYOUT,
+  DEFAULT_STATUS_LAYOUT,
   type OverviewViewMode,
-  type PanelLayout
+  type PanelLayout,
+  type StatusLayout
 } from '../shared/types'
 
 // Generic key/value storage backed by the `app_settings` table (created in db.ts's profiles
@@ -70,4 +73,32 @@ export function getOverviewViewMode(): OverviewViewMode {
 
 export function setOverviewViewMode(mode: OverviewViewMode): void {
   setSetting(OVERVIEW_VIEW_MODE_KEY, mode)
+}
+
+const STATUS_LAYOUT_KEY = 'statusLayout'
+
+function isValidStatusLayout(value: unknown): value is StatusLayout {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<StatusLayout>
+  return (
+    Array.isArray(candidate.visible) &&
+    candidate.visible.every((w) => (ALL_STATUS_WIDGET_TYPES as string[]).includes(w))
+  )
+}
+
+/** Falls back to the default (every section shown) if nothing was saved yet, or the saved JSON
+ *  doesn't parse or no longer matches the shape - same reasoning as getPanelLayout above. */
+export function getStatusLayout(): StatusLayout {
+  const raw = getSetting(STATUS_LAYOUT_KEY)
+  if (!raw) return DEFAULT_STATUS_LAYOUT
+  try {
+    const parsed = JSON.parse(raw)
+    return isValidStatusLayout(parsed) ? parsed : DEFAULT_STATUS_LAYOUT
+  } catch {
+    return DEFAULT_STATUS_LAYOUT
+  }
+}
+
+export function setStatusLayout(layout: StatusLayout): void {
+  setSetting(STATUS_LAYOUT_KEY, JSON.stringify(layout))
 }

@@ -17,6 +17,7 @@ import type {
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent,
+  StatusLayout,
   TeleportSessionInfo
 } from '../shared/types'
 
@@ -206,6 +207,10 @@ const api: GateHApi = {
   overview: {
     getViewMode: () => ipcRenderer.invoke('overview:getViewMode'),
     setViewMode: (mode: OverviewViewMode) => ipcRenderer.send('overview:setViewMode', mode)
+  },
+  statusLayout: {
+    get: () => ipcRenderer.invoke('statusLayout:get'),
+    set: (layout: StatusLayout) => ipcRenderer.send('statusLayout:set', layout)
   }
 }
 
