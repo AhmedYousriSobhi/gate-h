@@ -5,6 +5,7 @@ import { getCluster, getClusterSecrets } from '../clusters'
 import { addNotification } from '../notifications/store'
 import { buildConnectConfig, connectClient, openForward, type HostContext } from './connect'
 import { ensureTunnel, stopTunnel } from '../azure/tunnel'
+import { refreshCluster } from '../monitor/clusterMonitor'
 import { ptyManager } from '../pty/manager'
 import {
   EXIT_NO_SESSION,
@@ -87,6 +88,11 @@ export async function openSshSession(
   if (tunnel) {
     try {
       await ensureTunnel(cluster)
+      // A Bastion-mode reachability reading only ever reflects whether the tunnel is up (see
+      // clusterMonitor's isReachable) - without this, the LED would sit on its last ("offline")
+      // reading for up to a full sweep interval after the tunnel the Terminal is already using
+      // just came up, instead of catching up immediately the way it does after an edit.
+      refreshCluster(cluster)
     } catch (err) {
       notifyConnectFailure(
         clusterId,

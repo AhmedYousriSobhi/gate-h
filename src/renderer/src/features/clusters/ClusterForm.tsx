@@ -1038,62 +1038,6 @@ export default function ClusterForm({
                           ever allows 22 or 3389 here, regardless of the real sshd port.
                         </p>
                       </div>
-                      {initial && (
-                        <div className="form-field">
-                          <div className="form-inline">
-                            <button
-                              type="button"
-                              className="btn btn-sm"
-                              onClick={handleVerifyTunnel}
-                              disabled={verifyingTunnel}
-                            >
-                              {verifyingTunnel ? 'Verifying...' : 'Verify tunnel'}
-                            </button>
-                          </div>
-                          <p className="hint">
-                            Opens (or reuses) this cluster&apos;s actual tunnel and waits for a live
-                            SSH banner through it - confirms the tunnel really carries traffic, not
-                            just that az reports it open. Uses the saved configuration, not unsaved
-                            edits above.
-                          </p>
-                          {verifyingTunnel && verifyProgress && (
-                            <p className="hint">{verifyProgress}</p>
-                          )}
-                          {verifyFailure && (
-                            <p className="hint">Could not verify: {verifyFailure}</p>
-                          )}
-                          {verifyResult && !verifyResult.tunnelOpened && (
-                            <p className="hint">
-                              Tunnel failed to open: {verifyResult.tunnelError}
-                            </p>
-                          )}
-                          {verifyResult &&
-                            verifyResult.tunnelOpened &&
-                            verifyResult.bannerReceived && (
-                              <p className="hint">
-                                Tunnel is open and an SSH banner arrived in {verifyResult.latencyMs}
-                                ms - the path to sshd is working end to end.
-                              </p>
-                            )}
-                          {verifyResult &&
-                            verifyResult.tunnelOpened &&
-                            !verifyResult.bannerReceived && (
-                              <p className="hint">
-                                Tunnel opened and az reports it listening, but no SSH banner arrived
-                                within 10s - the session may have silently died while its local port
-                                kept listening (a known az CLI issue, azure-cli#28367). Try closing
-                                the cluster and reconnecting to force a fresh tunnel; if it keeps
-                                happening, run the command below by hand and compare it against a
-                                plain `ssh` to the same local port.
-                              </p>
-                            )}
-                          {verifyCommand && (
-                            <p className="hint">
-                              <code>{verifyCommand}</code>
-                            </p>
-                          )}
-                        </div>
-                      )}
                       <div className="form-field">
                         <label htmlFor="azureSubscription">Subscription (ID or name)</label>
                         <div className="form-inline">
@@ -1238,6 +1182,62 @@ export default function ClusterForm({
                               onChange={(e) => set('azureLocalUser', e.target.value)}
                             />
                           </div>
+                        </div>
+                      )}
+                      {initial && (
+                        <div className="form-field">
+                          <div className="form-inline">
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={handleVerifyTunnel}
+                              disabled={verifyingTunnel}
+                            >
+                              {verifyingTunnel ? 'Verifying...' : 'Verify tunnel'}
+                            </button>
+                          </div>
+                          <p className="hint">
+                            Opens (or reuses) this cluster&apos;s actual tunnel and waits for a live
+                            SSH banner through it - confirms the tunnel really carries traffic, not
+                            just that az reports it open. Uses the saved configuration, not unsaved
+                            edits above.
+                          </p>
+                          {verifyingTunnel && verifyProgress && (
+                            <p className="hint">{verifyProgress}</p>
+                          )}
+                          {verifyFailure && (
+                            <p className="hint">Could not verify: {verifyFailure}</p>
+                          )}
+                          {verifyResult && !verifyResult.tunnelOpened && (
+                            <p className="hint">
+                              Tunnel failed to open: {verifyResult.tunnelError}
+                            </p>
+                          )}
+                          {verifyResult &&
+                            verifyResult.tunnelOpened &&
+                            verifyResult.bannerReceived && (
+                              <p className="hint">
+                                Tunnel is open and an SSH banner arrived in {verifyResult.latencyMs}
+                                ms - the path to sshd is working end to end.
+                              </p>
+                            )}
+                          {verifyResult &&
+                            verifyResult.tunnelOpened &&
+                            !verifyResult.bannerReceived && (
+                              <p className="hint">
+                                Tunnel opened and az reports it listening, but no SSH banner arrived
+                                within 10s - the session may have silently died while its local port
+                                kept listening (a known az CLI issue, azure-cli#28367). Try closing
+                                the cluster and reconnecting to force a fresh tunnel; if it keeps
+                                happening, run the command below by hand and compare it against a
+                                plain `ssh` to the same local port.
+                              </p>
+                            )}
+                          {verifyCommand && (
+                            <p className="hint">
+                              <code>{verifyCommand}</code>
+                            </p>
+                          )}
                         </div>
                       )}
                     </>
