@@ -254,6 +254,10 @@ export function useTerminalAuth({
   function authenticateAzure(): void {
     setAzureAuthenticating(true)
     setConnectError(null)
+    // `az login`'s own progress (and its ERROR, if any) now streams in as connection-log entries -
+    // open the log so it's visible without an extra click, instead of only the single line under
+    // the terminal shade that the next line immediately replaces.
+    setLogOpen(true)
     window.api.azure
       .login(clusterId)
       .then(() => {

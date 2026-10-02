@@ -186,9 +186,10 @@ function needsDeviceCode(): boolean {
   return process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY
 }
 
-/** Runs `az login`, broadcasting its device-code prompt (or progress, with a desktop browser)
- *  through the same `azure:status` channel a tunnel pre-flight uses - see TerminalPanel's
- *  "Authenticate" action. Only ever started from that explicit click, never automatically. */
+/** Runs `az login`, broadcasting every line of its progress (device-code prompt, desktop-browser
+ *  status, or its eventual error) through the same `azure:status` channel a tunnel pre-flight uses
+ *  - see TerminalPanel's "Authenticate" action. Only ever started from that explicit click, never
+ *  automatically. */
 export function loginAzure(cluster: ClusterSummary): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = ['login', '--only-show-errors', '--output', 'none']
@@ -204,11 +205,10 @@ export function loginAzure(cluster: ClusterSummary): Promise<void> {
     })
     createInterface({ input: child.stderr }).on('line', (line) => {
       const trimmed = line.trim()
-      // Same device-code instruction `runUp` watches for - printed here too since this is the
-      // only login attempt the app ever makes for real now (see ensureTunnel).
-      if (/devicelogin|enter the code/i.test(trimmed)) {
-        broadcast?.({ clusterId: cluster.id, phase: 'auth', message: trimmed })
-      }
+      // Forward every line live (not just the device-code prompt) - `az login`'s own progress and
+      // its eventual ERROR, if any, are the only way to tell "stuck silently" apart from "browser
+      // opened but picked the wrong cached account for this tenant" apart from "actually working".
+      if (trimmed) broadcast?.({ clusterId: cluster.id, phase: 'auth', message: trimmed })
       if (/^ERROR:/i.test(trimmed)) lastError = trimmed
     })
 
