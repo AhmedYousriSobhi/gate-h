@@ -249,12 +249,17 @@ export function clearAzureAuth(): Promise<void> {
 }
 
 // How long to wait for a live SSH banner after the script reports the tunnel's local port
-// listening, before treating it as the azure-cli#28367 stale-port case. Longer than
-// verifyTunnel's own 10s (a deliberate one-off check the user is already watching) - an IP-based
-// Bastion connection in particular can take considerably longer than 10s to actually start
-// relaying traffic after its local port opens, and cutting the wait short here doesn't just delay
-// a one-off diagnostic, it fails the connection outright on every single automatic retry.
+// listening, before treating the attempt as a stale/slow relay and trying again. An IP-based
+// Bastion connection in particular can take considerably longer than a few seconds to actually
+// start relaying traffic after its local port opens.
 const BANNER_WAIT_MS = 30_000
+// One retry, with a fresh tunnel, before giving up - closes the azure-cli#28367 stale-port race
+// (a dead relay whose local port stays listening) automatically instead of requiring the user to
+// notice the failure and manually reconnect. Real-world testing against an IP-based Bastion target
+// showed the *first* attempt after a cold tunnel start occasionally outliving one 30s window even
+// though the relay was otherwise healthy - a second attempt on a fresh tunnel has so far always
+// succeeded well inside its own window, so this is a liveness retry, not a longer single wait.
+const BANNER_WAIT_ATTEMPTS = 2
 
 /** Resolves once the cluster's tunnel is listening *and* actually carries traffic - reusing the
  *  tunnel if it's already up (the script's `up` is idempotent). Fails fast on a missing/expired
@@ -267,7 +272,9 @@ const BANNER_WAIT_MS = 30_000
  *  connecting through it that early gets a TCP accept but no SSH banner ever arrives (the same
  *  azure-cli#28367 symptom `verifyTunnel` already checks for, here closing the race instead of
  *  just diagnosing it after the fact). Waiting here is cheap on an already-warm, reused tunnel
- *  (its banner arrives near-instantly) and only adds real latency in the exact case being fixed. */
+ *  (its banner arrives near-instantly) and only adds real latency in the exact case being fixed.
+ *  If the banner still hasn't shown up after a full wait, tears the tunnel down and tries once
+ *  more on a fresh one before surfacing an error - see BANNER_WAIT_ATTEMPTS. */
 export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
   const pending = pendingUps.get(cluster.id)
   if (pending) return pending
@@ -282,22 +289,29 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
             : 'No Azure sign-in found - authenticate and retry.'
       )
     }
-    await runUp(cluster)
     const tunnel = cluster.azureTunnel
-    if (tunnel) {
+    for (let attempt = 1; attempt <= BANNER_WAIT_ATTEMPTS; attempt++) {
+      await runUp(cluster)
+      if (!tunnel) return
       broadcast?.({
         clusterId: cluster.id,
         phase: 'tunnel',
-        message: 'Waiting for a live SSH banner through the tunnel'
+        message:
+          attempt === 1
+            ? 'Waiting for a live SSH banner through the tunnel'
+            : 'Still no banner - opened a fresh tunnel, waiting again'
       })
       const bannerReceived = await checkTcpReachable('127.0.0.1', tunnel.localPort, BANNER_WAIT_MS)
-      if (!bannerReceived) {
+      if (bannerReceived) return
+      if (attempt === BANNER_WAIT_ATTEMPTS) {
         throw new Error(
           `Tunnel opened on port ${tunnel.localPort} but no SSH banner arrived within ` +
-            `${BANNER_WAIT_MS / 1000}s - the session may have silently died while its local port ` +
-            'kept listening (a known az CLI issue, azure-cli#28367). Retrying forces a fresh tunnel.'
+            `${BANNER_WAIT_MS / 1000}s, across ${BANNER_WAIT_ATTEMPTS} attempts on fresh tunnels - ` +
+            'the relay to the target may not be reachable at all (not just slow). Check the ' +
+            "target's Bastion IP-based connection setting and NSG rules."
         )
       }
+      await stopTunnel(cluster.id)
     }
   })().finally(() => pendingUps.delete(cluster.id))
   pendingUps.set(cluster.id, run)
