@@ -156,6 +156,33 @@ export interface SlurmNodeIssue {
   reason: string
 }
 
+/** One GPU generic-resource entry from a node's Slurm GRES config (`sinfo %G`), e.g. `gpu:a100:4`
+ *  parses to `{ type: 'a100', count: 4 }`. This is static capacity Slurm was configured with, not
+ *  a live utilization reading - see GpuSample for that (scoped to one job's nodes, from DCGM or
+ *  an on-demand nvidia-smi sample). */
+export interface SlurmGres {
+  type: string
+  count: number
+}
+
+/** The cluster's full compute-node inventory, from `sinfo -N` - distinct from SlurmNodeIssue
+ *  (problem nodes only) and from GpuSample (one job's nodes only). A node in several partitions
+ *  appears once, with every partition it belongs to. */
+export interface SlurmNode {
+  name: string
+  partitions: string[]
+  /** State flags (`down*`, `idle~`, ...) dropped, same as SlurmPartition.nodesByState. */
+  state: string
+  /** From `sinfo %C` (`alloc/idle/other/total`). Null if the field didn't parse. */
+  cpusAllocated: number | null
+  cpusTotal: number | null
+  /** From `sinfo %m`, in MiB. Null if the field didn't parse. */
+  memTotalMiB: number | null
+  /** Empty when the node has no GRES configured (`sinfo %G` prints `(null)`), or a non-GPU-only
+   *  GRES string this parser doesn't recognize. */
+  gpus: SlurmGres[]
+}
+
 /** 'waiting': no live session to run on yet (nothing ran). 'no-slurm': squeue isn't on the login
  *  node's PATH. 'busy': slurmctld timed out or rate-limited the query. */
 export type SchedulerStatus = 'ok' | 'waiting' | 'no-slurm' | 'busy' | 'error'
@@ -173,6 +200,9 @@ export interface SchedulerSnapshot {
   truncated: boolean
   partitions: SlurmPartition[]
   nodeIssues: SlurmNodeIssue[]
+  /** The cluster's full node inventory (see SlurmNode) - every node Slurm knows about, not just
+   *  the problem ones in nodeIssues. */
+  nodes: SlurmNode[]
   /** Null when refresh is manual, or nothing is scheduled. */
   nextRefreshAt: string | null
 }

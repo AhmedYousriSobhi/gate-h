@@ -3,8 +3,10 @@ import {
   SLURM_PARTITION_PATTERN,
   type SchedulerConfig,
   type SchedulerStatus,
+  type SlurmGres,
   type SlurmHistoryJob,
   type SlurmJob,
+  type SlurmNode,
   type SlurmNodeIssue,
   type SlurmPartition
 } from '../../shared/types'
@@ -19,6 +21,7 @@ export interface SlurmData {
   truncated: boolean
   partitions: SlurmPartition[]
   nodeIssues: SlurmNodeIssue[]
+  nodes: SlurmNode[]
 }
 
 const SECTION_MARKER = '@@gateh@@'
@@ -45,8 +48,18 @@ function jobsCommand(config: SchedulerConfig, extra = ''): string {
   return `LC_ALL=C squeue${who}${extra} --noheader '--format=${format}'`
 }
 
-/** One refresh: jobs, per-partition node states, and down/drained nodes, chained into a single
- *  exec so it costs one channel. `&&` so the exit status is the first failure's. */
+/** One refresh: jobs, per-partition node states, down/drained nodes, and the full node inventory,
+ *  chained into a single exec so it costs one channel. `&&` so the exit status is the first
+ *  failure's.
+ *
+ *  ASSUMPTION: `%C`/`%m`/`%G` are standard, stable `sinfo` format letters (CPU state as
+ *  `alloc/idle/other/total`, memory in MiB, and GRES) across the Slurm versions already targeted
+ *  by this file's other commands. EVIDENCE: documented in Slurm's `sinfo` man page, unchanged
+ *  since well before the oldest Slurm version this app already assumes (its delimited-format
+ *  commands already avoid `--json`, which needs 21.08+). DECISION: parse defensively (`parseNodes`
+ *  below skips a row whose `%C` doesn't split into exactly 4 numbers rather than guessing) and
+ *  flag this for validation against a real cluster before relying on it further (see
+ *  docs/architecture/roadmap.md Phase 2). */
 export function snapshotCommand(config: SchedulerConfig): string {
   const partitions = partitionArg(config)
   return [
@@ -54,7 +67,9 @@ export function snapshotCommand(config: SchedulerConfig): string {
     `echo '${SECTION_MARKER}'`,
     `LC_ALL=C sinfo${partitions} --noheader '--format=%R|%a|%D|%T'`,
     `echo '${SECTION_MARKER}'`,
-    `LC_ALL=C sinfo${partitions} --noheader --list-reasons '--format=%N|%T|%E'`
+    `LC_ALL=C sinfo${partitions} --noheader --list-reasons '--format=%N|%T|%E'`,
+    `echo '${SECTION_MARKER}'`,
+    `LC_ALL=C sinfo -N${partitions} --noheader '--format=%N|%R|%T|%C|%m|%G'`
   ].join(' && ')
 }
 
@@ -226,13 +241,74 @@ export function parseNodeIssues(text: string): SlurmNodeIssue[] {
   return issues
 }
 
+/** Parses a GRES string like `gpu:4`, `gpu:a100:4`, or several comma-separated entries, into GPU
+ *  type+count pairs. `(null)` (no GRES configured) and non-GPU entries (e.g. `license:foo:2`)
+ *  parse to nothing rather than a guess. */
+export function parseGres(raw: string): SlurmGres[] {
+  if (!raw || raw === '(null)') return []
+  const out: SlurmGres[] = []
+  for (const entry of raw.split(',')) {
+    const parts = entry.split(':')
+    if (parts[0] !== 'gpu') continue
+    const count = Number(parts[parts.length - 1])
+    if (!Number.isInteger(count) || count <= 0) continue
+    const type = parts.length > 2 ? parts.slice(1, -1).join(':') : 'gpu'
+    out.push({ type, count })
+  }
+  return out
+}
+
+/** sinfo -N prints one row per (node, partition) pair; this folds them into one SlurmNode per
+ *  unique node name, with every partition it belongs to. A row whose %C doesn't split into
+ *  exactly 4 numbers (alloc/idle/other/total) is kept with null CPU fields rather than dropped -
+ *  see the ASSUMPTION note on snapshotCommand. */
+export function parseNodes(text: string): SlurmNode[] {
+  const byName = new Map<string, SlurmNode>()
+  for (const row of lines(text)) {
+    const f = splitFields(row, 6)
+    if (!f) continue
+    const [name, partition, rawState, cpuField, memField, gresField] = f
+    const existing = byName.get(name)
+    if (existing) {
+      if (!existing.partitions.includes(partition)) existing.partitions.push(partition)
+      continue
+    }
+    const cpuParts = cpuField.split('/')
+    const cpuNumbers = cpuParts.length === 4 ? cpuParts.map(Number) : null
+    const cpusValid = cpuNumbers?.every(Number.isFinite) ?? false
+    const mem = Number(memField)
+    byName.set(name, {
+      name,
+      partitions: [partition],
+      state: rawState.toLowerCase().replace(/[^a-z]+$/, ''),
+      cpusAllocated: cpusValid ? (cpuNumbers as number[])[0] : null,
+      cpusTotal: cpusValid ? (cpuNumbers as number[])[3] : null,
+      memTotalMiB: Number.isFinite(mem) ? mem : null,
+      gpus: parseGres(gresField)
+    })
+  }
+  return [...byName.values()]
+}
+
+/** Total configured GPU capacity across the inventory - a static figure from Slurm's own GRES
+ *  config, not a live reading. Fills the gap flagged in docs/architecture/current-state.md §4:
+ *  there was previously no way to answer "how many GPUs does this cluster have" at all, only
+ *  "which GPUs belong to one running job" (GpuSample). Deliberately does not attempt a GPU
+ *  *allocation* (in-use) figure here - that needs either a validated squeue GRES-per-job format
+ *  or `scontrol show node`'s AllocTRES, neither verified against real output yet (see
+ *  docs/architecture/roadmap.md Phase 2). */
+export function totalGpuCapacity(nodes: SlurmNode[]): number {
+  return nodes.reduce((sum, node) => sum + node.gpus.reduce((s, g) => s + g.count, 0), 0)
+}
+
 export function parseSnapshot(stdout: string, scope: SchedulerConfig['scope']): SlurmData {
   const sections = stdout.split(`${SECTION_MARKER}\n`)
-  if (sections.length !== 3) throw new Error('Unexpected output from squeue/sinfo.')
+  if (sections.length !== 4) throw new Error('Unexpected output from squeue/sinfo.')
   return {
     ...parseJobs(sections[0], scope),
     partitions: parsePartitions(sections[1]),
-    nodeIssues: parseNodeIssues(sections[2])
+    nodeIssues: parseNodeIssues(sections[2]),
+    nodes: parseNodes(sections[3])
   }
 }
 

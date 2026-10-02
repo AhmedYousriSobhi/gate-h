@@ -35,7 +35,8 @@ function report(ok: boolean, desc: string, detail = ''): void {
 }
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-const OUTPUT = '1|cpu|RUNNING|1:00|2:00|1|N/A|cpu01|job\n@@gateh@@\ncpu|up|4|idle\n@@gateh@@\n'
+const OUTPUT =
+  '1|cpu|RUNNING|1:00|2:00|1|N/A|cpu01|job\n@@gateh@@\ncpu|up|4|idle\n@@gateh@@\n@@gateh@@\n'
 let runs = 0
 let exitCode = 0
 let session = true
@@ -174,10 +175,10 @@ async function main(): Promise<void> {
   console.log('-- background notifications')
   const queueBefore =
     '10|gpu|RUNNING|1:00|2:00|1|N/A|gpu01|train\n11|gpu|PENDING|0:00|2:00|1|N/A|(Resources)|eval\n' +
-    '@@gateh@@\ngpu|up|4|mixed\n@@gateh@@\n'
+    '@@gateh@@\ngpu|up|4|mixed\n@@gateh@@\n@@gateh@@\n'
   const queueAfter =
     '11|gpu|RUNNING|0:10|2:00|1|N/A|gpu02|eval\n' +
-    '@@gateh@@\ngpu|up|4|mixed\n@@gateh@@\ngpu03|drained|ECC errors\n'
+    '@@gateh@@\ngpu|up|4|mixed\n@@gateh@@\ngpu03|drained|ECC errors\n@@gateh@@\n'
   outputs.bg = queueBefore
   outputs.bgQuiet = queueBefore
   const beforeSweep = runs
