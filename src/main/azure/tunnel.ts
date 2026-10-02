@@ -226,6 +226,28 @@ export function loginAzure(cluster: ClusterSummary): Promise<void> {
   })
 }
 
+/** Wipes the Azure CLI's entire local token cache (`az account clear`) - every tenant/account, not
+ *  just one cluster's. Needed because the browser's own Microsoft SSO session silently reuses
+ *  whatever account is already cached, with no "choose an account" step, so switching to a
+ *  different tenant can silently fail (or silently succeed with the wrong account) instead of
+ *  prompting - clearing the cache is the only way to force a real sign-in prompt on the next
+ *  `az login`. Only ever started from the user's explicit "Clear cached sign-in" action. */
+export function clearAzureAuth(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile('az', ['account', 'clear', '--only-show-errors'], { timeout: 20_000 }, (err) => {
+      if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        reject(new Error("Could not run the Azure CLI (is 'az' installed?)"))
+        return
+      }
+      if (err) {
+        reject(new Error(err.message))
+        return
+      }
+      resolve()
+    })
+  })
+}
+
 /** Resolves once the cluster's tunnel is listening - reusing it if it's already up (the script's
  *  `up` is idempotent). Fails fast on a missing/expired Azure sign-in instead of falling through
  *  to the script's own `az login` fallback, which would otherwise start an unannounced

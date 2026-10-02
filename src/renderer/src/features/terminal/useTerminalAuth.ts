@@ -89,6 +89,12 @@ export interface UseTerminalAuthResult {
   setAzureAuthRequired: (state: AzureAuthState) => void
   /** The Terminal's "Authenticate" button handler. */
   authenticateAzure: () => void
+  /** Whether a "Clear cached sign-in" click is in flight. */
+  azureClearing: boolean
+  /** The Terminal's "Clear cached sign-in" button handler - wipes every tenant's cached `az`
+   *  sign-in, not just this cluster's, so the next Authenticate gets a real account prompt instead
+   *  of the browser's SSO silently reusing whatever's cached. */
+  clearAzureAuth: () => void
 }
 
 /** TerminalPanel's reconnect/backoff state machine and Azure authentication state, pulled out
@@ -112,6 +118,7 @@ export function useTerminalAuth({
   const [logOpen, setLogOpen] = useState(false)
   const [azureAuthState, setAzureAuthState] = useState<AzureAuthState | null>(null)
   const [azureAuthenticating, setAzureAuthenticating] = useState(false)
+  const [azureClearing, setAzureClearing] = useState(false)
 
   const statusRef = useRef<SessionStatus>(status)
   useEffect(() => {
@@ -271,6 +278,21 @@ export function useTerminalAuth({
       })
   }
 
+  function clearAzureAuth(): void {
+    setAzureClearing(true)
+    logEvent('Clearing cached Azure sign-in (all tenants)')
+    window.api.azure
+      .clearAuth()
+      .then(() => {
+        setAzureClearing(false)
+        logEvent('Cleared - Authenticate will prompt for an account again')
+      })
+      .catch((err: Error) => {
+        setAzureClearing(false)
+        logEvent(err.message)
+      })
+  }
+
   return {
     status,
     setStatus,
@@ -293,6 +315,8 @@ export function useTerminalAuth({
     azureAuthState,
     azureAuthenticating,
     setAzureAuthRequired,
-    authenticateAzure
+    authenticateAzure,
+    azureClearing,
+    clearAzureAuth
   }
 }

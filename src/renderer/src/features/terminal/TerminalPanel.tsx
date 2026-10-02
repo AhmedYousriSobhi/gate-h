@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import {
+  Eraser,
   FileCode2,
   History,
   LogIn,
@@ -667,6 +668,25 @@ export default function TerminalPanel({
                     <RefreshCw size={13} strokeWidth={2} />
                     Retry connection
                   </button>
+                  {auth.azureAuthState?.status !== 'cli-missing' && (
+                    <button
+                      className="btn btn-sm"
+                      disabled={auth.azureAuthenticating || auth.azureClearing}
+                      title="Signs out of every cluster's cached Azure session, not just this one - use when Authenticate silently reuses the wrong account for this cluster's tenant"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Clear the Azure CLI's cached sign-in for every cluster (not just this one)? You'll need to authenticate again."
+                          )
+                        ) {
+                          auth.clearAzureAuth()
+                        }
+                      }}
+                    >
+                      <Eraser size={13} strokeWidth={2} />
+                      {auth.azureClearing ? 'Clearing...' : 'Clear cached sign-in'}
+                    </button>
+                  )}
                 </div>
               </>
             )}

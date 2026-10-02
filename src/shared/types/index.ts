@@ -478,6 +478,11 @@ export interface GateHApi {
      *  broadcasting progress through `onStatus` the same way a tunnel pre-flight does. Resolves
      *  once signed in; never attempted automatically, only from an explicit "Authenticate" click. */
     login(clusterId: string): Promise<void>
+    /** Runs `az account clear`, wiping every cached Azure CLI sign-in (all tenants/accounts, not
+     *  just one cluster's) - the only way to force a fresh account prompt on the next `login()`
+     *  when the browser's own Microsoft SSO session would otherwise silently reuse whatever's
+     *  cached. Never attempted automatically, only from an explicit "Clear cached sign-in" click. */
+    clearAuth(): Promise<void>
   }
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>

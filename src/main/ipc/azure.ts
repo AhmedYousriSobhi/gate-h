@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   checkAzureAuth,
+  clearAzureAuth,
   findVm,
   listSubscriptions,
   loginAzure,
@@ -28,4 +29,5 @@ export function registerAzureIpcHandlers(): void {
   ipcMain.handle('azure:login', (_event: IpcMainInvokeEvent, clusterId: string) =>
     loginAzure(getAzureCluster(clusterId))
   )
+  ipcMain.handle('azure:clearAuth', () => clearAzureAuth())
 }
