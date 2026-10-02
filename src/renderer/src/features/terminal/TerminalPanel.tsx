@@ -17,7 +17,6 @@ import {
   X
 } from 'lucide-react'
 import type {
-  AzureAuthState,
   ClusterReachability,
   ClusterSummary,
   Snippet,
@@ -28,6 +27,14 @@ import SnippetsDialog from './SnippetsDialog'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 import { isMac, SPLIT_SHORTCUT_LABEL } from '../../lib/platform'
+import {
+  MAX_RECONNECT_ATTEMPTS,
+  STABLE_SESSION_MS,
+  useTerminalAuth,
+  type SessionStatus
+} from './useTerminalAuth'
+
+export type { SessionStatus } from './useTerminalAuth'
 
 interface TerminalPanelProps {
   cluster: ClusterSummary
@@ -64,39 +71,10 @@ interface TerminalPanelProps {
   suspended?: boolean
 }
 
-/** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
- *  never resumes it - the proxy being up doesn't make a login happen - only a session update
- *  (a login here, on another cluster sharing the proxy, or with tsh in any terminal) does.
- *  `azure-auth-required`: the Azure tunnel's `az` sign-in is missing or expired - same idea, but
- *  resumed only by the Terminal's own "Authenticate" action or a manual Retry. */
-export type SessionStatus =
-  'connecting' | 'connected' | 'reconnecting' | 'paused' | 'auth-required' | 'azure-auth-required'
-
-// Bounded, backoff-based retry policy: at most MAX_RECONNECT_ATTEMPTS auto-retries within a
-// rolling RECONNECT_WINDOW_MS window, each spaced out exponentially with jitter, then the session
-// pauses entirely rather than hammering the cluster's SSH daemon - a login node that's actually
-// down (vs. transiently flaky) shouldn't see a retry storm that risks tripping fail2ban or similar.
-const MAX_RECONNECT_ATTEMPTS = 2
-const RECONNECT_WINDOW_MS = 2 * 60_000
-const BASE_RECONNECT_DELAY_MS = 5_000
-const RECONNECT_JITTER_MS = 1_000
-// How long a session must stay up before it counts as a real connection and restores the retry
-// budget. Resetting the moment connect() resolves isn't enough: a Teleport session "connects" as
-// soon as its local PTY starts, and tsh can still fail to reach the proxy a moment later - so a
-// down proxy would reset the budget on every attempt and retry forever.
-const STABLE_SESSION_MS = 30_000
 // Matches the session monitor's warning and teleport.sh's --min-ttl floor: with less than this
 // left, a resume would only be turned away again.
 const TELEPORT_WARN_MS = 15 * 60_000
 const TELEPORT_MIN_TTL_MS = 5 * 60_000
-// How much of this session's connection history to keep - enough to see the run-up to a failure
-// (tunnel steps, the drop, a retry or two) without growing unbounded over a long-lived session.
-const MAX_LOG_ENTRIES = 50
-
-interface ConnectionLogEntry {
-  time: string
-  message: string
-}
 
 function msLeft(info: TeleportSessionInfo | undefined): number {
   return info?.validUntil ? Date.parse(info.validUntil) - Date.now() : -Infinity
@@ -132,19 +110,12 @@ export default function TerminalPanel({
   useEffect(() => {
     onTitleChangeRef.current = onTitleChange
   }, [onTitleChange])
-  const [connectError, setConnectError] = useState<string | null>(null)
-  const [status, setStatus] = useState<SessionStatus>('connecting')
-  const [retryAttempt, setRetryAttempt] = useState(0)
-  const [connectNonce, setConnectNonce] = useState(0)
-  // Latest Azure pre-flight progress line ("Checking Azure CLI session", a device-code login
-  // prompt, "Tunnel active on port X", ...) - shown while not connected.
-  const [tunnelMessage, setTunnelMessage] = useState<string | null>(null)
-  // Every step of this session's connection lifecycle, timestamped - unlike tunnelMessage/
-  // connectError (last-message-wins, cleared on the next attempt or once paused shows a generic
-  // message), this survives past the moment that produced it so "what actually happened" can be
-  // read after the fact instead of only in the instant it flashed by.
-  const [connectionLog, setConnectionLog] = useState<ConnectionLogEntry[]>([])
-  const [logOpen, setLogOpen] = useState(false)
+  const auth = useTerminalAuth({
+    clusterId: cluster.id,
+    suspended,
+    reachability,
+    onStatusChange
+  })
   // Teleport only: expiry of this cluster's tsh session, and whether it's within the warning
   // window. Both come from session updates, which the main process also pushes at the warning
   // and expiry times, so no countdown timer is needed here.
@@ -154,11 +125,6 @@ export default function TerminalPanel({
     expired: boolean
   } | null>(null)
   const [loginDialog, setLoginDialog] = useState<{ renew: boolean } | null>(null)
-  // Azure tunnel only: the local `az` sign-in state behind the `azure-auth-required` status, and
-  // whether an "Authenticate" click is in flight (so the button can show progress and disable
-  // itself instead of allowing a second concurrent `az login`).
-  const [azureAuthState, setAzureAuthState] = useState<AzureAuthState | null>(null)
-  const [azureAuthenticating, setAzureAuthenticating] = useState(false)
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [snippetsOpen, setSnippetsOpen] = useState(false)
   const [manageSnippetsOpen, setManageSnippetsOpen] = useState(false)
@@ -166,128 +132,17 @@ export default function TerminalPanel({
   const [searchQuery, setSearchQuery] = useState('')
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
-  const statusRef = useRef<SessionStatus>(status)
-  useEffect(() => {
-    statusRef.current = status
-    onStatusChange?.(status)
-  }, [status, onStatusChange])
-
-  // 0 rather than Date.now() (an impure call not allowed during render) - the first failure will
-  // always see the window as expired and reset it, which is the correct behavior anyway.
-  const windowStartRef = useRef(0)
-  const attemptsRef = useRef(0)
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Read from the connect effect's callbacks, which only re-run on reconnect.
-  const suspendedRef = useRef(suspended)
-  // Set when a drop was paused only because the cluster was in the background - the one pause
-  // that selecting the cluster again resumes. A pause from an exhausted retry budget still waits
-  // for reachability or a manual Reconnect, as before.
-  const pausedInBackgroundRef = useRef(false)
   const refitRef = useRef<(() => void) | null>(null)
   // Mirrors the connect effect's own local `sessionId` so inserting a snippet (triggered from the
   // header, outside that effect) can write to whatever session is currently live.
   const sessionIdRef = useRef<string | null>(null)
 
-  const logEvent = useCallback((message: string): void => {
-    setConnectionLog((prev) =>
-      [...prev, { time: new Date().toISOString(), message }].slice(-MAX_LOG_ENTRIES)
-    )
-  }, [])
-
-  function clearRetryTimer(): void {
-    if (retryTimerRef.current) {
-      clearTimeout(retryTimerRef.current)
-      retryTimerRef.current = null
-    }
-  }
-
-  /** Called whenever a connection attempt fails or an established session drops. Schedules a
-   *  backed-off retry if the rolling window still has attempts left, otherwise pauses. */
-  const scheduleReconnectOrPause = useCallback((): void => {
-    if (suspendedRef.current) {
-      pausedInBackgroundRef.current = true
-      setStatus('paused')
-      logEvent('Paused - cluster is in the background')
-      return
-    }
-    const now = Date.now()
-    if (now - windowStartRef.current > RECONNECT_WINDOW_MS) {
-      windowStartRef.current = now
-      attemptsRef.current = 0
-    }
-
-    if (attemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-      setStatus('paused')
-      logEvent(`Paused - ${MAX_RECONNECT_ATTEMPTS} retries used up`)
-      return
-    }
-
-    attemptsRef.current += 1
-    setRetryAttempt(attemptsRef.current)
-    setStatus('reconnecting')
-    const delay =
-      BASE_RECONNECT_DELAY_MS * 2 ** (attemptsRef.current - 1) + Math.random() * RECONNECT_JITTER_MS
-    logEvent(
-      `Retrying in ${Math.round(delay / 1000)}s (attempt ${attemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
-    )
-    clearRetryTimer()
-    retryTimerRef.current = setTimeout(() => setConnectNonce((n) => n + 1), delay)
-  }, [logEvent])
-
-  /** Manual "Reconnect" click, or a reachability recovery signal for this cluster - both reset
-   *  the backoff window so a fresh burst of attempts is available rather than inheriting whatever
-   *  was left over from the failure that caused the pause. */
-  const resetAndReconnectNow = useCallback((): void => {
-    clearRetryTimer()
-    pausedInBackgroundRef.current = false
-    windowStartRef.current = Date.now()
-    attemptsRef.current = 0
-    setRetryAttempt(0)
-    setStatus('connecting')
-    logEvent('Reconnecting now')
-    setConnectNonce((n) => n + 1)
-  }, [logEvent])
-
+  // Refit the terminal once coming back from the background - split out from the pause/resume
+  // effect that now lives in useTerminalAuth, since this part is about the xterm instance, not
+  // reconnect state. See useTerminalAuth's comment on why this split doesn't change behavior.
   useEffect(() => {
-    // Re-checked on every reachability push for this cluster (roughly every 60s, same cadence the
-    // reachability sweep itself uses - frequent enough to notice the node coming back, restrained
-    // enough not to look like abuse), not just on a detected offline -> online flip - only worth
-    // acting on when the session is actually sitting paused; a connecting/connected/retrying
-    // session has nothing to nudge.
-    if (
-      reachability?.status === 'online' &&
-      statusRef.current === 'paused' &&
-      !suspendedRef.current
-    ) {
-      resetAndReconnectNow()
-    }
-  }, [reachability, resetAndReconnectNow])
-
-  useEffect(() => {
-    suspendedRef.current = suspended
-    if (suspended) {
-      // A retry already scheduled when the cluster went to the background would otherwise still
-      // fire there.
-      if (retryTimerRef.current) {
-        clearRetryTimer()
-        pausedInBackgroundRef.current = true
-        setStatus('paused')
-      }
-      return
-    }
-    refitRef.current?.()
-    if (pausedInBackgroundRef.current) resetAndReconnectNow()
-  }, [suspended, resetAndReconnectNow])
-
-  useEffect(
-    () =>
-      window.api.azure.onStatus((event) => {
-        if (event.clusterId !== cluster.id) return
-        setTunnelMessage(event.message)
-        logEvent(event.message)
-      }),
-    [cluster.id, logEvent]
-  )
+    if (!suspended) refitRef.current?.()
+  }, [suspended])
 
   // Reloaded whenever the management dialog closes too, so an edit there shows up in the insert
   // popover without needing to reopen this session.
@@ -325,8 +180,8 @@ export default function TerminalPanel({
           ? { at: info.validUntil, soon: left < TELEPORT_WARN_MS, expired: left <= 0 }
           : null
       )
-      if (statusRef.current === 'auth-required' && left > TELEPORT_MIN_TTL_MS) {
-        resetAndReconnectNow()
+      if (auth.statusRef.current === 'auth-required' && left > TELEPORT_MIN_TTL_MS) {
+        auth.resetAndReconnectNow()
       }
     }
     void window.api.teleport.sessions().then(apply)
@@ -335,7 +190,12 @@ export default function TerminalPanel({
       disposed = true
       off()
     }
-  }, [cluster.id, isTeleport, resetAndReconnectNow])
+    // `auth` itself is a new object every render (useTerminalAuth isn't memoized as a whole), so
+    // listing it here would re-subscribe on every render; `auth.resetAndReconnectNow` (useCallback
+    // inside the hook) and `auth.statusRef` (a ref, stable identity) are the two actually-stable
+    // pieces this effect reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cluster.id, isTeleport, auth.resetAndReconnectNow, auth.statusRef])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -343,10 +203,7 @@ export default function TerminalPanel({
     let disposed = false
     let sessionId: string | null = null
     let stableTimer: ReturnType<typeof setTimeout> | null = null
-    setStatus('connecting')
-    setConnectError(null)
-    setAzureAuthState(null)
-    logEvent(`Connecting to ${cluster.connection.host}`)
+    auth.beginConnectAttempt(cluster.connection.host)
 
     const term = new Terminal({
       convertEol: true,
@@ -423,7 +280,7 @@ export default function TerminalPanel({
     }
     refitRef.current = refit
     const resizeObserver = new ResizeObserver(() => {
-      if (!suspendedRef.current) refit()
+      if (!auth.suspendedRef.current) refit()
     })
     resizeObserver.observe(containerRef.current)
 
@@ -434,18 +291,18 @@ export default function TerminalPanel({
       if (event.sessionId !== sessionId || disposed) return
       if (stableTimer) clearTimeout(stableTimer)
       if (event.authRequired) {
-        clearRetryTimer()
-        setStatus('auth-required')
-        logEvent('Teleport login needed')
+        auth.clearRetryTimer()
+        auth.setStatus('auth-required')
+        auth.logEvent('Teleport login needed')
         return
       }
-      logEvent('Session closed unexpectedly')
-      scheduleReconnectOrPause()
+      auth.logEvent('Session closed unexpectedly')
+      auth.scheduleReconnectOrPause()
     })
     const offError = window.api.ssh.onError((event) => {
       if (event.sessionId !== sessionId) return
-      setConnectError(event.message)
-      logEvent(event.message)
+      auth.setConnectError(event.message)
+      auth.logEvent(event.message)
     })
 
     const dataDisposable = term.onData((data) => {
@@ -463,22 +320,18 @@ export default function TerminalPanel({
           }
           sessionId = result.sessionId
           sessionIdRef.current = sessionId
-          stableTimer = setTimeout(() => {
-            windowStartRef.current = Date.now()
-            attemptsRef.current = 0
-            setRetryAttempt(0)
-          }, STABLE_SESSION_MS)
-          setStatus('connected')
-          logEvent('Connected')
+          stableTimer = setTimeout(auth.markSessionStable, STABLE_SESSION_MS)
+          auth.setStatus('connected')
+          auth.logEvent('Connected')
           window.api.ssh.resize(sessionId, term.cols, term.rows)
           term.focus()
         })
         .catch((err: Error) => {
           if (disposed) return
           if (!cluster.azureTunnel) {
-            setConnectError(err.message)
-            logEvent(err.message)
-            scheduleReconnectOrPause()
+            auth.setConnectError(err.message)
+            auth.logEvent(err.message)
+            auth.scheduleReconnectOrPause()
             return
           }
           // The pre-flight check below already screens out a missing/expired sign-in before this
@@ -488,15 +341,12 @@ export default function TerminalPanel({
           window.api.azure.checkAuth(cluster.id).then((state) => {
             if (disposed) return
             if (state.status !== 'valid') {
-              clearRetryTimer()
-              setAzureAuthState(state)
-              setStatus('azure-auth-required')
-              logEvent('Azure authentication required')
+              auth.setAzureAuthRequired(state)
               return
             }
-            setConnectError(err.message)
-            logEvent(err.message)
-            scheduleReconnectOrPause()
+            auth.setConnectError(err.message)
+            auth.logEvent(err.message)
+            auth.scheduleReconnectOrPause()
           })
         })
     }
@@ -505,9 +355,7 @@ export default function TerminalPanel({
       window.api.azure.checkAuth(cluster.id).then((state) => {
         if (disposed) return
         if (state.status !== 'valid') {
-          setAzureAuthState(state)
-          setStatus('azure-auth-required')
-          logEvent('Azure authentication required')
+          auth.setAzureAuthRequired(state)
           return
         }
         attemptConnect()
@@ -518,7 +366,7 @@ export default function TerminalPanel({
 
     return () => {
       disposed = true
-      clearRetryTimer()
+      auth.clearRetryTimer()
       if (stableTimer) clearTimeout(stableTimer)
       resizeObserver.disconnect()
       refitRef.current = null
@@ -539,7 +387,13 @@ export default function TerminalPanel({
     // component a new `cluster` object with the same data would defeat the narrowing those two
     // already do.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cluster.id, cluster.connection.host, connectNonce, scheduleReconnectOrPause, logEvent])
+  }, [
+    cluster.id,
+    cluster.connection.host,
+    auth.connectNonce,
+    auth.scheduleReconnectOrPause,
+    auth.logEvent
+  ])
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus()
@@ -561,29 +415,13 @@ export default function TerminalPanel({
   )
 
   const statusLabel =
-    status === 'reconnecting'
-      ? `reconnecting (attempt ${retryAttempt}/${MAX_RECONNECT_ATTEMPTS})`
-      : status === 'auth-required'
+    auth.status === 'reconnecting'
+      ? `reconnecting (attempt ${auth.retryAttempt}/${MAX_RECONNECT_ATTEMPTS})`
+      : auth.status === 'auth-required'
         ? 'login needed'
-        : status === 'azure-auth-required'
+        : auth.status === 'azure-auth-required'
           ? 'azure sign-in needed'
-          : status
-
-  const authenticateAzure = (): void => {
-    setAzureAuthenticating(true)
-    setConnectError(null)
-    window.api.azure
-      .login(cluster.id)
-      .then(() => {
-        setAzureAuthenticating(false)
-        resetAndReconnectNow()
-      })
-      .catch((err: Error) => {
-        setAzureAuthenticating(false)
-        setConnectError(err.message)
-        logEvent(err.message)
-      })
-  }
+          : auth.status
 
   return (
     <div className="terminal-panel">
@@ -592,7 +430,7 @@ export default function TerminalPanel({
         onPointerDown={onHeaderPointerDown}
       >
         <span className="terminal-statusbar-label">
-          <span className={`session-dot session-dot-${status}`} />
+          <span className={`session-dot session-dot-${auth.status}`} />
           <span className="mono">
             {cluster.connection.username}@{cluster.connection.host}
             {cluster.azureTunnel && ` via Azure tunnel :${cluster.azureTunnel.localPort}`}
@@ -625,11 +463,11 @@ export default function TerminalPanel({
             <FileCode2 size={13} strokeWidth={2} />
           </button>
           <button
-            className={`terminal-header-btn${logOpen ? ' terminal-header-btn-active' : ''}`}
+            className={`terminal-header-btn${auth.logOpen ? ' terminal-header-btn-active' : ''}`}
             title="Connection log"
             aria-label="Connection log"
-            aria-pressed={logOpen}
-            onClick={() => setLogOpen((v) => !v)}
+            aria-pressed={auth.logOpen}
+            onClick={() => auth.setLogOpen((v) => !v)}
           >
             <History size={13} strokeWidth={2} />
           </button>
@@ -711,19 +549,19 @@ export default function TerminalPanel({
           </button>
         </div>
       )}
-      {logOpen && (
+      {auth.logOpen && (
         <div className="terminal-connection-log">
           <div className="terminal-connection-log-header">
             <h5>Connection log</h5>
-            <button className="btn-icon" title="Close" onClick={() => setLogOpen(false)}>
+            <button className="btn-icon" title="Close" onClick={() => auth.setLogOpen(false)}>
               <X size={12} strokeWidth={2} />
             </button>
           </div>
-          {connectionLog.length === 0 ? (
+          {auth.connectionLog.length === 0 ? (
             <p className="terminal-connection-log-empty">Nothing yet.</p>
           ) : (
             <ul className="terminal-connection-log-list">
-              {[...connectionLog].reverse().map((entry, i) => (
+              {[...auth.connectionLog].reverse().map((entry, i) => (
                 <li key={entry.time + i} className="terminal-connection-log-entry">
                   <span className="terminal-connection-log-time">
                     {new Date(entry.time).toLocaleTimeString([], {
@@ -739,7 +577,7 @@ export default function TerminalPanel({
           )}
         </div>
       )}
-      {connectError && <div className="error-banner terminal-error">{connectError}</div>}
+      {auth.connectError && <div className="error-banner terminal-error">{auth.connectError}</div>}
       <div className="terminal-body">
         <div className="terminal-container" ref={containerRef} />
         {searchOpen && (
@@ -768,23 +606,23 @@ export default function TerminalPanel({
         )}
         {/* Shades the (possibly stale) terminal buffer whenever there's no live session, so it's
             never mistaken for a connected, responsive prompt. */}
-        {status !== 'connected' && (
+        {auth.status !== 'connected' && (
           <div className="terminal-shade">
-            {status === 'connecting' && <p>Connecting to {cluster.connection.host}...</p>}
-            {status === 'reconnecting' && (
+            {auth.status === 'connecting' && <p>Connecting to {cluster.connection.host}...</p>}
+            {auth.status === 'reconnecting' && (
               <p>
-                Reconnecting to {cluster.connection.host} (attempt {retryAttempt}/
+                Reconnecting to {cluster.connection.host} (attempt {auth.retryAttempt}/
                 {MAX_RECONNECT_ATTEMPTS})...
               </p>
             )}
             {cluster.azureTunnel &&
-              tunnelMessage &&
-              (status === 'connecting' ||
-                status === 'reconnecting' ||
-                (status === 'azure-auth-required' && azureAuthenticating)) && (
-                <p className="terminal-shade-detail">{tunnelMessage}</p>
+              auth.tunnelMessage &&
+              (auth.status === 'connecting' ||
+                auth.status === 'reconnecting' ||
+                (auth.status === 'azure-auth-required' && auth.azureAuthenticating)) && (
+                <p className="terminal-shade-detail">{auth.tunnelMessage}</p>
               )}
-            {status === 'auth-required' && (
+            {auth.status === 'auth-required' && (
               <>
                 <p className="terminal-shade-title">Teleport login needed</p>
                 <p>
@@ -800,31 +638,31 @@ export default function TerminalPanel({
                 </button>
               </>
             )}
-            {status === 'azure-auth-required' && (
+            {auth.status === 'azure-auth-required' && (
               <>
                 <p className="terminal-shade-title">Azure authentication required</p>
                 <p>
-                  {azureAuthState?.status === 'cli-missing'
+                  {auth.azureAuthState?.status === 'cli-missing'
                     ? "The Azure CLI ('az') was not found on PATH."
-                    : azureAuthState?.account
-                      ? `Azure sign-in for ${azureAuthState.account} has expired.`
+                    : auth.azureAuthState?.account
+                      ? `Azure sign-in for ${auth.azureAuthState.account} has expired.`
                       : 'No cached Azure sign-in was found.'}
                 </p>
                 <div className="terminal-shade-actions">
-                  {azureAuthState?.status !== 'cli-missing' && (
+                  {auth.azureAuthState?.status !== 'cli-missing' && (
                     <button
                       className="btn btn-sm btn-primary"
-                      disabled={azureAuthenticating}
-                      onClick={authenticateAzure}
+                      disabled={auth.azureAuthenticating}
+                      onClick={auth.authenticateAzure}
                     >
                       <LogIn size={13} strokeWidth={2} />
-                      {azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                      {auth.azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
                     </button>
                   )}
                   <button
                     className="btn btn-sm"
-                    disabled={azureAuthenticating}
-                    onClick={resetAndReconnectNow}
+                    disabled={auth.azureAuthenticating}
+                    onClick={auth.resetAndReconnectNow}
                   >
                     <RefreshCw size={13} strokeWidth={2} />
                     Retry connection
@@ -832,7 +670,7 @@ export default function TerminalPanel({
                 </div>
               </>
             )}
-            {status === 'paused' && (
+            {auth.status === 'paused' && (
               <>
                 <p className="terminal-shade-title">Not connected</p>
                 <p>
@@ -848,7 +686,7 @@ export default function TerminalPanel({
                         ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
                         : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
                 </p>
-                <button className="btn btn-sm" onClick={resetAndReconnectNow}>
+                <button className="btn btn-sm" onClick={auth.resetAndReconnectNow}>
                   <RefreshCw size={13} strokeWidth={2} />
                   Reconnect now
                 </button>
