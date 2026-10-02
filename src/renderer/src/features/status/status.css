@@ -1,10 +1,31 @@
+.status-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.status-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
 .status-body {
   padding: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.status-empty {
+  margin: auto;
+  text-align: center;
 }
 
 .status-body h2 {

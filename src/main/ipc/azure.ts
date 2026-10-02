@@ -1,6 +1,18 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { findVm, listSubscriptions, verifyTunnel } from '../azure/tunnel'
+import {
+  checkAzureAuth,
+  findVm,
+  listSubscriptions,
+  loginAzure,
+  verifyTunnel
+} from '../azure/tunnel'
 import { getCluster } from '../clusters'
+
+function getAzureCluster(clusterId: string): NonNullable<ReturnType<typeof getCluster>> {
+  const cluster = getCluster(clusterId)
+  if (!cluster?.azureTunnel) throw new Error('This cluster has no Azure tunnel configured')
+  return cluster
+}
 
 export function registerAzureIpcHandlers(): void {
   ipcMain.handle('azure:listSubscriptions', () => listSubscriptions())
@@ -10,4 +22,11 @@ export function registerAzureIpcHandlers(): void {
     if (!cluster) throw new Error('Cluster not found')
     return verifyTunnel(cluster)
   })
+  ipcMain.handle('azure:checkAuth', (_event: IpcMainInvokeEvent, clusterId: string) => {
+    getAzureCluster(clusterId)
+    return checkAzureAuth()
+  })
+  ipcMain.handle('azure:login', (_event: IpcMainInvokeEvent, clusterId: string) =>
+    loginAzure(getAzureCluster(clusterId))
+  )
 }

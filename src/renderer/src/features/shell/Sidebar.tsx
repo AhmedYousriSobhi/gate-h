@@ -26,6 +26,8 @@ interface SidebarProps {
   notifications: ClusterNotification[]
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
+  deleteNotification: (id: string) => void
+  clearAllNotifications: () => void
   onNotificationNavigate: (clusterId: string, widget?: WidgetType) => void
   profilesState: ReturnType<typeof useProfiles>
   onProfileChanged: () => void
@@ -44,7 +46,8 @@ const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
   connected: 'Connected',
   reconnecting: 'Reconnecting',
   paused: 'Paused',
-  'auth-required': 'Login needed'
+  'auth-required': 'Login needed',
+  'azure-auth-required': 'Azure sign-in needed'
 }
 
 export default function Sidebar({
@@ -60,6 +63,8 @@ export default function Sidebar({
   notifications,
   markNotificationRead,
   markAllNotificationsRead,
+  deleteNotification,
+  clearAllNotifications,
   onNotificationNavigate,
   profilesState,
   onProfileChanged,
@@ -81,6 +86,8 @@ export default function Sidebar({
             notifications={notifications}
             markRead={markNotificationRead}
             markAllRead={markAllNotificationsRead}
+            deleteNotification={deleteNotification}
+            clearAll={clearAllNotifications}
             onNavigate={onNotificationNavigate}
           />
           <button

@@ -3,6 +3,7 @@ import { createInterface } from 'readline'
 import scriptPath from '../../../resources/azure-tunnel.sh?asset&asarUnpack'
 import { checkTcpReachable } from '../monitor/reachability'
 import type {
+  AzureAuthState,
   AzureSubscription,
   AzureTunnelPhase,
   AzureTunnelStatusEvent,
@@ -131,12 +132,108 @@ function runUp(cluster: ClusterSummary): Promise<void> {
   })
 }
 
+const AUTH_CHECK_TIMEOUT_MS = 10_000
+
+/** The local Azure CLI's cached sign-in state, independent of any one cluster's subscription -
+ *  mirrors the script's own `ensure_login` check (resources/azure-tunnel.sh) but run directly so
+ *  a caller can tell "no valid session" apart *before* the script's `az login` fallback would
+ *  kick in and start an unannounced device-code wait. `az account show` only reads the local
+ *  cache and succeeds even when the refresh token has expired, so it's the only way to recover
+ *  which account is cached once `status` is 'expired'. */
+export function checkAzureAuth(): Promise<AzureAuthState> {
+  return new Promise((resolve) => {
+    execFile(
+      'az',
+      ['account', 'show', '--only-show-errors', '--query', 'user.name', '--output', 'tsv'],
+      { timeout: AUTH_CHECK_TIMEOUT_MS },
+      (err, stdout) => {
+        if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+          resolve({ status: 'cli-missing' })
+          return
+        }
+        const account = err ? undefined : stdout.trim() || undefined
+        if (!account) {
+          resolve({ status: 'signed-out' })
+          return
+        }
+        execFile(
+          'az',
+          ['account', 'get-access-token', '--only-show-errors', '--output', 'none'],
+          { timeout: AUTH_CHECK_TIMEOUT_MS },
+          (tokenErr) => resolve({ status: tokenErr ? 'expired' : 'valid', account })
+        )
+      }
+    )
+  })
+}
+
+/** A headless Linux box has no browser to hand `az login` off to - same check as the script's
+ *  `is_interactive`/`ensure_login` (resources/azure-tunnel.sh). macOS/Windows always have one. */
+function needsDeviceCode(): boolean {
+  return process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY
+}
+
+/** Runs `az login`, broadcasting its device-code prompt (or progress, with a desktop browser)
+ *  through the same `azure:status` channel a tunnel pre-flight uses - see TerminalPanel's
+ *  "Authenticate" action. Only ever started from that explicit click, never automatically. */
+export function loginAzure(cluster: ClusterSummary): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const args = ['login', '--only-show-errors', '--output', 'none']
+    if (needsDeviceCode()) args.push('--use-device-code')
+    const tenant = cluster.azureTunnel?.tenant
+    if (tenant) args.push('--tenant', tenant)
+
+    const child = spawn('az', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let lastError = ''
+
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      broadcast?.({ clusterId: cluster.id, phase: 'auth', message: line.trim() })
+    })
+    createInterface({ input: child.stderr }).on('line', (line) => {
+      const trimmed = line.trim()
+      // Same device-code instruction `runUp` watches for - printed here too since this is the
+      // only login attempt the app ever makes for real now (see ensureTunnel).
+      if (/devicelogin|enter the code/i.test(trimmed)) {
+        broadcast?.({ clusterId: cluster.id, phase: 'auth', message: trimmed })
+      }
+      if (/^ERROR:/i.test(trimmed)) lastError = trimmed
+    })
+
+    child.on('error', (err) => {
+      reject(new Error(`Could not run the Azure CLI (is 'az' installed?): ${err.message}`))
+    })
+    child.on('close', (code) => {
+      if (code === 0) {
+        broadcast?.({ clusterId: cluster.id, phase: 'auth', message: 'Logged in to Azure' })
+        resolve()
+        return
+      }
+      reject(new Error(lastError || `az login failed (exit code ${code})`))
+    })
+  })
+}
+
 /** Resolves once the cluster's tunnel is listening - reusing it if it's already up (the script's
- *  `up` is idempotent), otherwise authenticating and opening it. */
+ *  `up` is idempotent). Fails fast on a missing/expired Azure sign-in instead of falling through
+ *  to the script's own `az login` fallback, which would otherwise start an unannounced
+ *  device-code wait on every connect attempt - signing in is only ever started by the user's
+ *  explicit "Authenticate" action (see loginAzure). */
 export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
   const pending = pendingUps.get(cluster.id)
   if (pending) return pending
-  const run = runUp(cluster).finally(() => pendingUps.delete(cluster.id))
+  const run = (async () => {
+    const auth = await checkAzureAuth()
+    if (auth.status !== 'valid') {
+      throw new Error(
+        auth.status === 'cli-missing'
+          ? "Azure CLI ('az') not found on PATH."
+          : auth.account
+            ? `Azure sign-in for ${auth.account} has expired - authenticate and retry.`
+            : 'No Azure sign-in found - authenticate and retry.'
+      )
+    }
+    await runUp(cluster)
+  })().finally(() => pendingUps.delete(cluster.id))
   pendingUps.set(cluster.id, run)
   return run
 }

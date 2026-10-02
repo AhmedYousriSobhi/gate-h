@@ -32,7 +32,7 @@ export default function AppShell(): React.JSX.Element {
   // ends its sessions. Only Close, standby, removal and a profile switch take a cluster out.
   const [openClusterIds, setOpenClusterIds] = useState<string[]>([])
   const profilesState = useProfiles()
-  const { notifications, markRead, markAllRead } = useNotifications()
+  const { notifications, markRead, markAllRead, deleteNotification, clearAll } = useNotifications()
   // Every mounted cluster's Terminal/Grafana get this raw, per-cluster reading straight through
   // (see MainPanel/TerminalPanel/GrafanaStatusSection's `reachability` prop) instead of a one-shot
   // "just came back online" signal derived here - a derived signal only fires on an observed
@@ -157,6 +157,8 @@ export default function AppShell(): React.JSX.Element {
           notifications={notifications}
           markNotificationRead={markRead}
           markAllNotificationsRead={markAllRead}
+          deleteNotification={deleteNotification}
+          clearAllNotifications={clearAll}
           onNotificationNavigate={handleNotificationNavigate}
           profilesState={profilesState}
           onProfileChanged={handleProfileChanged}

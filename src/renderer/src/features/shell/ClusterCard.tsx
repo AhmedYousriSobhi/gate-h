@@ -5,13 +5,12 @@ import type {
   ClusterSummary,
   SchedulerSnapshot
 } from '../../../../shared/types'
-import { avatarColorFor, initialFor } from '../../lib/avatarColor'
 import { showToast } from '../../lib/toast'
 import StatusPill from './StatusPill'
+import { jobSummary } from './jobSummary'
 
 interface ClusterCardProps {
   cluster: ClusterSummary
-  siblingNames: string[]
   reachability?: ClusterReachability
   /** Last-known Slurm snapshot, if one exists - see useSchedulerSnapshots. Never fetched on the
    *  Overview's account; absent entirely for a cluster that's never been connected. */
@@ -21,25 +20,11 @@ interface ClusterCardProps {
   onViewStatus: (cluster: ClusterSummary) => void
 }
 
-/** Compact "N running · M pending" from a snapshot's jobs - every distinct state present, most
- *  populous first, so a long tail of one-off states doesn't bump a state with real counts out of
- *  view on a narrow card. */
-function jobSummary(snapshot: SchedulerSnapshot): string {
-  if (snapshot.jobs.length === 0) return 'No jobs'
-  const counts = new Map<string, number>()
-  for (const job of snapshot.jobs) counts.set(job.state, (counts.get(job.state) ?? 0) + 1)
-  return [...counts]
-    .sort((a, b) => b[1] - a[1])
-    .map(([state, count]) => `${count} ${state.toLowerCase()}`)
-    .join(' · ')
-}
-
 /** One cluster's "fleet at a glance" summary: identity, live status, and a single state-aware
  *  primary action. The whole card opens the cluster, mirroring the primary button, so the larger
  *  click target works whether or not a user notices the button itself. */
 export default function ClusterCard({
   cluster,
-  siblingNames,
   reachability,
   schedulerSnapshot,
   unread,
@@ -82,12 +67,6 @@ export default function ClusterCard({
       }}
     >
       <div className="cluster-card-head">
-        <span
-          className="cluster-avatar overview-card-avatar"
-          style={{ backgroundColor: avatarColorFor(cluster.name) }}
-        >
-          {initialFor(cluster.name, siblingNames)}
-        </span>
         <div className="cluster-card-identity">
           <div className="cluster-card-name-row">
             <span className="cluster-card-name" title={cluster.name}>

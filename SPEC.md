@@ -111,9 +111,17 @@ never the plaintext or ciphertext.
   from a popover in the terminal header, without retyping it or searching shell history.
 
 ### 3.3.1 Azure tunnel pre-flight
-- A cluster may require an Azure tunnel. Before its SSH session connects, the app signs in with
-  the Azure CLI (a device-code prompt if needed), selects the configured subscription, and opens
-  the tunnel. Each step shows in the terminal view. Every `az` call is scoped to the configured
+- A cluster may require an Azure tunnel. Before attempting one, the app checks the local Azure
+  CLI's cached sign-in itself (not scoped to any one cluster's subscription) - unlike Teleport
+  (§3.3.2), this is a point-in-time pre-flight check, not a continuously watched session. A
+  missing or expired sign-in shows a distinct "Azure authentication required" terminal state (the
+  cached account and why, when known) instead of a generic connection failure, with an explicit
+  "Authenticate" action and a "Retry connection" action; like Teleport, nothing retries
+  automatically and the app never signs in by itself. Authenticating runs `az login` (a
+  device-code prompt on a headless Linux box, the system browser otherwise), streamed into the
+  terminal view the same way the rest of this pre-flight is.
+- Once signed in, selecting the configured subscription and opening the tunnel follow the same
+  way, each step shown in the terminal view. Every `az` call is scoped to the configured
   subscription per-invocation (`--subscription`), never through the CLI's own process-wide
   `az account set`, so configuring one cluster never changes what another cluster (or a manual
   `az` session elsewhere) resolves against.
@@ -203,11 +211,21 @@ never the plaintext or ciphertext.
   tabs, so both are visible at once.
 - The user can toggle either widget on/off, swap their pane order, switch orientation, and
   drag-resize the split between them; the layout choice persists across restarts.
+- Independently, the Status widget's own sections (Grafana, Slurm, Storage, Jira) can each be
+  shown or hidden from a picker in its toolbar - a user who only cares about some of them doesn't
+  see a placeholder for the rest. This choice persists the same way as the Terminal/Status layout
+  above, one shared preference for the whole app rather than per cluster.
 
 ### 3.9 Overview dashboard
 - The default view (nothing selected) is a grid of every cluster in the active profile, showing
   reachability, tags, which integrations (Grafana/Jira) are configured, and unread notification
-  count — never a blank "pick something" screen.
+  count — never a blank "pick something" screen. A summary strip above it shows fleet-wide counts
+  (total, online, unreachable, with alerts) that double as filters, plus running/pending job totals
+  from whatever Slurm snapshots are already cached (never a new poll) once at least one is.
+- The grid can be switched to a dense table (one row per cluster: status, name, host, job summary,
+  configured integrations, unread count, actions) for a fleet too large for cards to stay
+  scannable. The choice persists across restarts, the same way the Terminal/Status layout does
+  (§3.8).
 
 ### 3.10 HPC orchestration
 Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). The design is in
@@ -217,7 +235,8 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
   state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
   collapsed until expanded. Also show per-partition node counts by state and drain reasons.
 - **Job history.** On request, the user's own finished jobs from the last 24 hours or 7 days
-  (from `sacct`), with final state and exit code. Never polled.
+  (from `sacct`), with final state, exit code, and CPU efficiency (time actually used vs. time
+  reserved - the same figure `seff` reports, computed from the same `sacct` row). Never polled.
 - **Scheduler commands never open a connection.** They run only on a session the user already has
   open: an extra `ssh2` channel on the terminal's connection, or, for Teleport, a non-interactive
   `tsh ssh` while the Teleport session is valid. With no live session, nothing runs, and a
@@ -239,7 +258,10 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
   closed or standby cluster runs nothing.
 - **Storage quota.** For configured paths, show the whole filesystem's usage and the user's own
   quota where the filesystem has one (Lustre, GPFS), flagging usage over the soft limit. Checked
-  on request only, over the existing session.
+  on request by default, over the existing session; auto-refresh is opt-in per cluster (off by
+  default, a longer floor/interval than Slurm's since quota doesn't change minute to minute),
+  only while the cluster is selected and the section is visible, with the same backoff on
+  repeated failure as the rest of this section.
 - **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
   running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
   existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside
@@ -261,7 +283,10 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
 - **No connection-attempt storms** — every reconnect/re-poll path (Terminal, Grafana) is bounded
   and backed off (§3.3, §3.4); a target that's genuinely down must degrade to a slow, capped retry
   cadence, not sustained pressure. This matters specifically because the "clusters" on the other
-  end are real HPC login nodes and shared infrastructure, not disposable test endpoints.
+  end are real HPC login nodes and shared infrastructure, not disposable test endpoints. The
+  reachability sweep (§3.2) and Jira polling, which run against every cluster in every profile at
+  once, cap how many checks run concurrently rather than firing all of them in the same instant -
+  needed once a fleet reaches into the tens or hundreds of clusters.
 - **Linux and macOS** — developed and verified on Linux. macOS (Apple Silicon and Intel) is
   built, tested and smoke-tested per architecture in CI (`.github/workflows/macos.yml`) and
   follows its conventions: native window controls, an app menu, Cmd shortcuts, and the login

@@ -12,6 +12,7 @@ import { registerNotificationIpcHandlers } from './ipc/notifications'
 import { registerWindowIpcHandlers } from './ipc/window'
 import { registerProfileIpcHandlers } from './ipc/profiles'
 import { registerLayoutIpcHandlers } from './ipc/layout'
+import { registerOverviewIpcHandlers } from './ipc/overview'
 import { registerAzureIpcHandlers } from './ipc/azure'
 import { setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
 import { registerTeleportIpcHandlers } from './ipc/teleport'
@@ -174,6 +175,7 @@ app.whenReady().then(() => {
   registerWindowIpcHandlers(() => mainWindow)
   registerProfileIpcHandlers()
   registerLayoutIpcHandlers()
+  registerOverviewIpcHandlers()
   registerAzureIpcHandlers()
   registerTeleportIpcHandlers()
   registerSchedulerIpcHandlers()

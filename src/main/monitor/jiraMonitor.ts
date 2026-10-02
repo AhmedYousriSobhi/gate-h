@@ -1,12 +1,18 @@
 import { getClusterSecrets, listClusters } from '../clusters'
 import { listJiraIssues } from '../jira/client'
 import { addNotification } from '../notifications/store'
+import { runWithConcurrency } from './concurrencyLimit'
 import type { ClusterSummary } from '../../shared/types'
 
 // Jira's API is heavier and more rate-limit-sensitive than the reachability TCP probe, so this
 // polls far less often - every 3 minutes is enough to feel "live" for ticket triage without
 // hammering the API.
 const SWEEP_INTERVAL_MS = 3 * 60 * 1000
+
+// A sweep queries every Jira-configured cluster in every profile at once (see sweep() below) -
+// capped for the same reason as clusterMonitor.ts's reachability sweep, and lower here since a
+// Jira API is more rate-limit-sensitive than a bare TCP probe.
+const SWEEP_CONCURRENCY = 8
 
 // key: `${clusterId}:${issueKey}` -> last-seen status. A cluster's first sweep this run only
 // establishes this baseline (no notifications) - otherwise every cluster with existing tickets
@@ -79,7 +85,7 @@ async function sweep(): Promise<void> {
   for (const id of sweptClusterIds) {
     if (!knownIds.has(id)) sweptClusterIds.delete(id)
   }
-  await Promise.all(clusters.map(sweepCluster))
+  await runWithConcurrency(clusters, SWEEP_CONCURRENCY, sweepCluster)
 }
 
 export function startJiraMonitor(): void {

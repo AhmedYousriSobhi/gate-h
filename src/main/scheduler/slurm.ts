@@ -25,7 +25,7 @@ const SECTION_MARKER = '@@gateh@@'
 const MINE_JOB_FORMAT = '%i|%P|%T|%M|%l|%D|%S|%R|%j'
 const PARTITION_JOB_FORMAT = '%i|%P|%u|%T|%M|%l|%D|%S|%R|%j'
 // --parsable2 separates with | and doesn't end lines with one; JobName is free text, so last.
-const HISTORY_FORMAT = 'JobID,Partition,State,ExitCode,Elapsed,Start,End,JobName'
+const HISTORY_FORMAT = 'JobID,Partition,State,ExitCode,Elapsed,Start,End,TotalCPU,AllocCPUS,JobName'
 export const HISTORY_DAYS = [1, 7]
 
 function partitionArg(config: SchedulerConfig): string {
@@ -144,13 +144,46 @@ export function parseJobs(
   return { jobs, truncated: rows.length > MAX_SLURM_JOBS }
 }
 
+/** Parses Slurm's `[DD-[HH:]]MM:SS[.ms]` duration format (seen in Elapsed/TotalCPU) into seconds.
+ *  Null for anything that doesn't match - an empty/missing field, or `INVALID`. */
+function parseSlurmDuration(value: string): number | null {
+  const match = /^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)$/.exec(value.trim())
+  if (!match) return null
+  const days = Number(match[1] ?? 0)
+  const hours = Number(match[2] ?? 0)
+  const minutes = Number(match[3])
+  const seconds = Number(match[4])
+  return days * 86400 + hours * 3600 + minutes * 60 + seconds
+}
+
+/** CPU time actually used (TotalCPU) as a percentage of what was reserved (AllocCPUS x Elapsed) -
+ *  the same thing `seff` reports, computed from fields already in the same sacct row instead of a
+ *  second query against job steps. Null whenever any input doesn't parse, or elapsed/CPUs are
+ *  zero (a job that never started) - better to show nothing than a divide-by-zero or nonsense
+ *  number. */
+function cpuEfficiencyPct(totalCpu: string, allocCpus: string, elapsed: string): number | null {
+  const cpuSeconds = parseSlurmDuration(totalCpu)
+  const elapsedSeconds = parseSlurmDuration(elapsed)
+  const cpus = Number(allocCpus)
+  if (
+    cpuSeconds === null ||
+    elapsedSeconds === null ||
+    !Number.isFinite(cpus) ||
+    cpus <= 0 ||
+    elapsedSeconds <= 0
+  ) {
+    return null
+  }
+  return Math.round((cpuSeconds / (elapsedSeconds * cpus)) * 100)
+}
+
 /** Newest first: sacct lists oldest first, and the recent failures are what people look for. */
 export function parseHistory(text: string): SlurmHistoryJob[] {
   const jobs: SlurmHistoryJob[] = []
   for (const row of lines(text).slice(-MAX_SLURM_JOBS)) {
-    const f = splitFields(row, 8)
+    const f = splitFields(row, 10)
     if (!f) continue
-    const [id, partition, state, exitCode, elapsed, start, end, name] = f
+    const [id, partition, state, exitCode, elapsed, start, end, totalCpu, allocCpus, name] = f
     jobs.push({
       id,
       partition,
@@ -159,7 +192,8 @@ export function parseHistory(text: string): SlurmHistoryJob[] {
       elapsed,
       start: slurmTime(start),
       end: slurmTime(end),
-      name
+      name,
+      cpuEfficiencyPct: cpuEfficiencyPct(totalCpu, allocCpus, elapsed)
     })
   }
   return jobs.reverse()

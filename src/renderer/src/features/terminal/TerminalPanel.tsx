@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react'
 import type {
+  AzureAuthState,
   ClusterReachability,
   ClusterSummary,
   Snippet,
@@ -65,8 +66,11 @@ interface TerminalPanelProps {
 
 /** `auth-required`: a Teleport terminal with no usable tsh session. Unlike `paused`, reachability
  *  never resumes it - the proxy being up doesn't make a login happen - only a session update
- *  (a login here, on another cluster sharing the proxy, or with tsh in any terminal) does. */
-export type SessionStatus = 'connecting' | 'connected' | 'reconnecting' | 'paused' | 'auth-required'
+ *  (a login here, on another cluster sharing the proxy, or with tsh in any terminal) does.
+ *  `azure-auth-required`: the Azure tunnel's `az` sign-in is missing or expired - same idea, but
+ *  resumed only by the Terminal's own "Authenticate" action or a manual Retry. */
+export type SessionStatus =
+  'connecting' | 'connected' | 'reconnecting' | 'paused' | 'auth-required' | 'azure-auth-required'
 
 // Bounded, backoff-based retry policy: at most MAX_RECONNECT_ATTEMPTS auto-retries within a
 // rolling RECONNECT_WINDOW_MS window, each spaced out exponentially with jitter, then the session
@@ -150,6 +154,11 @@ export default function TerminalPanel({
     expired: boolean
   } | null>(null)
   const [loginDialog, setLoginDialog] = useState<{ renew: boolean } | null>(null)
+  // Azure tunnel only: the local `az` sign-in state behind the `azure-auth-required` status, and
+  // whether an "Authenticate" click is in flight (so the button can show progress and disable
+  // itself instead of allowing a second concurrent `az login`).
+  const [azureAuthState, setAzureAuthState] = useState<AzureAuthState | null>(null)
+  const [azureAuthenticating, setAzureAuthenticating] = useState(false)
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [snippetsOpen, setSnippetsOpen] = useState(false)
   const [manageSnippetsOpen, setManageSnippetsOpen] = useState(false)
@@ -336,6 +345,7 @@ export default function TerminalPanel({
     let stableTimer: ReturnType<typeof setTimeout> | null = null
     setStatus('connecting')
     setConnectError(null)
+    setAzureAuthState(null)
     logEvent(`Connecting to ${cluster.connection.host}`)
 
     const term = new Terminal({
@@ -443,30 +453,68 @@ export default function TerminalPanel({
     })
     const titleDisposable = term.onTitleChange((title) => onTitleChangeRef.current?.(title))
 
-    window.api.ssh
-      .connect(cluster.id)
-      .then((result) => {
-        if (disposed) {
-          window.api.ssh.disconnect(result.sessionId)
+    const attemptConnect = (): void => {
+      window.api.ssh
+        .connect(cluster.id)
+        .then((result) => {
+          if (disposed) {
+            window.api.ssh.disconnect(result.sessionId)
+            return
+          }
+          sessionId = result.sessionId
+          sessionIdRef.current = sessionId
+          stableTimer = setTimeout(() => {
+            windowStartRef.current = Date.now()
+            attemptsRef.current = 0
+            setRetryAttempt(0)
+          }, STABLE_SESSION_MS)
+          setStatus('connected')
+          logEvent('Connected')
+          window.api.ssh.resize(sessionId, term.cols, term.rows)
+          term.focus()
+        })
+        .catch((err: Error) => {
+          if (disposed) return
+          if (!cluster.azureTunnel) {
+            setConnectError(err.message)
+            logEvent(err.message)
+            scheduleReconnectOrPause()
+            return
+          }
+          // The pre-flight check below already screens out a missing/expired sign-in before this
+          // runs - re-checking here only catches a token that expired in the gap between the two,
+          // so a connect failure is never retried blindly when the real cause is one only the
+          // user's "Authenticate" action can fix.
+          window.api.azure.checkAuth(cluster.id).then((state) => {
+            if (disposed) return
+            if (state.status !== 'valid') {
+              clearRetryTimer()
+              setAzureAuthState(state)
+              setStatus('azure-auth-required')
+              logEvent('Azure authentication required')
+              return
+            }
+            setConnectError(err.message)
+            logEvent(err.message)
+            scheduleReconnectOrPause()
+          })
+        })
+    }
+
+    if (cluster.azureTunnel) {
+      window.api.azure.checkAuth(cluster.id).then((state) => {
+        if (disposed) return
+        if (state.status !== 'valid') {
+          setAzureAuthState(state)
+          setStatus('azure-auth-required')
+          logEvent('Azure authentication required')
           return
         }
-        sessionId = result.sessionId
-        sessionIdRef.current = sessionId
-        stableTimer = setTimeout(() => {
-          windowStartRef.current = Date.now()
-          attemptsRef.current = 0
-          setRetryAttempt(0)
-        }, STABLE_SESSION_MS)
-        setStatus('connected')
-        logEvent('Connected')
-        window.api.ssh.resize(sessionId, term.cols, term.rows)
-        term.focus()
+        attemptConnect()
       })
-      .catch((err: Error) => {
-        setConnectError(err.message)
-        logEvent(err.message)
-        if (!disposed) scheduleReconnectOrPause()
-      })
+    } else {
+      attemptConnect()
+    }
 
     return () => {
       disposed = true
@@ -485,6 +533,12 @@ export default function TerminalPanel({
       searchAddonRef.current = null
       setSearchOpen(false)
     }
+    // cluster.azureTunnel (read above, for the pre-flight auth check) is deliberately left out of
+    // the deps below, same reasoning as cluster.id/cluster.connection.host: it's effectively
+    // static for a given cluster.id, and reconnecting whenever an unrelated re-render hands this
+    // component a new `cluster` object with the same data would defeat the narrowing those two
+    // already do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cluster.id, cluster.connection.host, connectNonce, scheduleReconnectOrPause, logEvent])
 
   useEffect(() => {
@@ -511,7 +565,25 @@ export default function TerminalPanel({
       ? `reconnecting (attempt ${retryAttempt}/${MAX_RECONNECT_ATTEMPTS})`
       : status === 'auth-required'
         ? 'login needed'
-        : status
+        : status === 'azure-auth-required'
+          ? 'azure sign-in needed'
+          : status
+
+  const authenticateAzure = (): void => {
+    setAzureAuthenticating(true)
+    setConnectError(null)
+    window.api.azure
+      .login(cluster.id)
+      .then(() => {
+        setAzureAuthenticating(false)
+        resetAndReconnectNow()
+      })
+      .catch((err: Error) => {
+        setAzureAuthenticating(false)
+        setConnectError(err.message)
+        logEvent(err.message)
+      })
+  }
 
   return (
     <div className="terminal-panel">
@@ -707,7 +779,9 @@ export default function TerminalPanel({
             )}
             {cluster.azureTunnel &&
               tunnelMessage &&
-              (status === 'connecting' || status === 'reconnecting') && (
+              (status === 'connecting' ||
+                status === 'reconnecting' ||
+                (status === 'azure-auth-required' && azureAuthenticating)) && (
                 <p className="terminal-shade-detail">{tunnelMessage}</p>
               )}
             {status === 'auth-required' && (
@@ -724,6 +798,38 @@ export default function TerminalPanel({
                   <LogIn size={13} strokeWidth={2} />
                   Log in
                 </button>
+              </>
+            )}
+            {status === 'azure-auth-required' && (
+              <>
+                <p className="terminal-shade-title">Azure authentication required</p>
+                <p>
+                  {azureAuthState?.status === 'cli-missing'
+                    ? "The Azure CLI ('az') was not found on PATH."
+                    : azureAuthState?.account
+                      ? `Azure sign-in for ${azureAuthState.account} has expired.`
+                      : 'No cached Azure sign-in was found.'}
+                </p>
+                <div className="terminal-shade-actions">
+                  {azureAuthState?.status !== 'cli-missing' && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={azureAuthenticating}
+                      onClick={authenticateAzure}
+                    >
+                      <LogIn size={13} strokeWidth={2} />
+                      {azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-sm"
+                    disabled={azureAuthenticating}
+                    onClick={resetAndReconnectNow}
+                  >
+                    <RefreshCw size={13} strokeWidth={2} />
+                    Retry connection
+                  </button>
+                </div>
               </>
             )}
             {status === 'paused' && (

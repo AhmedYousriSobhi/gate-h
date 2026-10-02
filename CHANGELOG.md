@@ -640,3 +640,177 @@ survive restarts.
 - `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified**: an actual
   restart of the packaged app (this sandbox can't open a real Electron window) - only the
   persistence logic and the IPC wiring around it.
+
+### 2026-10-02 — `feat/azure-auth-preflight`: detect expired/missing Azure sign-in before connecting
+
+Reported workflow problem: an Azure-tunneled cluster's SSH connect would just fail with a generic
+error once the local `az` CLI's cached token expired, with no indication that was the cause - the
+user had to notice, leave the app, run `az login` by hand, and retry.
+
+- `ensureTunnel()` (`src/main/azure/tunnel.ts`) now calls a new `checkAzureAuth()` before
+  attempting the tunnel, calling `az account show`/`az account get-access-token` directly (the
+  same way `listSubscriptions`/`findVm` already bypass `azure-tunnel.sh` for read-only checks). A
+  missing/expired sign-in rejects distinctly instead of letting the script's own inline
+  `az login` fallback run unannounced.
+- The Terminal gets a new `azure-auth-required` status, mirroring the existing Teleport
+  `auth-required` pattern exactly: a dedicated shade (cached account + why), an explicit
+  "Authenticate" action (`loginAzure()`, running `az login` - device-code on headless Linux,
+  the system browser otherwise - never automatically) and a "Retry connection" action. Nothing
+  retries on its own while this state is showing.
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass; the existing
+  `scripts/test-azure-tunnel.sh` offline smoke test still passes unchanged (the bash script
+  itself wasn't touched). **Not verified**: against a real Azure account - no live `az` session in
+  this environment.
+
+### 2026-10-02 — `feat/notifications-persist-and-manage`: real persistence, delete, clear all, filter
+
+The notification feed was a capped in-memory array, explicitly commented as "not persisted across
+restarts" - directly contradicting SPEC.md, which already described it as persisted. The bell
+panel also only had "mark all read", with no way to delete one notification, clear everything, or
+filter a long list.
+
+- `src/main/notifications/store.ts` rewritten to read/write a new `notifications` SQLite table
+  (`src/main/db.ts`, additive), mirroring `clusters.ts`'s row-mapping pattern, instead of an
+  in-memory array. The 200-row cap now trims the actual table on insert (tie-broken by `rowid`
+  for same-millisecond inserts) rather than an array length.
+- Added `delete`/`clearAll` end to end (store → IPC → preload → `GateHApi`), mirroring the
+  existing `markRead`/`markAllRead` fire-and-forget pattern.
+- `NotificationBell.tsx`: a per-item delete button (hover-revealed), a "Clear all" header action,
+  and filter chips by kind (Reachability/SSH/Jira/Scheduler) and severity (Warning/Info) - purely
+  client-side, since both fields already existed on every notification.
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified**: an actual
+  app restart confirming notifications survive it (this sandbox can't open a real window) - only
+  the SQL/IPC wiring.
+
+### 2026-10-02 — `fix/monitor-sweep-concurrency-cap`: bound concurrent reachability/Jira checks
+
+Both the reachability sweep (`clusterMonitor.ts`) and the Jira sweep (`jiraMonitor.ts`) ran
+`Promise.all(clusters.map(...))` against every cluster in every profile, unconditionally - fine at
+a handful of clusters, but a connection-attempt storm at fleet scale (hundreds of simultaneous
+probes every sweep), which is exactly what SPEC.md's "no connection-attempt storms" non-functional
+requirement rules out elsewhere.
+
+- Added `runWithConcurrency()` (`src/main/monitor/concurrencyLimit.ts`, ~15 lines, no new
+  dependency - a small worker-pool) and used it in place of the bare `Promise.all` in both
+  sweeps: 20 concurrent reachability checks, 8 concurrent Jira checks (lower, since Jira's API is
+  more rate-limit-sensitive than a bare TCP probe).
+- A small fleet (the common case) never reaches either cap, so sweep latency and behavior are
+  unchanged; only a large one is now bounded.
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass. Verified
+  `runWithConcurrency`'s own behavior (every item processed exactly once, concurrency never
+  exceeds the limit but does reach it, a limit ≥ item count behaves like unbounded `Promise.all`,
+  empty input and a non-positive limit don't hang) with a standalone script - this helper has no
+  Electron/native dependencies to stub for a `scripts/*.checks.ts`-style script.
+
+### 2026-10-02 — `feat/overview-table-view-and-totals`: dense table view, fleet-wide job totals
+
+The Overview dashboard's card grid has no virtualization - fine at a handful of clusters, but
+wastes screen space and gets unwieldy well before fleet scale (tens to hundreds of clusters).
+
+- Added a cards/table toggle, persisted like the Terminal/Status layout (`app_settings` via
+  `src/main/settings.ts` - this codebase has no `localStorage` usage anywhere; every durable UI
+  preference goes through the main process). Table view: one dense row per cluster (status, name,
+  host, job summary, configured integrations, unread count, actions) via a new
+  `ClusterTableRow.tsx`.
+- Added fleet-wide running/pending job totals to the summary strip, summed from whatever Slurm
+  snapshots are already cached (`fleetJobTotals()` in the new `jobSummary.ts`, shared with
+  `ClusterCard.tsx`) - display-only, fetches nothing itself, so it adds no new polling.
+- Dropped the card's decorative letter avatar (`avatarColorFor`/`initialFor`) - it carried no
+  information, just visual weight; the status dot and name already identify the card.
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified** in a live
+  window (no X server in this sandbox at the time) - layout/data wiring only.
+
+### 2026-10-02 — `feat/status-widget-visibility`: show/hide Grafana/Slurm/Storage/Jira sections
+
+The Status widget rendered all four sections in a fixed order, each showing a "not configured"
+placeholder rather than being omittable - a user who only cares about two of the four still saw
+all four every time.
+
+- Added `StatusWidgetType`/`StatusLayout` to `src/shared/types.ts` and `getStatusLayout`/
+  `setStatusLayout` to `src/main/settings.ts`, mirroring `WidgetType`/`PanelLayout` (the existing
+  Terminal/Status pane layout) exactly - same `app_settings` JSON-blob + validate-with-fallback
+  shape, one layer down.
+- A new `StatusWidgetPicker.tsx`, the same toggle-list popover pattern as `WidgetPicker.tsx`,
+  opened from a new toolbar in `StatusPanel.tsx`. Sections are now plain conditional rendering
+  (`layout.visible.includes('grafana') && ...`) rather than a registry, after an inline-component
+  registry tripped `eslint-plugin-react`'s `prop-types` rule, which doesn't trace TypeScript types
+  through array-literal component definitions - simple conditionals avoided the problem entirely
+  and are easier to read besides.
+- No new dependency; reordering (drag-and-drop) is left for later since one doesn't exist yet.
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified** in a live
+  window - layout/persistence wiring only.
+
+### 2026-10-02 — `feat/storage-auto-refresh`: opt-in auto-refresh for storage quota, like Slurm's
+
+Storage quota was checked on request only, with no equivalent of the Slurm section's
+auto-refresh.
+
+- Added optional `autoRefresh`/`intervalSec` to `StorageConfig` (optional rather than required
+  like `SchedulerConfig`'s, so existing saved configs without them just mean "off" - same
+  convention as `SchedulerConfig.notify`). Off by default, with a longer 60s floor / 5 minute
+  default than Slurm's 30s/60s - a quota check hits the filesystem's metadata servers and doesn't
+  change minute to minute.
+- The refresh loop lives entirely in `StorageSection.tsx` (no main-process monitor, unlike
+  Slurm's): it only runs while the section is mounted, which already means the cluster is
+  selected and Storage is visible, since Status fully unmounts for a background cluster. Checks
+  less often while the window is unfocused, and backs off (capped at 8x the interval) on
+  repeated failure rather than hammering a down cluster, mirroring the reconnect backoff
+  elsewhere.
+- Cluster form: a "Refresh every (seconds)" + "Refresh automatically" pair in the Storage
+  section, mirroring the Slurm section's fields (including the same Teleport audit-log hint,
+  since storage checks already run through the same Teleport-aware command runner Slurm uses).
+- `npm run typecheck`, `npm run lint`, and `npm run build` all pass. **Not verified** in a live
+  window - the timer/backoff logic only, not an actual multi-minute observation.
+
+### 2026-10-02 — `feat/slurm-history-cpu-efficiency`: show CPU efficiency in job history
+
+Searched for what established HPC portals (Open OnDemand, Bright Cluster Manager) and HPC-site
+docs commonly offer. Most of it is either already in Gate-H (snippets, multi-session terminal, job
+submission/queue/history, GPU telemetry) or explicitly out of scope per SPEC.md §5 (interactive
+app hosting, container orchestration). One concrete, in-scope gap turned up: a near-universal,
+specifically-requested feature (Slurm's own `seff`, Princeton's Jobstats) that Gate-H's job
+history didn't have - per-job CPU efficiency, how much CPU time a job actually used versus what it
+reserved.
+
+- Added `TotalCPU`/`AllocCPUS` to the existing `sacct --format=` list (`historyCommand()`,
+  `src/main/scheduler/slurm.ts`) - no second remote command - inserted *before* `JobName`, which
+  has to stay last (the parser relies on the free-text job name being the final field so an
+  embedded `|` doesn't break parsing, per that file's own header comment).
+- `cpuEfficiencyPct = TotalCPU / (Elapsed x AllocCPUS) x 100`, the same thing `seff` reports,
+  via a small new duration parser for Slurm's `[DD-[HH:]]MM:SS` format. Null (not 0%) whenever a
+  field doesn't parse or elapsed/CPUs are zero - a job that never started shouldn't show a
+  misleading number.
+- Added a "CPU eff." column to `SlurmHistory.tsx`, and 3 new assertions to `slurm.checks.ts`
+  (computed, null-on-missing-data, and a still-running job).
+- Deliberately not pursuing memory efficiency in the same pass - it needs `MaxRSS`, which
+  `sacct --allocations` doesn't reliably report at the parent-job rollup level (it lives on job
+  steps), so getting it means a second, steps-level query.
+- `npm run typecheck`, `npm run lint`, `npm run build`, and the full `test-pty-manager.mjs` suite
+  (173 assertions, including the 3 new ones) all pass. **Not verified** against a real Slurm
+  installation - the local Vagrant lab (next entry) doesn't run one.
+
+### 2026-10-02 — live-testing the merged review branch against a local Vagrant lab
+
+With a real two-VM Vagrant lab already set up on this machine for Gate-H (`hgate-testlab/` -
+a plain Ubuntu "compute-node" plus a "grafana-node" running Prometheus+Grafana), this session
+turned out to be able to render a real Electron window after all: `CLAUDE.md`'s "no X server"
+note was actually about this environment's `ELECTRON_RUN_AS_NODE=1` forcing Electron to run as
+plain Node, not a missing display. Unset for one `npm run dev` run, a real window opened and was
+screenshotted (via `xwd` + a hand-decoded BGRX buffer, since no screenshot tool or ImageMagick was
+installed) - confirming the Overview redesign renders as intended against the user's own existing
+profile. Synthetic X11 clicks (via `ctypes` against `libX11`/`libXtst`, already on the system) move
+the pointer and fire real button events, but Electron isn't acting on them - likely filtered at
+the Chromium input layer - so interactive click-through testing still needs a real mouse or a
+tool like `xdotool` (not installed, and installing it wasn't asked for).
+
+What *was* verified against the real lab: the exact remote command `fetchStorageUsage` builds for
+a path (`stat -f` + `df -Pk`, markers and all) was run by hand over SSH against `compute-node` and
+produced output that matches what `parseUsage` expects, byte for byte - genuine end-to-end
+confirmation of the storage feature (and the auto-refresh wrapping it) against a real non-mocked
+host, not just the local-bash test. `grafana-node`'s `/api/health` responded 200, confirming the
+Grafana integration's assumptions hold too. (No real Slurm installation in this lab, so the
+previous entry's CPU-efficiency feature couldn't be exercised against a live scheduler - same
+caveat as the rest of the Slurm feature set.)
+
+No screenshot was kept or committed anywhere - this environment's real, pre-existing cluster data
+stays out of the repo; any future documentation screenshots use fabricated example data instead.

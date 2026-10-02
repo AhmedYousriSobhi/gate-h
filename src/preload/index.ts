@@ -10,12 +10,14 @@ import type {
   GateHApi,
   JobTemplateInput,
   SnippetInput,
+  OverviewViewMode,
   PanelLayout,
   PanelOrientation,
   SchedulerSnapshot,
   SshClosedEvent,
   SshDataEvent,
   SshErrorEvent,
+  StatusLayout,
   TeleportSessionInfo
 } from '../shared/types'
 
@@ -146,6 +148,8 @@ const api: GateHApi = {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
     findVm: (vmName: string) => ipcRenderer.invoke('azure:findVm', vmName),
     verifyTunnel: (clusterId: string) => ipcRenderer.invoke('azure:verifyTunnel', clusterId),
+    checkAuth: (clusterId: string) => ipcRenderer.invoke('azure:checkAuth', clusterId),
+    login: (clusterId: string) => ipcRenderer.invoke('azure:login', clusterId),
     onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AzureTunnelStatusEvent): void =>
         callback(payload)
@@ -166,6 +170,8 @@ const api: GateHApi = {
     list: () => ipcRenderer.invoke('notifications:list'),
     markRead: (id: string) => ipcRenderer.send('notifications:markRead', id),
     markAllRead: () => ipcRenderer.send('notifications:markAllRead'),
+    delete: (id: string) => ipcRenderer.send('notifications:delete', id),
+    clearAll: () => ipcRenderer.send('notifications:clearAll'),
     onCreated: (callback: (notification: ClusterNotification) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: ClusterNotification): void =>
         callback(payload)
@@ -197,6 +203,14 @@ const api: GateHApi = {
   layout: {
     get: () => ipcRenderer.invoke('layout:get'),
     set: (layout: PanelLayout) => ipcRenderer.send('layout:set', layout)
+  },
+  overview: {
+    getViewMode: () => ipcRenderer.invoke('overview:getViewMode'),
+    setViewMode: (mode: OverviewViewMode) => ipcRenderer.send('overview:setViewMode', mode)
+  },
+  statusLayout: {
+    get: () => ipcRenderer.invoke('statusLayout:get'),
+    set: (layout: StatusLayout) => ipcRenderer.send('statusLayout:set', layout)
   }
 }
 

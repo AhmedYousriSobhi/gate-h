@@ -13,11 +13,18 @@ Gate-H terminal ──ssh2──▶ 127.0.0.1:<local port> ══ Azure tunnel �
 ```
 
 - **Connecting** (`src/main/ssh/manager.ts`): before a cluster with an Azure tunnel connects,
-  `ensureTunnel()` in `src/main/azure/tunnel.ts` runs `azure-tunnel.sh up --non-interactive`.
+  `ensureTunnel()` in `src/main/azure/tunnel.ts` first checks the local `az` CLI's cached sign-in
+  itself (`checkAzureAuth`, not scoped to this cluster's subscription). A missing or expired
+  sign-in fails fast there - the terminal shows a dedicated "Azure authentication required" state
+  (the cached account and why, when known) with an "Authenticate" action, instead of
+  `azure-tunnel.sh` attempting a login inline. Nothing retries automatically and the app never
+  signs in by itself; Authenticate runs `az login` directly (`loginAzure`), showing its
+  device-code prompt (on a headless Linux box) or progress (with a desktop browser) in the
+  terminal the same way the rest of this pre-flight does.
+  - Only once signed in does `ensureTunnel()` run `azure-tunnel.sh up --non-interactive`.
   - `up` is idempotent: if the tunnel is already healthy, it returns straight away.
   - Its `STATUS` lines are sent to the terminal view: *Checking Azure CLI session*, then
     *Using subscription '…'*, then *Tunnel active on port N*.
-  - If `az` needs a login, the terminal also shows the device-code prompt, as selectable text.
   - SSH then dials `127.0.0.1:<local port>`. The host key stays pinned under the cluster's real
     Host/Port, not under 127.0.0.1.
 - **Lifetime**: the tunnel is a detached process group, tracked in
@@ -131,8 +138,8 @@ NAME=gateh-<cluster id>
    az account show --query '{sub:name, user:user.name}' --output table
    ```
 
-   If this fails, the next reconnect will need a login. Gate-H shows the device-code prompt in the
-   terminal.
+   If this fails, the next reconnect shows "Azure authentication required" in the terminal instead
+   of attempting to connect - click Authenticate there (or run `az login` yourself) and retry.
 2. **Is the tunnel alive?**
 
    ```bash
@@ -305,7 +312,10 @@ Run it after any change to the script.
    to fill the subscription list.
 2. **Pre-flight:** select the cluster. The terminal should step through *Checking Azure CLI
    session*, *Using subscription*, and *Tunnel active on port N*, then connect. With `az` logged
-   out, it should show the device-code prompt instead.
+   out (or its token expired), it should instead show "Azure authentication required" with the
+   cached account (if any) and an Authenticate button - not attempt the tunnel. Click Authenticate:
+   the terminal should show the device-code prompt (or just progress, with a desktop browser), then
+   reconnect by itself once signed in.
 3. **Idle:** leave the session idle for 15 minutes or more. It should still be live.
 4. **Dropped tunnel:** run `./resources/azure-tunnel.sh down --name gateh-<id>` while connected.
    The terminal should show *reconnecting (attempt 1/2)*, reopen the tunnel, and reconnect by

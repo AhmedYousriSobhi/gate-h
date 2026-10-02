@@ -140,6 +140,19 @@ export interface AzureTunnelVerifyResult {
   latencyMs?: number
 }
 
+export type AzureAuthStatus = 'valid' | 'expired' | 'signed-out' | 'cli-missing'
+
+/** The local Azure CLI's cached sign-in state, independent of any one cluster's subscription -
+ *  checked before a tunnel connect attempt instead of letting it fail and only then explaining
+ *  why (see `GateHApi.azure.checkAuth`). */
+export interface AzureAuthState {
+  status: AzureAuthStatus
+  /** The cached account's sign-in name. Present even when `status` is 'expired' - `az account
+   *  show` reads only the local cache and succeeds even with an expired refresh token - but
+   *  absent when signed out or when the CLI itself is missing. */
+  account?: string
+}
+
 export interface AzureSubscription {
   id: string
   name: string
@@ -214,7 +227,18 @@ export const SLURM_PARTITION_PATTERN = /^[A-Za-z0-9_.-]+$/
 /** Paths whose usage and quota the Status widget can check, e.g. `~` or `/scratch/$USER`. */
 export interface StorageConfig {
   paths: string[]
+  /** Off (the default) means checked only on request. Mirrors SchedulerConfig.autoRefresh, but
+   *  optional rather than required - absent in configs saved before this existed = off, the same
+   *  convention as SchedulerConfig.notify. */
+  autoRefresh?: boolean
+  /** Only meaningful when autoRefresh is on. Absent = DEFAULT_STORAGE_INTERVAL_SEC. */
+  intervalSec?: number
 }
+
+// Longer than Slurm's floor/default: a quota check hits the filesystem's metadata servers, and
+// usage doesn't change minute to minute the way a job queue does.
+export const MIN_STORAGE_INTERVAL_SEC = 60
+export const DEFAULT_STORAGE_INTERVAL_SEC = 300
 
 /** Characters allowed in a storage path, after removing `$USER`/`$HOME` - paths are passed to the
  *  remote shell, so nothing that could end the quoting or start a command. */
@@ -392,6 +416,10 @@ export interface SlurmHistoryJob {
   /** Null while the job is still running. */
   end: string | null
   name: string
+  /** CPU time actually used (sacct's TotalCPU) as a percentage of what was reserved (AllocCPUS x
+   *  Elapsed) - the same figure `seff` reports. Null when Slurm didn't report enough to compute
+   *  it (e.g. the job never started, or AllocCPUS/TotalCPU came back empty). */
+  cpuEfficiencyPct: number | null
 }
 
 export interface SlurmPartition {
@@ -579,6 +607,24 @@ export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   splitRatio: 0.5
 }
 
+/** The Overview dashboard's layout: a card per cluster (the default), or a dense table row per
+ *  cluster for a fleet too large for cards to stay useful. Persisted like PanelLayout above. */
+export type OverviewViewMode = 'cards' | 'table'
+export const DEFAULT_OVERVIEW_VIEW_MODE: OverviewViewMode = 'cards'
+
+// Which sections the Status widget itself shows - independent of whether Status as a whole is
+// visible in PanelLayout above. Same shape and persistence pattern as PanelLayout, one layer down.
+export type StatusWidgetType = 'grafana' | 'slurm' | 'storage' | 'jira'
+export const ALL_STATUS_WIDGET_TYPES: StatusWidgetType[] = ['grafana', 'slurm', 'storage', 'jira']
+
+export interface StatusLayout {
+  visible: StatusWidgetType[]
+}
+
+export const DEFAULT_STATUS_LAYOUT: StatusLayout = {
+  visible: ALL_STATUS_WIDGET_TYPES
+}
+
 export interface GateHApi {
   /** `process.platform` of the main process - 'darwin', 'linux' or 'win32'. */
   platform: string
@@ -711,6 +757,15 @@ export interface GateHApi {
     verifyTunnel(clusterId: string): Promise<AzureTunnelVerifyResult>
     /** Progress of a cluster's tunnel pre-flight (auth, subscription, tunnel up/down). */
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
+    /** The local Azure CLI's cached sign-in state - checked before a connect attempt (and again
+     *  on a connect failure) so the Terminal can show "Azure authentication required" instead of
+     *  a generic connection error. `clusterId` only picks which cluster's tunnel config to read
+     *  (e.g. its tenant); the result isn't scoped to that cluster's subscription. */
+    checkAuth(clusterId: string): Promise<AzureAuthState>
+    /** Runs `az login` (device-code on a headless Linux box, the system browser otherwise),
+     *  broadcasting progress through `onStatus` the same way a tunnel pre-flight does. Resolves
+     *  once signed in; never attempted automatically, only from an explicit "Authenticate" click. */
+    login(clusterId: string): Promise<void>
   }
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>
@@ -720,6 +775,8 @@ export interface GateHApi {
     list(): Promise<ClusterNotification[]>
     markRead(id: string): void
     markAllRead(): void
+    delete(id: string): void
+    clearAll(): void
     onCreated(callback: (notification: ClusterNotification) => void): () => void
   }
   windowControls: {
@@ -744,5 +801,17 @@ export interface GateHApi {
      *  saved yet or the saved value doesn't parse. */
     get(): Promise<PanelLayout>
     set(layout: PanelLayout): void
+  }
+  overview: {
+    /** Always resolves to a valid mode - falls back to DEFAULT_OVERVIEW_VIEW_MODE if nothing was
+     *  saved yet or the saved value doesn't parse. */
+    getViewMode(): Promise<OverviewViewMode>
+    setViewMode(mode: OverviewViewMode): void
+  }
+  statusLayout: {
+    /** Always resolves to a valid layout - falls back to DEFAULT_STATUS_LAYOUT if nothing was
+     *  saved yet or the saved value doesn't parse. */
+    get(): Promise<StatusLayout>
+    set(layout: StatusLayout): void
   }
 }
