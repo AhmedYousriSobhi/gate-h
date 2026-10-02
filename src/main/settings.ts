@@ -4,7 +4,10 @@ import {
   ALL_WIDGET_TYPES,
   DEFAULT_OVERVIEW_VIEW_MODE,
   DEFAULT_PANEL_LAYOUT,
+  DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_STATUS_LAYOUT,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
   type OverviewViewMode,
   type PanelLayout,
   type StatusLayout
@@ -101,4 +104,21 @@ export function getStatusLayout(): StatusLayout {
 
 export function setStatusLayout(layout: StatusLayout): void {
   setSetting(STATUS_LAYOUT_KEY, JSON.stringify(layout))
+}
+
+const SIDEBAR_WIDTH_KEY = 'sidebarWidth'
+
+/** Falls back to the default width if nothing was saved yet, or the saved value doesn't parse or
+ *  falls outside the allowed range - same reasoning as getPanelLayout above. */
+export function getSidebarWidth(): number {
+  const raw = getSetting(SIDEBAR_WIDTH_KEY)
+  if (!raw) return DEFAULT_SIDEBAR_WIDTH
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= SIDEBAR_MIN_WIDTH && parsed <= SIDEBAR_MAX_WIDTH
+    ? parsed
+    : DEFAULT_SIDEBAR_WIDTH
+}
+
+export function setSidebarWidth(width: number): void {
+  setSetting(SIDEBAR_WIDTH_KEY, String(width))
 }

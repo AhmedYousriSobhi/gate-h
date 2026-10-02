@@ -39,6 +39,7 @@ interface SidebarProps {
   liveSessionCounts: Record<string, number>
   onCloseSessions: (cluster: ClusterSummary) => void
   onToggleActiveMonitoring: (cluster: ClusterSummary) => void
+  width: number
 }
 
 const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
@@ -72,13 +73,14 @@ export default function Sidebar({
   openClusterIds,
   liveSessionCounts,
   onCloseSessions,
-  onToggleActiveMonitoring
+  onToggleActiveMonitoring,
+  width
 }: SidebarProps): React.JSX.Element {
   // Closing a cluster with connected sessions takes a second click on the same button rather
   // than a modal - ended SSH sessions can't be brought back, but a dialog for it gets in the way.
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null)
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width }}>
       <div className="sidebar-header">
         <ProfileSwitcher profilesState={profilesState} onProfileChanged={onProfileChanged} />
         <div className="sidebar-header-actions">
