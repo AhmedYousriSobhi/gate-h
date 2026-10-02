@@ -61,16 +61,15 @@ function toSummary(profile: JiraProfile, issue: JiraApiIssue): JiraIssueSummary 
   }
 }
 
-export async function listJiraIssues(
-  profile: JiraProfile,
-  token: string
-): Promise<JiraIssueSummary[]> {
-  const jql =
-    profile.jql?.trim() ||
-    (profile.projectKey
-      ? `project = "${profile.projectKey}" ORDER BY updated DESC`
-      : 'ORDER BY updated DESC')
+function baseJql(profile: JiraProfile): string {
+  return profile.jql?.trim() || (profile.projectKey ? `project = "${profile.projectKey}"` : '')
+}
 
+async function searchJiraIssues(
+  profile: JiraProfile,
+  token: string,
+  jql: string
+): Promise<JiraIssueSummary[]> {
   const res = await jiraFetch(profile, token, '/rest/api/2/search', {
     method: 'POST',
     body: JSON.stringify({
@@ -81,6 +80,28 @@ export async function listJiraIssues(
   })
   const data = (await res.json()) as { issues: JiraApiIssue[] }
   return data.issues.map((issue) => toSummary(profile, issue))
+}
+
+export async function listJiraIssues(
+  profile: JiraProfile,
+  token: string
+): Promise<JiraIssueSummary[]> {
+  const scope = baseJql(profile)
+  return searchJiraIssues(profile, token, `${scope ? `${scope} ` : ''}ORDER BY updated DESC`)
+}
+
+/** Tickets mentioning a given compute node, scoped the same way as listJiraIssues (the cluster's
+ *  own project/JQL filter) - see docs/JIRA_GUIDE.md section 4's "mentioning a specific compute
+ *  node" recipe, which this automates instead of the user typing it in by hand. */
+export async function searchJiraIssuesByNode(
+  profile: JiraProfile,
+  token: string,
+  nodeName: string
+): Promise<JiraIssueSummary[]> {
+  const scope = baseJql(profile)
+  const escaped = nodeName.replace(/"/g, '\\"')
+  const jql = `${scope ? `${scope} AND ` : ''}text ~ "${escaped}" ORDER BY updated DESC`
+  return searchJiraIssues(profile, token, jql)
 }
 
 export async function createJiraIssue(

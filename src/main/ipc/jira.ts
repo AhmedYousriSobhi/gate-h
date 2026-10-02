@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getCluster, getClusterSecrets } from '../clusters'
-import { createJiraIssue, listJiraIssues } from '../jira/client'
+import { createJiraIssue, listJiraIssues, searchJiraIssuesByNode } from '../jira/client'
 import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
 
 function requireJiraContext(clusterId: string): {
@@ -30,6 +30,14 @@ export function registerJiraIpcHandlers(): void {
     async (_event, clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary> => {
       const { jira, token, clusterName } = requireJiraContext(clusterId)
       return createJiraIssue(jira, token, input, clusterName)
+    }
+  )
+
+  ipcMain.handle(
+    'jira:searchNode',
+    async (_event, clusterId: string, nodeName: string): Promise<JiraIssueSummary[]> => {
+      const { jira, token } = requireJiraContext(clusterId)
+      return searchJiraIssuesByNode(jira, token, nodeName)
     }
   )
 }

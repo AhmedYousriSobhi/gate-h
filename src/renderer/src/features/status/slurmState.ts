@@ -16,3 +16,16 @@ export function shortTime(value: string): string {
   const match = /^\d{4}-(\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value)
   return match ? `${match[1]} ${match[2]}` : value
 }
+
+/** A SlurmNode.state is already flag-stripped (see its own doc comment), so this only needs to
+ *  match base state words, not sinfo's `down*`/`drain$` suffix notation. */
+export function nodeIsDown(state: string): boolean {
+  return /^(down|drain|fail)/i.test(state)
+}
+
+export function nodeStateClass(state: string): string {
+  if (nodeIsDown(state)) return 'slurm-state-failed'
+  if (/^(alloc|mixed)/i.test(state)) return 'issue-status-active'
+  if (/^idle/i.test(state)) return 'issue-status-done'
+  return 'issue-status-todo'
+}
