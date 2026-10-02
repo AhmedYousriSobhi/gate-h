@@ -248,11 +248,23 @@ export function clearAzureAuth(): Promise<void> {
   })
 }
 
-/** Resolves once the cluster's tunnel is listening - reusing it if it's already up (the script's
- *  `up` is idempotent). Fails fast on a missing/expired Azure sign-in instead of falling through
- *  to the script's own `az login` fallback, which would otherwise start an unannounced
- *  device-code wait on every connect attempt - signing in is only ever started by the user's
- *  explicit "Authenticate" action (see loginAzure). */
+// How long to wait for a live SSH banner after the script reports the tunnel's local port
+// listening, before treating it as the azure-cli#28367 stale-port case - same as verifyTunnel's
+// own wait, since a legitimately slow Bastion relay needs the same room here.
+const BANNER_WAIT_MS = 10_000
+
+/** Resolves once the cluster's tunnel is listening *and* actually carries traffic - reusing the
+ *  tunnel if it's already up (the script's `up` is idempotent). Fails fast on a missing/expired
+ *  Azure sign-in instead of falling through to the script's own `az login` fallback, which would
+ *  otherwise start an unannounced device-code wait on every connect attempt - signing in is only
+ *  ever started by the user's explicit "Authenticate" action (see loginAzure).
+ *
+ *  The script's own readiness check only waits for the *local* port to start listening, which can
+ *  happen before Azure Bastion's backend relay to the target has actually finished establishing -
+ *  connecting through it that early gets a TCP accept but no SSH banner ever arrives (the same
+ *  azure-cli#28367 symptom `verifyTunnel` already checks for, here closing the race instead of
+ *  just diagnosing it after the fact). Waiting here is cheap on an already-warm, reused tunnel
+ *  (its banner arrives near-instantly) and only adds real latency in the exact case being fixed. */
 export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
   const pending = pendingUps.get(cluster.id)
   if (pending) return pending
@@ -268,39 +280,41 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
       )
     }
     await runUp(cluster)
+    const tunnel = cluster.azureTunnel
+    if (tunnel) {
+      broadcast?.({
+        clusterId: cluster.id,
+        phase: 'tunnel',
+        message: 'Waiting for a live SSH banner through the tunnel'
+      })
+      const bannerReceived = await checkTcpReachable('127.0.0.1', tunnel.localPort, BANNER_WAIT_MS)
+      if (!bannerReceived) {
+        throw new Error(
+          `Tunnel opened on port ${tunnel.localPort} but no SSH banner arrived within ` +
+            `${BANNER_WAIT_MS / 1000}s - the session may have silently died while its local port ` +
+            'kept listening (a known az CLI issue, azure-cli#28367). Retrying forces a fresh tunnel.'
+        )
+      }
+    }
   })().finally(() => pendingUps.delete(cluster.id))
   pendingUps.set(cluster.id, run)
   return run
 }
 
-/** On-demand self-check: opens (or reuses) the cluster's real tunnel, then confirms it actually
- *  carries traffic by waiting for a live SSH banner through it - not just that its local port is
- *  listening, which a known az CLI bug can leave true even after the session itself has silently
- *  died (azure-cli#28367, see the comment on `stopTunnel`'s caller in ssh/manager.ts). This is the
- *  same tunnel a real connect would use, so a user can run it before opening a terminal, or to
- *  tell apart "the tunnel itself is broken" from "something past the tunnel is." */
+/** On-demand self-check: opens (or reuses) the cluster's real tunnel - the same one a real connect
+ *  would use, so a user can run it before opening a terminal. `ensureTunnel` itself already waits
+ *  for a live SSH banner (not just the local port listening, which a known az CLI bug can leave
+ *  true even after the session itself has silently died - azure-cli#28367), so a successful
+ *  resolve here already proves the tunnel carries traffic end to end. */
 export async function verifyTunnel(cluster: ClusterSummary): Promise<AzureTunnelVerifyResult> {
-  const tunnel = cluster.azureTunnel
-  if (!tunnel) throw new Error(`${cluster.name} has no Azure tunnel configured`)
+  if (!cluster.azureTunnel) throw new Error(`${cluster.name} has no Azure tunnel configured`)
+  const startedAt = Date.now()
   try {
     await ensureTunnel(cluster)
   } catch (err) {
-    return {
-      tunnelOpened: false,
-      tunnelError: err instanceof Error ? err.message : String(err),
-      bannerReceived: false
-    }
+    return { tunnelOpened: false, tunnelError: err instanceof Error ? err.message : String(err) }
   }
-  const startedAt = Date.now()
-  // Longer than the reachability monitor's default: this is a deliberate, one-off check the user
-  // is actively waiting on, not a frequent background poll, so it's worth giving a slow Bastion
-  // relay more room before calling it dead.
-  const bannerReceived = await checkTcpReachable('127.0.0.1', tunnel.localPort, 10_000)
-  return {
-    tunnelOpened: true,
-    bannerReceived,
-    latencyMs: bannerReceived ? Date.now() - startedAt : undefined
-  }
+  return { tunnelOpened: true, latencyMs: Date.now() - startedAt }
 }
 
 /** Tears the tunnel down. Spawned detached so it still completes when called on app quit. */

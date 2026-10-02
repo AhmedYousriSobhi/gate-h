@@ -132,12 +132,13 @@ export interface AzureTunnelStatusEvent {
  *  died (azure-cli#28367), which looks identical to a healthy tunnel until something tries to use
  *  it. */
 export interface AzureTunnelVerifyResult {
+  /** True only once a live SSH banner actually arrived through the tunnel - `ensureTunnel` itself
+   *  waits for one, so this already rules out azure-cli#28367's stale-listening-port case, not
+   *  just that `az` reported the tunnel open. */
   tunnelOpened: boolean
-  /** Set when `tunnelOpened` is false - the real `az` CLI failure reason. */
+  /** Set when `tunnelOpened` is false - the real failure reason (an `az` CLI error, or no banner
+   *  within the wait). */
   tunnelError?: string
-  /** Whether an SSH banner arrived through the tunnel within the check's timeout. Only meaningful
-   *  when `tunnelOpened` is true. */
-  bannerReceived: boolean
   latencyMs?: number
 }
 
