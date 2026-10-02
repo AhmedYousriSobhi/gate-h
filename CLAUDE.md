@@ -66,9 +66,13 @@ the terminal.
 - Secrets (`connection_secret`, `grafana_token`, `jira_token`) are encrypted with
   `electron.safeStorage` and never sent back to the renderer - `ClusterSummary` only carries
   `has*Secret` booleans. Never add a field that round-trips a raw secret to the renderer.
-- This environment can't render an actual Electron window (no X server, no sudo to install
-  `xvfb`) - UI changes are verified with `typecheck`+`lint`+manual code review only. Say that
-  explicitly in the PR instead of claiming a live UI test.
+- This environment *can* render a real Electron window - a real X server is already running
+  (`DISPLAY` is set; no `xvfb`/sudo needed). The actual blocker is `ELECTRON_RUN_AS_NODE=1` being
+  set in the shell, which forces Electron to run as plain Node. Unset it for one `npm run dev` run
+  (`env -u ELECTRON_RUN_AS_NODE npm run dev`) to open a real window; `xwininfo -root -tree` finds
+  its window id, `xwd -id <id>` + decoding the raw BGRX pixels (no `scrot`/`import` installed here)
+  screenshots it. Never commit a screenshot that shows real cluster/host data from the local
+  profile - use synthetic example data only.
 - macOS can't be built or run here; `.github/workflows/macos.yml` is the only check. Keep
   `resources/*.sh` bash-3.2 safe (empty arrays under `set -u` need `${a[@]+"${a[@]}"}`) and keep
   macOS shortcut/menu behavior in `src/renderer/src/lib/platform.ts` and `src/main/index.ts`.
