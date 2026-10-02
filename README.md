@@ -12,8 +12,16 @@
 <h3 align="center">Your HPC clusters, in one window.<br/>Terminal, Slurm, GPUs, files and tickets, side by side.</h3>
 
 <p align="center">
-  <img src="docs/assets/screenshots/slurm-status.png" alt="Gate-H showing Slurm jobs with an expanded job array, live GPU usage and node health" width="820"><br/>
-  <sub>Sample data. Jobs, live GPU load and drained nodes, one glance, no <code>squeue</code> typed.</sub>
+  A desktop app, not a website or a service you host. Point it at a login node you can already
+  <code>ssh</code> into — and, if your site has them, its Grafana and Jira — and Gate-H remembers
+  the connection, watches whether it's up, and gives you a terminal and a live status view side by
+  side instead of a pile of terminal windows and browser tabs. It doesn't provision, schedule, or
+  administer anything; it only connects to clusters that already exist.
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/overview-dashboard.png" alt="Gate-H's overview dashboard: a sidebar of clusters with live reachability, and a card per cluster showing status and quick actions" width="820"><br/>
+  <sub>Sample data. Every cluster you've added, one glance: up or down, who's configured, what needs attention.</sub>
 </p>
 
 ## The 15-second version
@@ -29,6 +37,15 @@
 | **Getting in** | ssh, jump hosts, `az`, `tsh login` | set it up once per cluster; Azure and Teleport log-ins happen in the terminal |
 
 Files move over the connection you already have. Jira tickets are filed from the cluster's own view.
+
+<p align="center">
+  <img src="docs/assets/screenshots/split-view.png" alt="Gate-H's split view: a connected terminal on the left, that same cluster's Grafana status on the right" width="820"><br/>
+  <sub>Sample data. Terminal and status side by side, resizable, swappable — not a tab you have to click between.</sub>
+</p>
+
+**What you need:** an account with SSH access to a cluster's login node — that's the only hard
+requirement. Grafana, Jira, an Azure tunnel, and Teleport are each optional, configured per cluster
+only if your site actually has them.
 
 ## Try it
 
