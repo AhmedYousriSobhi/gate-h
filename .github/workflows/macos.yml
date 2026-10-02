@@ -39,7 +39,7 @@ jobs:
 
       - run: npm run typecheck
       - run: npm run lint
-      - run: node scripts/test-pty-manager.mjs
+      - run: npm test
 
       # A Mac user's scripts run under /bin/bash 3.2 unless they've installed a newer bash, so the
       # tests do too, whatever the runner image has on PATH.
