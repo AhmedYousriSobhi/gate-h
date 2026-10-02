@@ -19,7 +19,9 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { useProfiles } from '../../hooks/useProfiles'
 import { usePanelLayout } from '../../hooks/usePanelLayout'
 import { useSidebarWidth } from '../../hooks/useSidebarWidth'
+import { useClusterOrder } from '../../hooks/useClusterOrder'
 import { withWidgetVisible, type WidgetType } from './panelLayout'
+import { moveClusterId, orderClusters } from './clusterOrder'
 import type { SessionStatus } from '../terminal/TerminalPanel'
 import './shell.css'
 
@@ -33,6 +35,7 @@ export default function AppShell(): React.JSX.Element {
   const { layout: panelLayout, setLayout: setPanelLayout } = usePanelLayout()
   const { width: sidebarWidth, setWidth: setSidebarWidth } = useSidebarWidth()
   const [dragSidebarWidth, setDragSidebarWidth] = useState<number | null>(null)
+  const { order: clusterOrder, setOrder: setClusterOrder } = useClusterOrder()
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [terminalStatuses, setTerminalStatuses] = useState<Record<string, SessionStatus>>({})
@@ -50,6 +53,24 @@ export default function AppShell(): React.JSX.Element {
   // every push (roughly every 60s - see clusterMonitor's sweep interval), not just on a flip.
   const reachability = useReachability()
   const schedulerSnapshots = useSchedulerSnapshots()
+
+  // User-chosen display order, separate from cluster identity/configuration - applied wherever
+  // clusters are listed (sidebar, overview). A cluster not yet in the saved order keeps its
+  // incoming (alphabetical) position, appended at the end - see clusterOrder.ts.
+  const orderedClusters = useMemo(
+    () => orderClusters(clusters, clusterOrder),
+    [clusters, clusterOrder]
+  )
+
+  function handleReorderCluster(draggedId: string, targetId: string): void {
+    setClusterOrder(
+      moveClusterId(
+        orderedClusters.map((c) => c.id),
+        draggedId,
+        targetId
+      )
+    )
+  }
 
   // Open clusters stay mounted (hidden when not selected) so their sessions stay connected in the
   // background - see MainPanel's `hidden` prop.
@@ -175,7 +196,8 @@ export default function AppShell(): React.JSX.Element {
       <TitleBar />
       <div className="shell">
         <Sidebar
-          clusters={clusters}
+          clusters={orderedClusters}
+          onReorder={handleReorderCluster}
           reachability={reachability}
           selectedClusterId={selectedClusterId}
           onSelect={(cluster) => selectCluster(cluster.id)}
@@ -219,7 +241,7 @@ export default function AppShell(): React.JSX.Element {
             {!selectedCluster && (
               <OverviewDashboard
                 profileName={profilesState.activeProfile?.name ?? ''}
-                clusters={clusters}
+                clusters={orderedClusters}
                 reachability={reachability}
                 schedulerSnapshots={schedulerSnapshots}
                 notifications={notifications}

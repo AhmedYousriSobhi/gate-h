@@ -631,6 +631,13 @@ export const SIDEBAR_MIN_WIDTH = 200
 export const SIDEBAR_MAX_WIDTH = 480
 export const DEFAULT_SIDEBAR_WIDTH = 272
 
+/** User-chosen cluster display order (ids), separate from cluster identity/configuration - a pure
+ *  UI preference, persisted like PanelLayout above. A cluster id missing from this list (new, or
+ *  before the first reorder) falls back to its incoming position - see
+ *  src/renderer/src/features/shell/clusterOrder.ts. */
+export type ClusterOrder = string[]
+export const DEFAULT_CLUSTER_ORDER: ClusterOrder = []
+
 export interface GateHApi {
   /** `process.platform` of the main process - 'darwin', 'linux' or 'win32'. */
   platform: string
@@ -825,5 +832,11 @@ export interface GateHApi {
      *  saved yet or the saved value is out of range/doesn't parse. */
     get(): Promise<number>
     set(width: number): void
+  }
+  clusterOrder: {
+    /** Always resolves to a valid order - falls back to DEFAULT_CLUSTER_ORDER (empty, meaning
+     *  "use incoming order") if nothing was saved yet or the saved value doesn't parse. */
+    get(): Promise<ClusterOrder>
+    set(order: ClusterOrder): void
   }
 }
