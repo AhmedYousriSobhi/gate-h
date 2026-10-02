@@ -1,4 +1,5 @@
 import type { FormState, SetFormField } from '../formState'
+import { RequiredMark } from './SectionChrome'
 
 export default function BasicsSection({
   form,
@@ -10,7 +11,10 @@ export default function BasicsSection({
   return (
     <>
       <div className="form-field">
-        <label htmlFor="name">Name</label>
+        <label htmlFor="name">
+          Name
+          <RequiredMark />
+        </label>
         <input id="name" value={form.name} onChange={(e) => set('name', e.target.value)} />
       </div>
       <div className="form-field">
