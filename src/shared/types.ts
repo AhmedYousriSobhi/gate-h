@@ -625,6 +625,12 @@ export const DEFAULT_STATUS_LAYOUT: StatusLayout = {
   visible: ALL_STATUS_WIDGET_TYPES
 }
 
+// The cluster sidebar's drag-resizable width in px - persisted like PanelLayout above, one shared
+// preference for the whole app rather than per-cluster state.
+export const SIDEBAR_MIN_WIDTH = 200
+export const SIDEBAR_MAX_WIDTH = 480
+export const DEFAULT_SIDEBAR_WIDTH = 272
+
 export interface GateHApi {
   /** `process.platform` of the main process - 'darwin', 'linux' or 'win32'. */
   platform: string
@@ -813,5 +819,11 @@ export interface GateHApi {
      *  saved yet or the saved value doesn't parse. */
     get(): Promise<StatusLayout>
     set(layout: StatusLayout): void
+  }
+  sidebarWidth: {
+    /** Always resolves to a valid width - falls back to DEFAULT_SIDEBAR_WIDTH if nothing was
+     *  saved yet or the saved value is out of range/doesn't parse. */
+    get(): Promise<number>
+    set(width: number): void
   }
 }

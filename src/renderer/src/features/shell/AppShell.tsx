@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ClusterInput, ClusterSummary } from '../../../../shared/types'
+import {
+  DEFAULT_SIDEBAR_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  type ClusterInput,
+  type ClusterSummary
+} from '../../../../shared/types'
 import ClusterForm from '../clusters/ClusterForm'
 import Sidebar from './Sidebar'
 import MainPanel from './MainPanel'
@@ -12,6 +18,7 @@ import { useSchedulerSnapshots } from '../../hooks/useSchedulerSnapshots'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useProfiles } from '../../hooks/useProfiles'
 import { usePanelLayout } from '../../hooks/usePanelLayout'
+import { useSidebarWidth } from '../../hooks/useSidebarWidth'
 import { withWidgetVisible, type WidgetType } from './panelLayout'
 import type { SessionStatus } from '../terminal/TerminalPanel'
 import './shell.css'
@@ -24,6 +31,8 @@ export default function AppShell(): React.JSX.Element {
   // Status side by side") more than cluster-specific state. Persisted across restarts - see
   // src/main/settings.ts.
   const { layout: panelLayout, setLayout: setPanelLayout } = usePanelLayout()
+  const { width: sidebarWidth, setWidth: setSidebarWidth } = useSidebarWidth()
+  const [dragSidebarWidth, setDragSidebarWidth] = useState<number | null>(null)
   const [editing, setEditing] = useState<ClusterSummary | 'new' | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [terminalStatuses, setTerminalStatuses] = useState<Record<string, SessionStatus>>({})
@@ -138,6 +147,27 @@ export default function AppShell(): React.JSX.Element {
     void refresh()
   }
 
+  // Dragging the handle between the sidebar and the main workspace - resizes live, committing to
+  // the persisted preference only on release (same pattern as MainPanel's split-resize handle).
+  function handleSidebarResizeStart(e: React.PointerEvent<HTMLDivElement>): void {
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handleSidebarResizeMove(e: React.PointerEvent<HTMLDivElement>): void {
+    if (e.buttons !== 1) return
+    const container = e.currentTarget.parentElement
+    if (!container) return
+    const left = container.getBoundingClientRect().left
+    setDragSidebarWidth(
+      Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, e.clientX - left)))
+    )
+  }
+
+  function handleSidebarResizeEnd(): void {
+    if (dragSidebarWidth !== null) setSidebarWidth(dragSidebarWidth)
+    setDragSidebarWidth(null)
+  }
+
   const selectedCluster = clusters.find((c) => c.id === selectedClusterId) ?? null
 
   return (
@@ -167,6 +197,17 @@ export default function AppShell(): React.JSX.Element {
           liveSessionCounts={liveSessionCounts}
           onCloseSessions={(cluster) => closeCluster(cluster.id)}
           onToggleActiveMonitoring={handleToggleActiveMonitoring}
+          width={dragSidebarWidth ?? sidebarWidth}
+        />
+        <div
+          className="sidebar-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          onPointerDown={handleSidebarResizeStart}
+          onPointerMove={handleSidebarResizeMove}
+          onPointerUp={handleSidebarResizeEnd}
+          onDoubleClick={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
         />
 
         {loadError ? (

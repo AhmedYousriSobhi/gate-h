@@ -211,6 +211,10 @@ const api: GateHApi = {
   statusLayout: {
     get: () => ipcRenderer.invoke('statusLayout:get'),
     set: (layout: StatusLayout) => ipcRenderer.send('statusLayout:set', layout)
+  },
+  sidebarWidth: {
+    get: () => ipcRenderer.invoke('sidebarWidth:get'),
+    set: (width: number) => ipcRenderer.send('sidebarWidth:set', width)
   }
 }
 
