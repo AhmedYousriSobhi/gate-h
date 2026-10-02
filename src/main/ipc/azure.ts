@@ -22,10 +22,9 @@ export function registerAzureIpcHandlers(): void {
     if (!cluster) throw new Error('Cluster not found')
     return verifyTunnel(cluster)
   })
-  ipcMain.handle('azure:checkAuth', (_event: IpcMainInvokeEvent, clusterId: string) => {
-    getAzureCluster(clusterId)
-    return checkAzureAuth()
-  })
+  ipcMain.handle('azure:checkAuth', (_event: IpcMainInvokeEvent, clusterId: string) =>
+    checkAzureAuth(getAzureCluster(clusterId).azureTunnel?.tenant)
+  )
   ipcMain.handle('azure:login', (_event: IpcMainInvokeEvent, clusterId: string) =>
     loginAzure(getAzureCluster(clusterId))
   )

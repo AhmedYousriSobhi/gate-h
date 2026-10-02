@@ -194,7 +194,12 @@ ensure_login() {
   status auth "Checking Azure CLI session"
   # `az account show` only reads the local cache and succeeds even when the
   # refresh token has expired; minting a token proves the session is usable.
-  if az account get-access-token --only-show-errors --output none >/dev/null 2>&1; then
+  # Scoped to $TENANT when set, so a valid session for a *different* tenant
+  # (e.g. another cluster's) doesn't short-circuit this and skip the login
+  # this cluster's own tenant actually needs.
+  local probe_args=(--only-show-errors --output none)
+  if [[ -n "$TENANT" ]]; then probe_args+=(--tenant "$TENANT"); fi
+  if az account get-access-token "${probe_args[@]}" >/dev/null 2>&1; then
     status auth "Azure CLI session is valid"
     return
   fi

@@ -134,36 +134,49 @@ function runUp(cluster: ClusterSummary): Promise<void> {
 
 const AUTH_CHECK_TIMEOUT_MS = 10_000
 
-/** The local Azure CLI's cached sign-in state, independent of any one cluster's subscription -
- *  mirrors the script's own `ensure_login` check (resources/azure-tunnel.sh) but run directly so
- *  a caller can tell "no valid session" apart *before* the script's `az login` fallback would
- *  kick in and start an unannounced device-code wait. `az account show` only reads the local
- *  cache and succeeds even when the refresh token has expired, so it's the only way to recover
- *  which account is cached once `status` is 'expired'. */
-export function checkAzureAuth(): Promise<AzureAuthState> {
+/** The local Azure CLI's cached sign-in state, scoped to `tenant` when given - mirrors the
+ *  script's own `ensure_login` check (resources/azure-tunnel.sh) but run directly so a caller can
+ *  tell "no valid session" apart *before* the script's `az login` fallback would kick in and
+ *  start an unannounced device-code wait. Two clusters in different tenants need two separate
+ *  sign-ins (same Outlook account, different `az login --tenant`); without `tenant`, a valid
+ *  session for one tenant would read as "valid" for the other too, since `az account show` with
+ *  no filter just reports whichever account is currently active CLI-wide. `az account list` is
+ *  used instead of `account show` so a cached-but-inactive tenant still resolves instead of only
+ *  ever reporting the active one. */
+// A tenant is a GUID or a verified domain name (e.g. contoso.onmicrosoft.com) - this also keeps
+// it safe to interpolate into the JMESPath query below (a quote in it would break the query).
+const TENANT_PATTERN = /^[A-Za-z0-9.-]+$/
+
+export function checkAzureAuth(tenant?: string): Promise<AzureAuthState> {
   return new Promise((resolve) => {
-    execFile(
-      'az',
-      ['account', 'show', '--only-show-errors', '--query', 'user.name', '--output', 'tsv'],
-      { timeout: AUTH_CHECK_TIMEOUT_MS },
-      (err, stdout) => {
-        if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-          resolve({ status: 'cli-missing' })
-          return
-        }
-        const account = err ? undefined : stdout.trim() || undefined
-        if (!account) {
-          resolve({ status: 'signed-out' })
-          return
-        }
-        execFile(
-          'az',
-          ['account', 'get-access-token', '--only-show-errors', '--output', 'none'],
-          { timeout: AUTH_CHECK_TIMEOUT_MS },
-          (tokenErr) => resolve({ status: tokenErr ? 'expired' : 'valid', account })
-        )
+    const scopedTenant = tenant && TENANT_PATTERN.test(tenant) ? tenant : undefined
+    const listArgs = scopedTenant
+      ? [
+          'account',
+          'list',
+          '--only-show-errors',
+          '--query',
+          `[?tenantId=='${scopedTenant}'].user.name | [0]`,
+          '--output',
+          'tsv'
+        ]
+      : ['account', 'show', '--only-show-errors', '--query', 'user.name', '--output', 'tsv']
+    execFile('az', listArgs, { timeout: AUTH_CHECK_TIMEOUT_MS }, (err, stdout) => {
+      if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        resolve({ status: 'cli-missing' })
+        return
       }
-    )
+      const account = err ? undefined : stdout.trim() || undefined
+      if (!account) {
+        resolve({ status: 'signed-out' })
+        return
+      }
+      const tokenArgs = ['account', 'get-access-token', '--only-show-errors', '--output', 'none']
+      if (scopedTenant) tokenArgs.push('--tenant', scopedTenant)
+      execFile('az', tokenArgs, { timeout: AUTH_CHECK_TIMEOUT_MS }, (tokenErr) =>
+        resolve({ status: tokenErr ? 'expired' : 'valid', account })
+      )
+    })
   })
 }
 
@@ -222,7 +235,7 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
   const pending = pendingUps.get(cluster.id)
   if (pending) return pending
   const run = (async () => {
-    const auth = await checkAzureAuth()
+    const auth = await checkAzureAuth(cluster.azureTunnel?.tenant)
     if (auth.status !== 'valid') {
       throw new Error(
         auth.status === 'cli-missing'

@@ -143,14 +143,14 @@ export interface AzureTunnelVerifyResult {
 
 export type AzureAuthStatus = 'valid' | 'expired' | 'signed-out' | 'cli-missing'
 
-/** The local Azure CLI's cached sign-in state, independent of any one cluster's subscription -
- *  checked before a tunnel connect attempt instead of letting it fail and only then explaining
- *  why (see `GateHApi.azure.checkAuth`). */
+/** The local Azure CLI's cached sign-in state, scoped to the checked cluster's tenant when it has
+ *  one configured - checked before a tunnel connect attempt instead of letting it fail and only
+ *  then explaining why (see `GateHApi.azure.checkAuth`). */
 export interface AzureAuthState {
   status: AzureAuthStatus
-  /** The cached account's sign-in name. Present even when `status` is 'expired' - `az account
-   *  show` reads only the local cache and succeeds even with an expired refresh token - but
-   *  absent when signed out or when the CLI itself is missing. */
+  /** The cached account's sign-in name. Present even when `status` is 'expired' - reading the
+   *  local cache succeeds even with an expired refresh token - but absent when signed out or when
+   *  the CLI itself is missing. */
   account?: string
 }
 
