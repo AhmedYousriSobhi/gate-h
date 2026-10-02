@@ -14,10 +14,10 @@ import {
   MIN_PANEL_WIDTH_FRACTION,
   type ClusterReachability,
   type ClusterSummary,
-  type GrafanaStatusResult,
   type PanelOrientation
 } from '../../../../shared/types'
-import { cachedStatus, isEmbedArmed, markEmbedArmed, rememberStatus } from './statusCache'
+import { isEmbedArmed, markEmbedArmed } from './statusCache'
+import { useGrafanaStatus } from '../../hooks/useGrafanaStatus'
 
 interface GrafanaStatusSectionProps {
   cluster: ClusterSummary
@@ -26,13 +26,6 @@ interface GrafanaStatusSectionProps {
    *  failure-backoff state resets, the same recovery TerminalPanel reacts to. */
   reachability?: ClusterReachability
 }
-
-// How often to re-fetch dashboard/panel status in the background, matching the reachability
-// sweep's cadence (src/main/monitor/clusterMonitor.ts) so both stay in step. On repeated failures
-// the interval backs off exponentially, capped at GRAFANA_MAX_REFRESH_BACKOFF_MS, so a Grafana
-// instance that's actually down doesn't get polled every tick.
-const GRAFANA_REFRESH_INTERVAL_MS = 60_000
-const GRAFANA_MAX_REFRESH_BACKOFF_MS = 5 * 60_000
 
 function trimBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
@@ -60,19 +53,11 @@ export default function GrafanaStatusSection({
   reachability
 }: GrafanaStatusSectionProps): React.JSX.Element {
   const baseUrl = cluster.grafana?.baseUrl ?? ''
-  // Starts from the last result for this cluster, if any, so switching back to it renders at
-  // once - see statusCache.ts. The effect below still fetches a fresh one straight away.
-  const [status, setStatusState] = useState<GrafanaStatusResult | null>(() =>
-    cachedStatus(cluster.id, baseUrl)
+  const { status, setStatus, error, setError, loading } = useGrafanaStatus(
+    cluster,
+    baseUrl,
+    reachability
   )
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(() => cachedStatus(cluster.id, baseUrl) === null)
-  const hasLoadedOnceRef = useRef(!loading)
-  const setStatus = (result: GrafanaStatusResult): void => {
-    rememberStatus(cluster.id, baseUrl, result)
-    setStatusState(result)
-  }
-  const consecutiveFailuresRef = useRef(0)
   const [pickerUid, setPickerUid] = useState<string | null>(null)
   // Panels can't be embedded until the main process has armed the embed session (Authorization
   // header + frame-blocking header stripping) for this cluster's Grafana origin - see
@@ -243,58 +228,6 @@ export default function GrafanaStatusSection({
   }
 
   useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
-    consecutiveFailuresRef.current = 0
-
-    function scheduleNext(delay: number): void {
-      if (!cancelled) timer = setTimeout(runFetch, delay)
-    }
-
-    function runFetch(): void {
-      window.api.grafana
-        .getStatus(cluster.id)
-        .then((result) => {
-          if (cancelled) return
-          consecutiveFailuresRef.current = 0
-          rememberStatus(cluster.id, baseUrl, result)
-          setStatusState(result)
-          setError(null)
-          scheduleNext(GRAFANA_REFRESH_INTERVAL_MS)
-        })
-        .catch((err: Error) => {
-          if (cancelled) return
-          setError(err.message)
-          consecutiveFailuresRef.current += 1
-          const backoff = Math.min(
-            GRAFANA_REFRESH_INTERVAL_MS * 2 ** consecutiveFailuresRef.current,
-            GRAFANA_MAX_REFRESH_BACKOFF_MS
-          )
-          scheduleNext(backoff)
-        })
-        .finally(() => {
-          if (cancelled) return
-          setLoading(false)
-          hasLoadedOnceRef.current = true
-        })
-    }
-
-    // Only show the "Loading..." placeholder on the very first fetch - a background refresh
-    // (interval tick or reconnect signal) shouldn't blank out already-rendered dashboards.
-    if (!hasLoadedOnceRef.current) setLoading(true)
-    runFetch()
-
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-    // Re-fetches whenever this cluster's saved config changes (e.g. a new Grafana token), not
-    // just when a different cluster is selected - `cluster.id` alone doesn't change on edit -
-    // and whenever this cluster's reachability status value changes (e.g. recovers), resetting
-    // the backoff state above.
-  }, [cluster.id, cluster.updatedAt, reachability?.status, baseUrl])
-
-  useEffect(() => {
     if (!cluster.grafana) return
     window.api.grafana
       .prepareEmbed(cluster.id)
@@ -303,7 +236,7 @@ export default function GrafanaStatusSection({
         setEmbedReady(true)
       })
       .catch((err: Error) => setError(err.message))
-  }, [cluster.id, cluster.updatedAt, cluster.grafana])
+  }, [cluster.id, cluster.updatedAt, cluster.grafana, setError])
 
   if (!cluster.grafana) {
     return <p className="hint">No Grafana instance configured for this cluster.</p>
