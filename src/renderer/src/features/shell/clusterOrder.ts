@@ -32,3 +32,17 @@ export function moveClusterId(
   if (targetIndex === -1) return order
   return [...withoutDragged.slice(0, targetIndex), draggedId, ...withoutDragged.slice(targetIndex)]
 }
+
+/** Swaps `id` with its neighbor one position up (-1) or down (+1) in `order` (a complete id list)
+ *  - the keyboard-accessible alternative to dragging a cluster row, since that's a plain swap
+ *  rather than the "insert before" semantics moveClusterId above needs for a drop target. A no-op
+ *  at either end of the list, rather than wrapping around. */
+export function moveClusterByOffset(order: ClusterOrder, id: string, offset: -1 | 1): ClusterOrder {
+  const index = order.indexOf(id)
+  if (index === -1) return order
+  const targetIndex = index + offset
+  if (targetIndex < 0 || targetIndex >= order.length) return order
+  const next = order.slice()
+  ;[next[index], next[targetIndex]] = [next[targetIndex], next[index]]
+  return next
+}

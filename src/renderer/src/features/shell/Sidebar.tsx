@@ -44,6 +44,9 @@ interface SidebarProps {
    *  AppShell computes and persists the new order (see clusterOrder.ts). Cluster identity/
    *  configuration is untouched; this only reorders the display list. */
   onReorder: (draggedId: string, targetId: string) => void
+  /** Keyboard-accessible alternative to dragging a row - Alt+ArrowUp/Down on a focused cluster
+   *  swaps it with its neighbor one position up or down. */
+  onMoveCluster: (id: string, offset: -1 | 1) => void
 }
 
 const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
@@ -79,15 +82,31 @@ export default function Sidebar({
   onCloseSessions,
   onToggleActiveMonitoring,
   width,
-  onReorder
+  onReorder,
+  onMoveCluster
 }: SidebarProps): React.JSX.Element {
   // Closing a cluster with connected sessions takes a second click on the same button rather
   // than a modal - ended SSH sessions can't be brought back, but a dialog for it gets in the way.
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  // Announces a keyboard reorder for screen-reader users, since the row simply moving in the DOM
+  // is otherwise silent - same pattern as OverviewDashboard's reachability announcements.
+  const [announcement, setAnnouncement] = useState('')
+
+  function handleMoveKey(cluster: ClusterSummary, direction: -1 | 1): void {
+    const index = clusters.findIndex((c) => c.id === cluster.id)
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= clusters.length) return
+    onMoveCluster(cluster.id, direction)
+    setAnnouncement(`${cluster.name} moved to position ${targetIndex + 1} of ${clusters.length}`)
+  }
+
   return (
     <aside className="sidebar" style={{ width }}>
+      <div aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
       <div className="sidebar-header">
         <ProfileSwitcher profilesState={profilesState} onProfileChanged={onProfileChanged} />
         <div className="sidebar-header-actions">
@@ -117,7 +136,15 @@ export default function Sidebar({
       <div className="cluster-rows">
         <div
           className={`cluster-row overview-row${selectedClusterId === null ? ' cluster-row-active' : ''}`}
+          role="button"
+          tabIndex={0}
           onClick={onShowOverview}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onShowOverview()
+            }
+          }}
         >
           <span className="overview-row-icon">
             <LayoutDashboard size={15} strokeWidth={2} />
@@ -138,7 +165,21 @@ export default function Sidebar({
             className={`cluster-row${cluster.id === selectedClusterId ? ' cluster-row-active' : ''}${
               draggedId === cluster.id ? ' cluster-row-dragging' : ''
             }${dragOverId === cluster.id && draggedId !== cluster.id ? ' cluster-row-drag-over' : ''}`}
+            role="button"
+            tabIndex={0}
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             onClick={() => onSelect(cluster)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onSelect(cluster)
+                return
+              }
+              if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                e.preventDefault()
+                handleMoveKey(cluster, e.key === 'ArrowUp' ? -1 : 1)
+              }
+            }}
             onMouseLeave={() => setConfirmCloseId((id) => (id === cluster.id ? null : id))}
             draggable
             onDragStart={() => setDraggedId(cluster.id)}

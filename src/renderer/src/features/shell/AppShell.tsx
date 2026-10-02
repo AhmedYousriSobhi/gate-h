@@ -21,7 +21,7 @@ import { usePanelLayout } from '../../hooks/usePanelLayout'
 import { useSidebarWidth } from '../../hooks/useSidebarWidth'
 import { useClusterOrder } from '../../hooks/useClusterOrder'
 import { withWidgetVisible, type WidgetType } from './panelLayout'
-import { moveClusterId, orderClusters } from './clusterOrder'
+import { moveClusterByOffset, moveClusterId, orderClusters } from './clusterOrder'
 import type { SessionStatus } from '../terminal/TerminalPanel'
 import './shell.css'
 
@@ -68,6 +68,18 @@ export default function AppShell(): React.JSX.Element {
         orderedClusters.map((c) => c.id),
         draggedId,
         targetId
+      )
+    )
+  }
+
+  // Keyboard-accessible alternative to dragging a cluster row - see Sidebar's Alt+ArrowUp/Down
+  // handling.
+  function handleMoveCluster(id: string, offset: -1 | 1): void {
+    setClusterOrder(
+      moveClusterByOffset(
+        orderedClusters.map((c) => c.id),
+        id,
+        offset
       )
     )
   }
@@ -198,6 +210,7 @@ export default function AppShell(): React.JSX.Element {
         <Sidebar
           clusters={orderedClusters}
           onReorder={handleReorderCluster}
+          onMoveCluster={handleMoveCluster}
           reachability={reachability}
           selectedClusterId={selectedClusterId}
           onSelect={(cluster) => selectCluster(cluster.id)}
