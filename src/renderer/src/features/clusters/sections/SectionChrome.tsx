@@ -1,5 +1,22 @@
 import type { KeyRound } from 'lucide-react'
 
+/** Marks a required field's label - an asterisk (not color alone, per WCAG 1.4.1) plus a
+ *  screen-reader-only "(required)" the visual asterisk alone wouldn't announce. Used only on the
+ *  three fields that are always required (Name, Host, Username) - every other field in this form
+ *  is optional, behind its own section toggle - see the "* Required" note in ClusterForm's
+ *  header. */
+export function RequiredMark(): React.JSX.Element {
+  return (
+    <>
+      <span className="required-mark" aria-hidden="true">
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  )
+}
+
 /** An optional section's heading: a toggle switch rather than a checkbox, since it turns a whole
  *  group of fields on or off below it, not one item among independent choices - see
  *  https://developer.apple.com/design/human-interface-guidelines/toggles ("use a switch to let
