@@ -1,10 +1,11 @@
 # HPC orchestration: design
 
-Status: **phases 1 to 3 (the Slurm job queue and node health) are built; the rest is proposed.**
-This is the design for Gate-H's next features: a Slurm
-job queue and node view, GPU and node telemetry, and later a file transfer panel and a job
-submission helper. [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned) states the
-requirements; [STATUS.md](./STATUS.md#known-limitations--near-term-roadmap) tracks progress.
+Status: **phases 1 to 6 (Slurm job queue/node health, GPU usage, file transfer, job templates and
+submit/cancel) are built; only PBS/LSF support remains proposed.** This is the design for Gate-H's
+HPC orchestration features: a Slurm job queue and node view, GPU and node telemetry, file transfer,
+and a job submission helper. [SPEC.md §3.10](../SPEC.md#310-hpc-orchestration-planned) states the
+requirements; [STATUS.md](./STATUS.md#known-limitations--near-term-roadmap) tracks progress in
+detail - when this banner and STATUS.md disagree, STATUS.md is correct.
 
 The Slurm module is designed in detail here. GPU telemetry, file transfer and job submission are
 covered at the level needed to see how they fit, and each gets its own detailed design before it
@@ -44,7 +45,7 @@ features/status/                 window.api.scheduler    ipc/scheduler.ts
 | Layer | New code | Reuses |
 |---|---|---|
 | `src/shared/types.ts` | `SchedulerConfig`, `SlurmJob`, `SlurmPartition`, `SlurmNodeIssue`, `SchedulerSnapshot`; a `scheduler` namespace on `GateHApi` | `Cluster`, `ClusterSummary` |
-| `src/main/db.ts` | one additive column, `scheduler_config TEXT` (JSON, nullable), guarded by `columnExists()` | the existing migration pattern |
+| `src/main/db.ts` | one additive column, `scheduler TEXT` (JSON, nullable), guarded by `columnExists()` | the existing migration pattern |
 | `src/main/scheduler/exec.ts` | runs one fixed command on the cluster's live session, with a timeout and an output cap | the `Client` held in `ssh/manager.ts`'s `sessions` map; `teleport/session.ts`'s `scopeArgs()` |
 | `src/main/scheduler/slurm.ts` | the command strings and their parsers | nothing; pure functions, which makes this the first code in Gate-H that is easy to unit test |
 | `src/main/scheduler/monitor.ts` | decides when to poll, backs off on failure, pushes snapshots | the backoff shape in `GrafanaStatusSection.tsx` |
