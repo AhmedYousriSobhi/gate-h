@@ -179,6 +179,9 @@ never the plaintext or ciphertext.
   file a new issue against that project directly from the cluster's view.
 - Works against both Jira Cloud and Jira Data Center/Server, without the user needing to know
   which auth scheme that entails.
+- Clicking a compute node in the Slurm node-health view (§3.10) searches the same configured Jira
+  project/JQL filter for tickets mentioning that node by name, and offers a one-click "Create
+  incident" (through the same filing path as above) when nothing matches.
 
 ### 3.6 Connection lifecycle: open, background and standby
 - **Open**: selecting a cluster opens it. Switching away never ends its sessions — every
@@ -233,7 +236,8 @@ Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). 
 - **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
   own jobs, or every user's jobs in named partitions (never the whole queue). Each job shows its
   state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
-  collapsed until expanded. Also show per-partition node counts by state and drain reasons.
+  collapsed until expanded. Also show per-partition node counts by state and drain reasons, and
+  every individual node Slurm reports, each one clickable through to its Jira correlation (§3.5).
 - **Job history.** On request, the user's own finished jobs from the last 24 hours or 7 days
   (from `sacct`), with final state, exit code, and CPU efficiency (time actually used vs. time
   reserved - the same figure `seff` reports, computed from the same `sacct` row). Never polled.

@@ -57,7 +57,9 @@ const api: GateHApi = {
   jira: {
     list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),
     create: (clusterId: string, input: CreateJiraIssueInput) =>
-      ipcRenderer.invoke('jira:create', clusterId, input)
+      ipcRenderer.invoke('jira:create', clusterId, input),
+    searchNode: (clusterId: string, nodeName: string) =>
+      ipcRenderer.invoke('jira:searchNode', clusterId, nodeName)
   },
   ssh: {
     connect: (clusterId: string) => ipcRenderer.invoke('ssh:connect', clusterId),

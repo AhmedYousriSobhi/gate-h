@@ -4,11 +4,13 @@ import {
   MAX_SLURM_JOBS,
   type ClusterSummary,
   type SchedulerSnapshot,
-  type SlurmJob
+  type SlurmJob,
+  type SlurmNode
 } from '../../../../shared/types'
 import GpuUsage from './GpuUsage'
+import NodeDetailDialog from './NodeDetailDialog'
 import SlurmHistory from './SlurmHistory'
-import { shortTime, stateClass } from './slurmState'
+import { nodeIsDown, nodeStateClass, shortTime, stateClass } from './slurmState'
 
 interface SlurmSectionProps {
   cluster: ClusterSummary
@@ -100,6 +102,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const [now, setNow] = useState(() => Date.now())
   const [arrays, setArrays] = useState<Record<string, ArrayTasks>>({})
   const [actionError, setActionError] = useState<string | null>(null)
+  const [selectedNode, setSelectedNode] = useState<SlurmNode | null>(null)
   const [visibleSections, setVisibleSections] = useState<Set<SlurmSubsection>>(
     () => new Set(ALL_SUBSECTIONS)
   )
@@ -410,12 +413,42 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                   ))}
                 </div>
               )}
+              {snapshot.nodes.length > 0 && (
+                <div className="slurm-node-chips">
+                  {[...snapshot.nodes]
+                    .sort(
+                      (a, b) =>
+                        Number(nodeIsDown(b.state)) - Number(nodeIsDown(a.state)) ||
+                        a.name.localeCompare(b.name)
+                    )
+                    .map((node) => (
+                      <button
+                        key={node.name}
+                        type="button"
+                        className={`issue-status ${nodeStateClass(node.state)} slurm-node-chip`}
+                        title={`${node.name}: ${node.state}`}
+                        onClick={() => setSelectedNode(node)}
+                      >
+                        {node.name}
+                      </button>
+                    ))}
+                </div>
+              )}
             </>
           )}
         </>
       )}
 
       <SlurmHistory clusterId={cluster.id} />
+
+      {selectedNode && (
+        <NodeDetailDialog
+          key={selectedNode.name}
+          cluster={cluster}
+          node={selectedNode}
+          onClose={() => setSelectedNode(null)}
+        />
+      )}
     </div>
   )
 }

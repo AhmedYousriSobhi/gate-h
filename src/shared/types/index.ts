@@ -381,6 +381,9 @@ export interface GateHApi {
   jira: {
     list(clusterId: string): Promise<JiraIssueSummary[]>
     create(clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary>
+    /** Tickets mentioning this node name, scoped by the cluster's own Jira project/JQL filter -
+     *  see docs/JIRA_GUIDE.md section 4. */
+    searchNode(clusterId: string, nodeName: string): Promise<JiraIssueSummary[]>
   }
   ssh: {
     connect(clusterId: string): Promise<{ sessionId: string }>

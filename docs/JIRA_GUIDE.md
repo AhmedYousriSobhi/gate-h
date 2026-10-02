@@ -87,7 +87,9 @@ just set that cluster's **Default project key**.
 project = HPC AND labels = "frontier-dev" AND statusCategory != Done ORDER BY updated DESC
 ```
 
-**Tickets mentioning a specific compute node** (ad hoc, when you already know the node name):
+**Tickets mentioning a specific compute node**: clicking a node in the Status tab's Slurm section
+now runs this automatically (and offers a one-click "Create incident" if nothing matches), using
+whichever project/JQL filter is already configured above:
 ```
 project = HPC AND labels = "frontier-dev" AND text ~ "cn042"
 ```
