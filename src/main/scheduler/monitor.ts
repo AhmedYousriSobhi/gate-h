@@ -67,6 +67,7 @@ function emptySnapshot(clusterId: string): SchedulerSnapshot {
     truncated: false,
     partitions: [],
     nodeIssues: [],
+    nodes: [],
     nextRefreshAt: null
   }
 }

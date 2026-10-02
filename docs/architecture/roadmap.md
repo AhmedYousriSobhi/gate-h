@@ -24,21 +24,34 @@ input rather than being purely mechanical.
 case for the new cap rather than writing a new check file from scratch).
 
 ## Phase 2 — Domain model and HPC topology
+**Status: node inventory + GPU capacity done; GPU allocation and UI surfacing still open.**
 **Objective**: add the one missing piece of the topology model — a cluster-wide node/GPU inventory
 — without breaking the existing, correct separation between host-level reachability and
 cluster-level Slurm state.
-**Expected code areas**: `src/shared/types/index.ts` (new `SlurmNode[]` type, parallel to the
-existing `SlurmPartition[]`/`SlurmNodeIssue[]`); `src/main/scheduler/slurm.ts` (a new parser for
-`sinfo -N` or equivalent, following the exact pure-function pattern `parsePartitions`/
-`parseNodeIssues` already use); a GPU capacity/allocation aggregate, sourced from the same
-DCGM/Prometheus datasource already configured per cluster (`src/main/grafana/gpu.ts`), not from any
-new per-node SSH/`nvidia-smi` fan-out.
-**Dependencies**: Phase 1 (don't build on top of an unbounded background sweep).
-**Risk**: Medium — this is new functionality, not a refactor, but it must be validated against real
-`sinfo -N`/DCGM output before shipping (per the High-severity "untested against real infra"
-finding) — a wrong assumption about `sinfo -N`'s column format would ship a silently-broken
+**Done**: `SlurmNode`/`SlurmGres` types (`src/shared/types/index.ts`); `parseNodes`/`parseGres`/
+`totalGpuCapacity` (`src/main/scheduler/slurm.ts`), parsing one more chained `sinfo -N` call folded
+into the existing single-exec `snapshotCommand()` (still one channel per refresh); `nodes:
+SlurmNode[]` added to `SchedulerSnapshot`. GPU capacity is summed from each node's own Slurm GRES
+config (`sinfo %G`), not DCGM — capacity is a static scheduler-config fact, a different question
+from DCGM's live utilization/health reading (`GpuSample`), so the two were kept separate rather
+than conflated. Covered by `scripts/slurm.checks.ts` against synthetic `sinfo -N` output (real
+format documented as an ASSUMPTION/EVIDENCE/DECISION comment on `snapshotCommand` — not yet
+confirmed against a live cluster).
+**Still open**: a GPU *allocation* (currently-in-use) figure — needs either a validated squeue
+GRES-per-job format or `scontrol show node`'s `AllocTRES`, neither attempted since the exact field
+format couldn't be confirmed without real infrastructure to check against; surfacing any of this
+in the UI (that's Phase 5's job, not Phase 2's, per this phase's original code-area scope).
+**Expected code areas**: `src/shared/types/index.ts`, `src/main/scheduler/slurm.ts` (done, above);
+GPU allocation, if pursued, touches the same two files plus possibly `scheduler/exec.ts` if a new
+command type (`scontrol`) is needed rather than reusing the existing chained `sinfo`/`squeue` exec.
+**Dependencies**: Phase 1 (don't build on top of an unbounded background sweep) — done.
+**Risk**: Medium — new functionality, not a refactor, but it must be validated against real
+`sinfo -N` output before being trusted in production (per the High-severity "untested against real
+infra" finding) — a wrong assumption about `sinfo -N`'s column format would ship a silently-broken
 inventory view, the same class of risk the existing `squeue`/`sinfo` parsers already manage
-carefully (delimiter choice, `LC_ALL=C`, free-text-last).
+carefully (delimiter choice, `LC_ALL=C`, free-text-last). The parser degrades defensively (a
+non-matching `%C` field yields null CPU counts rather than crashing or guessing), which bounds the
+damage of that risk but doesn't eliminate the need to verify against a real cluster.
 **Validation**: unit tests against recorded real `sinfo -N`/DCGM output (same style as
 `scripts/slurm.checks.ts`'s existing recorded-output tests); if a real Slurm/DCGM test lab becomes
 available (the repo's `CHANGELOG.md` references a local Vagrant lab used for exactly this purpose

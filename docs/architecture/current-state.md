@@ -123,7 +123,8 @@ question, and the answer is clean:
   (`ReachabilityStatus` vs `SchedulerStatus`), never merged into one "cluster status" object anywhere
   in the codebase — only combined visually, as separate props passed to separate UI sections.
 
-**What *is* missing: a full cluster compute-inventory model.** The topology that exists is:
+**What *was* missing: a full cluster compute-inventory model.** The topology at the time of this
+baseline was:
 
 | Scope | Type | What it covers |
 |---|---|---|
@@ -134,10 +135,14 @@ question, and the answer is clean:
 | GPU | `GpuSample` | **only GPUs of a running job's nodes** — no cluster-wide GPU capacity/allocation entity |
 | Job | `SlurmJob`, `SlurmHistoryJob` | first-class |
 
-There is nowhere in the type system or the UI that answers "this cluster has N nodes / M GPUs, Y%
+There was nowhere in the type system or the UI that answered "this cluster has N nodes / M GPUs, Y%
 allocated" as a standing fact — only "these specific nodes currently have a problem" and "these
-specific GPUs belong to my running job." This is a genuine gap, not a conflation bug, and it's the
-most relevant finding for any future "fleet/cluster capacity" dashboard work (see roadmap Phase 2).
+specific GPUs belong to my running job." **Phase 2 (`docs/architecture/roadmap.md`) closed half of
+this**: `SlurmNode[]` (full node inventory, from `sinfo -N`) and `totalGpuCapacity()` (summed from
+each node's Slurm GRES config, not DCGM) now exist in `SchedulerSnapshot`/`scheduler/slurm.ts`. What
+Phase 2 deliberately left open: a GPU *allocation* (in-use) figure, which needs either a validated
+squeue GRES-per-job format or `scontrol show node`'s `AllocTRES` — neither attempted yet, flagged
+rather than guessed at. Surfacing the new inventory in any UI is also still open (Phase 5).
 
 ## 5. Current data sources
 
@@ -279,8 +284,9 @@ output cap) are all sound.
    (`TerminalPanel.tsx` reconnect, `GrafanaStatusSection.tsx`, `StorageSection.tsx`) with no shared
    hook/helper — the fourth comparable case (`SlurmSection.tsx`) correctly avoids this by relying on
    a main-process push instead.
-4. No full cluster-level node/GPU inventory entity exists (§4) — only problem-nodes and
-   job-scoped GPU samples are modeled.
+4. ~~No full cluster-level node/GPU inventory entity exists~~ **Closed by Phase 2**: `SlurmNode[]`
+   (full node inventory) and `totalGpuCapacity()` (GPU count, from Slurm GRES) now exist (§4). GPU
+   *allocation* (in-use count) remains open, and nothing surfaces the new inventory in the UI yet.
 5. GPU hostlist expansion silently truncates at 64 nodes with no UI indicator, unlike the job
    table's surfaced 2,000-row truncation flag.
 6. CI runs only on macOS (`.github/workflows/macos.yml`) despite Linux-first positioning and

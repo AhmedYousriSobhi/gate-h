@@ -6,12 +6,15 @@ import {
   arrayTasksCommand,
   classifyFailure,
   historyCommand,
+  parseGres,
   parseHistory,
   parseJobs,
   parseNodeIssues,
+  parseNodes,
   parsePartitions,
   parseSnapshot,
   snapshotCommand,
+  totalGpuCapacity,
   type SlurmData
 } from '../src/main/scheduler/slurm'
 import { describeChanges } from '../src/main/scheduler/changes'
@@ -45,12 +48,12 @@ const mineCmd = snapshotCommand(mine)
 report(mineCmd.includes('squeue --user="$(id -un)"'), "scope 'mine' limits squeue to the SSH user")
 report(!mineCmd.includes('--partition'), 'no partition filter when none is configured')
 report(
-  (mineCmd.match(/ && /g) ?? []).length === 4,
+  (mineCmd.match(/ && /g) ?? []).length === 6,
   'one chained exec with the first failure as its status'
 )
 const partCmd = snapshotCommand(byPartition)
 report(
-  !partCmd.includes('--user') && (partCmd.match(/'--partition=gpu,cpu'/g) ?? []).length === 3,
+  !partCmd.includes('--user') && (partCmd.match(/'--partition=gpu,cpu'/g) ?? []).length === 4,
   "scope 'partitions' shows every user's jobs, but only in the named partitions",
   partCmd
 )
@@ -127,13 +130,57 @@ report(
   'drain reason containing | stays whole'
 )
 
+console.log('-- node inventory')
+const gresGpu = parseGres('gpu:a100:4')
+report(
+  gresGpu.length === 1 && gresGpu[0].type === 'a100' && gresGpu[0].count === 4,
+  'gpu:<model>:<count> parses to type+count'
+)
+report(parseGres('gpu:2')[0].type === 'gpu', 'gpu:<count> with no model defaults the type to gpu')
+report(parseGres('(null)').length === 0, 'no GRES configured parses to nothing')
+report(parseGres('license:matlab:2').length === 0, 'a non-GPU GRES entry is skipped, not guessed')
+const nodes = parseNodes(
+  [
+    'gpu01|gpu|idle|0/64/0/64|257542|gpu:a100:4',
+    'gpu01|debug|idle|0/64/0/64|257542|gpu:a100:4',
+    'cpu01|cpu|mixed|12/52/0/64|128771|(null)',
+    'bad01|cpu|idle|not-four-slashes|128771|(null)'
+  ].join('\n')
+)
+report(nodes.length === 3, 'one SlurmNode per unique node name')
+const gpu01 = nodes.find((n) => n.name === 'gpu01')
+report(
+  gpu01?.partitions.length === 2 &&
+    gpu01.partitions.includes('gpu') &&
+    gpu01.partitions.includes('debug'),
+  'a node in several partitions keeps all of them, once'
+)
+report(
+  gpu01?.cpusAllocated === 0 && gpu01?.cpusTotal === 64 && gpu01?.gpus[0]?.count === 4,
+  'parses CPU alloc/total and GPU GRES'
+)
+const bad01 = nodes.find((n) => n.name === 'bad01')
+report(
+  bad01?.cpusAllocated === null && bad01?.cpusTotal === null,
+  "a %C field that isn't alloc/idle/other/total gives null CPU counts, not a crash"
+)
+report(
+  totalGpuCapacity(nodes) === 4,
+  'total GPU capacity sums every node once, not once per partition row'
+)
+
 console.log('-- snapshot')
-const snapshot = parseSnapshot(`${squeueMine}@@gateh@@\ngpu|up|6|mixed\n@@gateh@@\n`, 'mine')
+const nodeRow = 'cpu01|cpu|idle|0/4/0/4|8192|(null)'
+const snapshot = parseSnapshot(
+  `${squeueMine}@@gateh@@\ngpu|up|6|mixed\n@@gateh@@\n@@gateh@@\n${nodeRow}\n`,
+  'mine'
+)
 report(
   snapshot.jobs.length === 3 &&
     snapshot.partitions.length === 1 &&
-    snapshot.nodeIssues.length === 0,
-  'splits the three sections'
+    snapshot.nodeIssues.length === 0 &&
+    snapshot.nodes.length === 1,
+  'splits the four sections'
 )
 report(
   throws(() => parseSnapshot('motd noise only', 'mine')),
@@ -202,6 +249,7 @@ const data = (jobs: SlurmJob[], extra: Partial<SlurmData> = {}): SlurmData => ({
   truncated: false,
   partitions: [],
   nodeIssues: [],
+  nodes: [],
   ...extra
 })
 const burst = describeChanges(
