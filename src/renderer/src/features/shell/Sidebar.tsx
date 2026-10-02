@@ -40,6 +40,10 @@ interface SidebarProps {
   onCloseSessions: (cluster: ClusterSummary) => void
   onToggleActiveMonitoring: (cluster: ClusterSummary) => void
   width: number
+  /** Called on drop with the dragged cluster's id and the id of the row it was dropped onto -
+   *  AppShell computes and persists the new order (see clusterOrder.ts). Cluster identity/
+   *  configuration is untouched; this only reorders the display list. */
+  onReorder: (draggedId: string, targetId: string) => void
 }
 
 const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
@@ -74,11 +78,14 @@ export default function Sidebar({
   liveSessionCounts,
   onCloseSessions,
   onToggleActiveMonitoring,
-  width
+  width,
+  onReorder
 }: SidebarProps): React.JSX.Element {
   // Closing a cluster with connected sessions takes a second click on the same button rather
   // than a modal - ended SSH sessions can't be brought back, but a dialog for it gets in the way.
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
   return (
     <aside className="sidebar" style={{ width }}>
       <div className="sidebar-header">
@@ -128,9 +135,29 @@ export default function Sidebar({
         {clusters.map((cluster) => (
           <div
             key={cluster.id}
-            className={`cluster-row${cluster.id === selectedClusterId ? ' cluster-row-active' : ''}`}
+            className={`cluster-row${cluster.id === selectedClusterId ? ' cluster-row-active' : ''}${
+              draggedId === cluster.id ? ' cluster-row-dragging' : ''
+            }${dragOverId === cluster.id && draggedId !== cluster.id ? ' cluster-row-drag-over' : ''}`}
             onClick={() => onSelect(cluster)}
             onMouseLeave={() => setConfirmCloseId((id) => (id === cluster.id ? null : id))}
+            draggable
+            onDragStart={() => setDraggedId(cluster.id)}
+            onDragEnd={() => {
+              setDraggedId(null)
+              setDragOverId(null)
+            }}
+            onDragOver={(e) => {
+              if (!draggedId || draggedId === cluster.id) return
+              e.preventDefault()
+              setDragOverId(cluster.id)
+            }}
+            onDragLeave={() => setDragOverId((id) => (id === cluster.id ? null : id))}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (draggedId && draggedId !== cluster.id) onReorder(draggedId, cluster.id)
+              setDraggedId(null)
+              setDragOverId(null)
+            }}
           >
             <span
               className="cluster-avatar"

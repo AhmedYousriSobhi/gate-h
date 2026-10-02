@@ -1,13 +1,15 @@
 import { ipcMain } from 'electron'
 import {
+  getClusterOrder,
   getPanelLayout,
   getSidebarWidth,
   getStatusLayout,
+  setClusterOrder,
   setPanelLayout,
   setSidebarWidth,
   setStatusLayout
 } from '../settings'
-import type { PanelLayout, StatusLayout } from '../../shared/types'
+import type { ClusterOrder, PanelLayout, StatusLayout } from '../../shared/types'
 
 export function registerLayoutIpcHandlers(): void {
   ipcMain.handle('layout:get', () => getPanelLayout())
@@ -16,4 +18,6 @@ export function registerLayoutIpcHandlers(): void {
   ipcMain.on('statusLayout:set', (_event, layout: StatusLayout) => setStatusLayout(layout))
   ipcMain.handle('sidebarWidth:get', () => getSidebarWidth())
   ipcMain.on('sidebarWidth:set', (_event, width: number) => setSidebarWidth(width))
+  ipcMain.handle('clusterOrder:get', () => getClusterOrder())
+  ipcMain.on('clusterOrder:set', (_event, order: ClusterOrder) => setClusterOrder(order))
 }

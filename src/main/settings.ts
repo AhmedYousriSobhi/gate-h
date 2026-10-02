@@ -2,12 +2,14 @@ import { getDb } from './db'
 import {
   ALL_STATUS_WIDGET_TYPES,
   ALL_WIDGET_TYPES,
+  DEFAULT_CLUSTER_ORDER,
   DEFAULT_OVERVIEW_VIEW_MODE,
   DEFAULT_PANEL_LAYOUT,
   DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_STATUS_LAYOUT,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
+  type ClusterOrder,
   type OverviewViewMode,
   type PanelLayout,
   type StatusLayout
@@ -121,4 +123,28 @@ export function getSidebarWidth(): number {
 
 export function setSidebarWidth(width: number): void {
   setSetting(SIDEBAR_WIDTH_KEY, String(width))
+}
+
+const CLUSTER_ORDER_KEY = 'clusterOrder'
+
+function isValidClusterOrder(value: unknown): value is ClusterOrder {
+  return Array.isArray(value) && value.every((id) => typeof id === 'string')
+}
+
+/** Falls back to the default (empty - "use incoming order") if nothing was saved yet, or the
+ *  saved JSON doesn't parse or no longer matches the shape - same reasoning as getPanelLayout
+ *  above. */
+export function getClusterOrder(): ClusterOrder {
+  const raw = getSetting(CLUSTER_ORDER_KEY)
+  if (!raw) return DEFAULT_CLUSTER_ORDER
+  try {
+    const parsed = JSON.parse(raw)
+    return isValidClusterOrder(parsed) ? parsed : DEFAULT_CLUSTER_ORDER
+  } catch {
+    return DEFAULT_CLUSTER_ORDER
+  }
+}
+
+export function setClusterOrder(order: ClusterOrder): void {
+  setSetting(CLUSTER_ORDER_KEY, JSON.stringify(order))
 }

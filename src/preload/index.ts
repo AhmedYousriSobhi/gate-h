@@ -4,6 +4,7 @@ import type {
   AzureTunnelStatusEvent,
   ClusterInput,
   ClusterNotification,
+  ClusterOrder,
   ClusterReachability,
   CreateJiraIssueInput,
   FileTransferEvent,
@@ -215,6 +216,10 @@ const api: GateHApi = {
   sidebarWidth: {
     get: () => ipcRenderer.invoke('sidebarWidth:get'),
     set: (width: number) => ipcRenderer.send('sidebarWidth:set', width)
+  },
+  clusterOrder: {
+    get: () => ipcRenderer.invoke('clusterOrder:get'),
+    set: (order: ClusterOrder) => ipcRenderer.send('clusterOrder:set', order)
   }
 }
 
