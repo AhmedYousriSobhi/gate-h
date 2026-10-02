@@ -249,9 +249,12 @@ export function clearAzureAuth(): Promise<void> {
 }
 
 // How long to wait for a live SSH banner after the script reports the tunnel's local port
-// listening, before treating it as the azure-cli#28367 stale-port case - same as verifyTunnel's
-// own wait, since a legitimately slow Bastion relay needs the same room here.
-const BANNER_WAIT_MS = 10_000
+// listening, before treating it as the azure-cli#28367 stale-port case. Longer than
+// verifyTunnel's own 10s (a deliberate one-off check the user is already watching) - an IP-based
+// Bastion connection in particular can take considerably longer than 10s to actually start
+// relaying traffic after its local port opens, and cutting the wait short here doesn't just delay
+// a one-off diagnostic, it fails the connection outright on every single automatic retry.
+const BANNER_WAIT_MS = 30_000
 
 /** Resolves once the cluster's tunnel is listening *and* actually carries traffic - reusing the
  *  tunnel if it's already up (the script's `up` is idempotent). Fails fast on a missing/expired
