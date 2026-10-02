@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, Columns2, FileCode2, FolderOpen, Power, Puzzle, Rows2 } from 'lucide-react'
+import { Power } from 'lucide-react'
 import type { ClusterReachability, ClusterSummary } from '../../../../shared/types'
 import TerminalPanel, { type SessionStatus } from '../terminal/TerminalPanel'
 import TerminalTabBar from '../terminal/TerminalTabBar'
 import { useSessionDrag } from '../terminal/useSessionDrag'
-import TabContextMenu from '../terminal/TabContextMenu'
 import {
   dividers,
   insertBeside,
@@ -20,10 +19,11 @@ import {
   type SplitDir
 } from '../terminal/splitLayout'
 import StatusPanel from '../status/StatusPanel'
-import WidgetPicker from './WidgetPicker'
 import FilesDialog from '../files/FilesDialog'
 import TemplatesDialog from '../templates/TemplatesDialog'
-import { toggleWidget, swapPanes, type PanelLayout, type WidgetType } from './panelLayout'
+import { type PanelLayout, type WidgetType } from './panelLayout'
+import MainPanelToolbar from './MainPanelToolbar'
+import MainPanelContextMenu from './MainPanelContextMenu'
 
 interface MainPanelProps {
   cluster: ClusterSummary
@@ -445,73 +445,15 @@ export default function MainPanel({
     <div className={`main-panel${hidden ? ' main-panel-hidden' : ''}`}>
       {filesOpen && !hidden && <FilesDialog cluster={cluster} onClose={closeFiles} />}
       {templatesOpen && !hidden && <TemplatesDialog cluster={cluster} onClose={closeTemplates} />}
-      <div className="panel-toolbar">
-        <span className="panel-toolbar-title">{cluster.name}</span>
-        <div className="panel-toolbar-actions">
-          <button
-            className="btn-icon"
-            title={
-              cluster.teleport
-                ? "File transfer isn't available for Teleport clusters yet"
-                : 'Browse and transfer files'
-            }
-            disabled={Boolean(cluster.teleport) || !cluster.activeMonitoring}
-            onClick={() => setFilesOpen(true)}
-          >
-            <FolderOpen size={15} strokeWidth={2} />
-          </button>
-          <button
-            className="btn-icon"
-            title={
-              cluster.scheduler
-                ? 'Job templates: review and submit batch scripts'
-                : 'Job templates (turn on Slurm for this cluster to submit)'
-            }
-            disabled={!cluster.activeMonitoring}
-            onClick={() => setTemplatesOpen(true)}
-          >
-            <FileCode2 size={15} strokeWidth={2} />
-          </button>
-          <button
-            className="btn-icon"
-            title="Swap pane order"
-            disabled={visible.length < 2}
-            onClick={() => onLayoutChange(swapPanes(layout))}
-          >
-            <ArrowLeftRight size={15} strokeWidth={2} />
-          </button>
-          <button
-            className={`btn-icon${orientation === 'horizontal' ? ' btn-icon-active' : ''}`}
-            title="Side by side"
-            onClick={() => onLayoutChange({ ...layout, orientation: 'horizontal' })}
-          >
-            <Columns2 size={15} strokeWidth={2} />
-          </button>
-          <button
-            className={`btn-icon${orientation === 'vertical' ? ' btn-icon-active' : ''}`}
-            title="Stacked"
-            onClick={() => onLayoutChange({ ...layout, orientation: 'vertical' })}
-          >
-            <Rows2 size={15} strokeWidth={2} />
-          </button>
-          <div className="widget-picker-anchor">
-            <button
-              className={`btn-icon${pickerOpen ? ' btn-icon-active' : ''}`}
-              title="Add or remove widgets"
-              onClick={() => setPickerOpen((open) => !open)}
-            >
-              <Puzzle size={15} strokeWidth={2} />
-            </button>
-            {pickerOpen && (
-              <WidgetPicker
-                visible={visible}
-                onToggle={(type) => onLayoutChange(toggleWidget(layout, type))}
-                onClose={() => setPickerOpen(false)}
-              />
-            )}
-          </div>
-        </div>
-      </div>
+      <MainPanelToolbar
+        cluster={cluster}
+        layout={layout}
+        onLayoutChange={onLayoutChange}
+        pickerOpen={pickerOpen}
+        setPickerOpen={setPickerOpen}
+        onOpenFiles={() => setFilesOpen(true)}
+        onOpenTemplates={() => setTemplatesOpen(true)}
+      />
 
       {cluster.activeMonitoring ? (
         // Both panes stay in the DOM even with visible.length === 0 (see paneStyle) so hiding
@@ -696,27 +638,22 @@ export default function MainPanel({
           </button>
         </div>
       )}
-      {contextMenu &&
-        (() => {
-          const { tabId } = contextMenu
-          const isPrimary = tabId === primaryTabId
-          const group = groupLeaves.find((g) => g.includes(tabId))
-          const others = allTabs.filter((id) => id !== tabId && id !== primaryTabId)
-          return (
-            <TabContextMenu
-              x={contextMenu.x}
-              y={contextMenu.y}
-              onDismiss={() => setContextMenu(null)}
-              onRename={() => startRename(tabId)}
-              onSplit={() => handleSplitTab(tabId)}
-              onDuplicate={() => handleDuplicateTab(tabId)}
-              onUnstack={group && group.length > 1 ? () => extractToStandaloneGroup(tabId) : null}
-              onCloseTab={isPrimary ? null : () => handleCloseTab(tabId)}
-              onCloseOthers={others.length > 0 ? () => handleCloseOtherTabs(tabId) : null}
-              onCloseAll={others.length > 0 ? () => handleCloseAllTabs() : null}
-            />
-          )
-        })()}
+      {contextMenu && (
+        <MainPanelContextMenu
+          contextMenu={contextMenu}
+          primaryTabId={primaryTabId}
+          groupLeaves={groupLeaves}
+          allTabs={allTabs}
+          onDismiss={() => setContextMenu(null)}
+          startRename={startRename}
+          handleSplitTab={handleSplitTab}
+          handleDuplicateTab={handleDuplicateTab}
+          extractToStandaloneGroup={extractToStandaloneGroup}
+          handleCloseTab={handleCloseTab}
+          handleCloseOtherTabs={handleCloseOtherTabs}
+          handleCloseAllTabs={handleCloseAllTabs}
+        />
+      )}
     </div>
   )
 }
