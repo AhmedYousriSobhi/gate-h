@@ -1,4 +1,5 @@
 import { getCluster, listClusters } from '../clusters'
+import { runWithConcurrency } from '../monitor/concurrencyLimit'
 import { addNotification } from '../notifications/store'
 import { hasLiveConnection, NoSessionError, runOnCluster } from './exec'
 import { describeChanges, finishedJobs, type FinalStates } from './changes'
@@ -221,11 +222,17 @@ async function poll(clusterId: string): Promise<void> {
 const BACKGROUND_SWEEP_MS = 60_000
 const BACKGROUND_INTERVAL_MS = 5 * 60_000
 const MAX_BACKGROUND_BACKOFF_MS = 30 * 60_000
+// A due cluster still only ever runs one exec at a time (the `running` flag below, and
+// exec.ts's own per-cluster queue) - this bounds how many *different* clusters' background
+// checks can be in flight in the same tick, the same reasoning as clusterMonitor.ts's and
+// jiraMonitor.ts's sweeps (see concurrencyLimit.ts).
+const BACKGROUND_SWEEP_CONCURRENCY = 10
 const background = new Map<string, { lastRunAt: number; failures: number; running: boolean }>()
 let sweepTimer: ReturnType<typeof setInterval> | null = null
 
 /** Run once a minute by startSchedulerMonitor; exported for scripts/scheduler-monitor.checks.ts. */
-export function sweepBackground(): void {
+export async function sweepBackground(): Promise<void> {
+  const due: ClusterSummary[] = []
   for (const cluster of listClusters()) {
     const config = cluster.scheduler
     if (!config?.notify || cluster.teleport || !cluster.activeMonitoring) continue
@@ -238,14 +245,20 @@ export function sweepBackground(): void {
       MAX_BACKGROUND_BACKOFF_MS
     )
     if (state.running || Date.now() - Math.max(state.lastRunAt, fetchedAt) < wait) continue
+    // Marked running before the concurrency-limited run below even starts, so a cluster queued
+    // behind the concurrency cap can't also be picked up as "due" by a later sweep tick.
     state.running = true
-    void refresh(cluster, config).then(({ snapshot, ran, ok }) => {
-      state.running = false
-      if (ran) state.lastRunAt = Date.now()
-      state.failures = ok ? 0 : ran ? state.failures + 1 : state.failures
-      publish(cluster.id, config, { ...snapshot, refreshing: false, nextRefreshAt: null })
-    })
+    due.push(cluster)
   }
+  await runWithConcurrency(due, BACKGROUND_SWEEP_CONCURRENCY, async (cluster) => {
+    const config = cluster.scheduler as SchedulerConfig
+    const state = background.get(cluster.id)!
+    const { snapshot, ran, ok } = await refresh(cluster, config)
+    state.running = false
+    if (ran) state.lastRunAt = Date.now()
+    state.failures = ok ? 0 : ran ? state.failures + 1 : state.failures
+    publish(cluster.id, config, { ...snapshot, refreshing: false, nextRefreshAt: null })
+  })
 }
 
 export function startSchedulerMonitor(): void {
