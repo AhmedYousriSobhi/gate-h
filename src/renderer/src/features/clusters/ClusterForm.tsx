@@ -530,6 +530,12 @@ export default function ClusterForm({
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="modal cluster-modal">
         <h2>{initial ? `Edit ${initial.name}` : 'Add cluster'}</h2>
+        <p className="hint">
+          <span className="required-mark" aria-hidden="true">
+            *
+          </span>{' '}
+          Required
+        </p>
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit} className="cluster-form-body">
           <div className="cluster-form-panes">

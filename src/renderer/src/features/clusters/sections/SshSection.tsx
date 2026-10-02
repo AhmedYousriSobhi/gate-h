@@ -1,6 +1,7 @@
 import { KeyRound } from 'lucide-react'
 import type { ClusterSummary, SshAuthMethod } from '../../../../../shared/types'
 import type { FormState, SetFormField } from '../formState'
+import { RequiredMark } from './SectionChrome'
 
 export default function SshSection({
   form,
@@ -19,7 +20,10 @@ export default function SshSection({
       </h4>
       <div className="form-row">
         <div className="form-field">
-          <label htmlFor="host">Host</label>
+          <label htmlFor="host">
+            Host
+            <RequiredMark />
+          </label>
           <input id="host" value={form.host} onChange={(e) => set('host', e.target.value)} />
         </div>
         <div className="form-field">
@@ -29,7 +33,10 @@ export default function SshSection({
       </div>
       <div className="form-row">
         <div className="form-field">
-          <label htmlFor="username">Username</label>
+          <label htmlFor="username">
+            Username
+            <RequiredMark />
+          </label>
           <input
             id="username"
             value={form.username}
