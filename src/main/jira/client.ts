@@ -70,11 +70,19 @@ function toSummary(profile: JiraProfile, issue: JiraApiIssue): JiraIssueSummary 
  *  after it, and without a trailing ORDER BY (each caller adds its own). Empty when unscoped. */
 function baseJql(profile: JiraProfile, tags: string[] = []): string {
   const labels = [...new Set(tags.map(toClusterSlug))]
-  // An explicit JQL wins; otherwise the project key and the cluster's own tags (as Jira labels)
-  // narrow it, so tagging a cluster is enough to scope its tickets.
+  const mentions = [...new Set(tags.map((t) => t.trim()).filter(Boolean))]
+  // An explicit JQL wins; otherwise the project key and the cluster's own tags narrow it. A tag
+  // matches a ticket carrying it as a label or mentioning it, since existing tickets are rarely
+  // labelled by hand.
+  const tagClause = [
+    labels.length ? `labels in (${labels.map((l) => `"${l}"`).join(', ')})` : '',
+    ...mentions.map((t) => `text ~ "${t.replace(/[\\"]/g, '\\$&')}"`)
+  ]
+    .filter(Boolean)
+    .join(' OR ')
   const derived = [
     profile.projectKey ? `project = "${profile.projectKey}"` : '',
-    labels.length ? `labels in (${labels.map((l) => `"${l}"`).join(', ')})` : ''
+    tagClause && `(${tagClause})`
   ]
     .filter(Boolean)
     .join(' AND ')
