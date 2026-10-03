@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Jira tickets</title>
+<style>
+  .stage { --l: 300px; --r: 330px; --zoom: 1.04; }
+  .status-body { overflow: visible; padding: 0; }
+  .menu { position: absolute; z-index: 3; width: 190px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); padding: 4px; box-shadow: 0 12px 30px rgba(0,0,0,.6); font-size: 13px; }
+  .menu div { padding: 5px 10px; border-radius: 6px; color: var(--color-text-2); }
+  .menu div.sel { background: var(--color-accent-soft); color: var(--color-text-1); }
+  .slurm-toolbar .form-field-checkbox { margin-bottom: 0; }
+  .win-body { padding-bottom: 22px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Status panel: Jira</h1><p>demo-gpu · synthetic data</p></div>
+  <div class="stage">
+    <div class="mock"><div class="win">
+      <div class="win-bar"><i></i><i></i><i></i><span>demo-gpu · Status</span></div>
+      <div class="win-body">
+      <div class="status-body"><section>
+        <h2><i data-i="ticket" data-s="15"></i>Jira</h2>
+        <div class="status-section">
+          <p class="hint" id="hint">This cluster has no Jira project key, JQL filter or tags, so this lists every ticket you can see (last 90 days). Add a tag or a project key to the cluster to scope it.</p>
+          <form class="slurm-toolbar" onsubmit="return false">
+            <input class="slurm-user-filter" id="search" type="text" placeholder="Search these tickets..." />
+            <label class="form-field-checkbox" id="open"><input type="checkbox" checked />Unresolved only</label>
+            <select class="slurm-user-filter" id="assignee"><option>Assigned to anyone</option></select>
+            <button type="submit" class="btn btn-sm">Search</button>
+          </form>
+          <div class="slurm-toolbar" id="auto">
+            <label class="form-field-checkbox"><input type="checkbox" checked />Auto-refresh (every minute)</label>
+            <button class="btn-icon" type="button"><i data-i="refresh-cw" data-s="14"></i></button>
+          </div>
+          <div class="issue-list" id="list"><div class="issue-row"><div><a href="#">OPS-104</a> node-017 drained: GPU fell off the bus</div><span class="issue-status issue-status-active">In Progress</span></div><div class="issue-row"><div><a href="#">OPS-103</a> Slurm controller slow to respond</div><span class="issue-status issue-status-todo">To Do</span></div><div class="issue-row"><div><a href="#">OPS-101</a> Request: more scratch quota for alice</div><span class="issue-status issue-status-active">In Progress</span></div><div class="issue-row"><div><a href="#">OPS-099</a> demo-gpu maintenance window, October</div><span class="issue-status issue-status-todo">To Do</span></div><div class="issue-row"><div><a href="#">OPS-097</a> Intermittent login node timeouts</div><span class="issue-status issue-status-todo">To Do</span></div></div>
+        </div>
+      </section></div>
+      </div>
+    </div>
+    <div class="menu" id="menu" style="left: 347px; top: 172px">
+      <div class="sel">Assigned to anyone</div><div>Assigned to me</div><div>Unassigned</div><div>Assigned to team...</div><div>Assigned to group...</div><div>Assigned to user...</div>
+    </div>
+    </div>
+
+    <div class="cap" data-for="hint"><b>Scoped by the cluster</b>Tags, the Jira project key or a JQL filter set on the cluster decide which tickets appear. With none of them, you see every ticket you can access.</div>
+    <div class="cap" data-for="open" data-lead="none" data-side="l"><b>Unresolved only</b>Hides finished tickets. The Overview's "open" count uses the same rule.</div>
+    <div class="cap" data-for="search" data-side="l"><b>Search</b>Free text over the tickets in view.</div>
+    <div class="cap" data-for="assignee" data-pt="t"><b>Assignee filter</b>Anyone, me, unassigned, or a team, group or user by name (menu shown open).</div>
+    <div class="cap" data-for="auto" data-side="l"><b>Auto-refresh</b>Re-reads the list every minute, or press the refresh button.</div>
+    <div class="cap" data-for="list"><b>Ticket list</b>Key, summary and a coloured status pill. Keys open in Jira.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

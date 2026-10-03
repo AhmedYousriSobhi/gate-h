@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Slurm queue</title>
+<style>
+  .stage { --r: 340px; --zoom: 1.04; }
+  .slurm-table-wrap { overflow: visible; }
+  .status-body { overflow: visible; padding: 0; }
+  .slurm-block { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Status panel: the Slurm queue</h1><p>demo-gpu · synthetic data</p></div>
+  <div class="stage">
+    <div class="mock"><div class="win">
+      <div class="win-bar"><i></i><i></i><i></i><span>demo-gpu · Status</span></div>
+      <div class="win-body">
+      <div class="status-body"><section>
+        <h2><i data-i="list-checks" data-s="15"></i>Slurm</h2>
+        <div class="status-section">
+          <div class="slurm-section-toggles">
+            <button class="btn btn-sm btn-primary">Jobs</button><button class="btn btn-sm btn-primary">Nodes</button><button class="btn btn-sm btn-primary">GPUs</button>
+          </div>
+          <div class="slurm-toolbar" id="states">
+            <div class="slurm-counts">
+              <span class="issue-status issue-status-active slurm-count-pill">96 running</span>
+              <span class="issue-status issue-status-todo slurm-count-pill">52 pending</span>
+              <span class="issue-status issue-status-done slurm-count-pill">3 completing</span>
+            </div>
+            <span class="slurm-dim">Updated 12 s ago</span>
+            <button class="btn-icon"><i data-i="refresh-cw" data-s="14"></i></button>
+          </div>
+          <div class="slurm-toolbar" id="reasons">
+            <span class="slurm-dim">Waiting because:</span>
+            <div class="slurm-counts">
+              <span class="issue-status issue-status-todo slurm-count-pill">40 Priority</span>
+              <span class="issue-status issue-status-todo slurm-count-pill">12 Resources</span>
+            </div>
+          </div>
+          <div class="slurm-toolbar" id="filters">
+            <input class="slurm-user-filter" id="search" type="text" value="train" style="width:230px" />
+            <select class="slurm-user-filter" id="part"><option>All partitions</option></select>
+            <button type="button" class="btn btn-sm" id="reset">Reset filters</button>
+          </div>
+          <div class="slurm-table-wrap" id="table"><table class="slurm-table">
+            <thead><tr><th>Job</th><th>Partition</th><th>User</th><th>State</th><th>Time / limit</th><th>Nodes</th><th>Nodes or reason</th><th>Name</th><th></th></tr></thead>
+            <tbody><tr><td class="slurm-mono">48211</td><td>gpu</td><td>alice</td><td><span class="issue-status issue-status-active">running</span></td><td class="slurm-mono">03:12:40 / 12:00:00</td><td>2</td><td class="slurm-mono slurm-wrap">node-[001-002]</td><td class="slurm-name">train-resnet</td><td class="slurm-action"><button class="btn-icon" id="cancel"><i data-i="x" data-s="13"></i></button></td></tr><tr><td class="slurm-mono">48212</td><td>gpu</td><td>alice</td><td><span class="issue-status issue-status-todo">pending</span></td><td class="slurm-mono">00:00:00 / 08:00:00</td><td>1</td><td class="slurm-mono slurm-wrap">(Priority)<span class="slurm-dim slurm-block">est. start 10-04 22:30</span></td><td class="slurm-name">train-resnet-v2</td><td class="slurm-action"><button class="btn-icon"><i data-i="x" data-s="13"></i></button></td></tr><tr><td class="slurm-mono">48213</td><td>gpu</td><td>bob</td><td><span class="issue-status issue-status-todo">pending</span></td><td class="slurm-mono">00:00:00 / 24:00:00</td><td>4</td><td class="slurm-mono slurm-wrap">(Resources)<span class="slurm-dim slurm-block">est. start 10-05 06:10</span></td><td class="slurm-name">train-llm-sweep</td><td class="slurm-action"></td></tr><tr><td class="slurm-mono">48214</td><td>gpu</td><td>bob</td><td><span class="issue-status issue-status-todo">pending</span></td><td class="slurm-mono">00:00:00 / 24:00:00</td><td>4</td><td class="slurm-mono slurm-wrap">(Priority)<span class="slurm-dim slurm-block">est. start 10-05 08:45</span></td><td class="slurm-name">train-llm-sweep</td><td class="slurm-action"></td></tr><tr><td class="slurm-mono">48190</td><td>gpu</td><td>carol</td><td><span class="issue-status issue-status-active">running</span></td><td class="slurm-mono">11:58:02 / 12:00:00</td><td>1</td><td class="slurm-mono slurm-wrap">node-007</td><td class="slurm-name">train-bert</td><td class="slurm-action"></td></tr></tbody></table></div>
+        </div>
+      </section></div>
+      </div>
+    </div></div>
+
+    <div class="cap" data-for="states"><b>State counts</b>One pill per job state, always for the whole queue. Click a pill to show only those jobs. The age and refresh button sit at the right.</div>
+        <div class="cap" data-for="reasons"><b>Why jobs are waiting</b>Pending jobs grouped by Slurm's reason, so a long queue explains itself. Click one to filter.</div>
+    <div class="cap" data-for="filters"><b>Filter row</b>Search by job id, name or user and narrow to a partition. "Reset filters" appears while any filter is on.</div>
+    <div class="cap" data-for="cancel"><b>Cancel</b>Only your own jobs get the X. Gate-H asks you to confirm before it runs scancel.</div>
+    <div class="cap" data-for="table"><b>Jobs table</b>Running jobs show their nodes; pending ones show the reason and an estimated start.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

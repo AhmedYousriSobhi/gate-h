@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Slurm node hop</title>
+<style>
+  .stage { --r: 360px; --zoom: 1.05; }
+  .mock { display: flex; flex-direction: column; gap: 26px; }
+  .dgm { padding: 22px 28px 26px; display: flex; flex-direction: column; gap: 18px; }
+  .flow { display: flex; flex-direction: column; align-items: flex-start; width: 440px; }
+  .flow .box { width: 100%; }
+  .box { border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface); padding: 12px 14px; font-size: 13px; line-height: 1.4; min-height: 76px; }
+  .box b { display: block; color: var(--color-text-1); font-size: 14.5px; margin-bottom: 2px; }
+  .box small { color: var(--color-text-2); font-size: 12px; }
+  .box.you { border-color: rgba(59, 124, 246, 0.55); background: var(--color-accent-soft); }
+  .link { display: flex; align-items: center; gap: 12px; padding: 12px 0 12px 40px; }
+  .link span { font-size: 13px; color: var(--color-text-1); line-height: 1.35; }
+  .link small { color: var(--color-text-2); font-size: 12px; }
+  .link code { font-size: 12px; }
+  .form { max-width: 560px; }
+  .form .form-field { margin-bottom: 8px; }
+  .form .hint { margin-top: 8px; }
+  .formbox { padding: 18px 20px 14px; }
+  .formtitle { color: var(--color-text-3); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px; }
+  .field-hl { outline: 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Where Slurm commands run</h1><p>Optional cluster setting · synthetic data</p></div>
+  <div class="stage">
+    <div class="mock">
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>How a Slurm refresh reaches the scheduler</span></div>
+        <div class="dgm">
+          <div class="flow">
+            <div class="box you" id="gate"><b>Gate-H</b><small>on your machine</small></div>
+            <div class="link"><svg width="14" height="46" viewBox="0 0 14 46"><line x1="7" y1="0" x2="7" y2="38" stroke="#8a8f98" stroke-width="2"/><path d="M1 38 L7 46 L13 38z" fill="#8a8f98"/></svg><span>your SSH connection<br/><small>through any jump host or tunnel</small></span></div>
+            <div class="box" id="login"><b>Login node</b><small class="mono">login.demo-gpu.example.org</small><br/><small>the node your terminal is connected to</small></div>
+            <div class="link" id="hop"><svg width="14" height="46" viewBox="0 0 14 46"><line x1="7" y1="0" x2="7" y2="38" stroke="#8a8f98" stroke-width="2" stroke-dasharray="5 4"/><path d="M1 38 L7 46 L13 38z" fill="#8a8f98"/></svg><span><code>ssh &lt;node&gt;</code><br/><small>only when the optional field is set</small></span></div>
+            <div class="box"><b>Slurm node</b><small class="mono">slurm-head-01</small><br/><small>runs squeue, sinfo and sacct</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>Edit cluster · Slurm</span></div>
+        <div class="formbox">
+          <div class="formtitle">Scheduler</div>
+          <div class="form">
+            <div class="form-field" id="field">
+              <label for="x">Run Slurm commands on a different node (optional)</label>
+              <input id="x" placeholder="Blank = the terminal's own node" />
+            </div>
+            <p class="hint" id="note">Leave this blank unless squeue/sinfo need to run on a different node than the terminal's own, such as a bastion or login node that doesn't host Slurm itself. The name is resolved from the already-connected node, not from your machine.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="cap" data-for="gate"><b>Gate-H reuses your connection</b>Slurm refreshes ride the terminal's existing SSH session, through any jump host or tunnel you configured. No extra login.</div>
+    <div class="cap" data-for="login"><b>Blank = login node itself</b>By default squeue and sinfo run right on the node your terminal is connected to.</div>
+    <div class="cap" data-for="hop"><b>Optional hop</b>If the login node has no Slurm, name a node that does. The login node runs <code>ssh &lt;node&gt;</code> and the commands run there.</div>
+    <div class="cap" data-for="field"><b>The cluster form field</b>"Run Slurm commands on a different node (optional)". A plain hostname, not a command.</div>
+    <div class="cap" data-for="note"><b>Resolved from the login node</b>The hostname must be reachable from the login node, not from your own machine.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

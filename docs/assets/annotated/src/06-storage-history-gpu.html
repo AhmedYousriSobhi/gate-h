@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Storage, history and GPUs</title>
+<style>
+  .stage { --r: 340px; --zoom: 1; }
+  .status-body { overflow: visible; padding: 0; }
+  .slurm-toolbar .form-field-checkbox { margin-bottom: 0; }
+  .mock { display: flex; flex-direction: column; gap: 26px; }
+  .win-body { padding-bottom: 20px; }
+  .slurm-table-wrap { overflow: visible; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Status panel: Storage, Slurm History and GPUs</h1><p>demo-gpu · synthetic data</p></div>
+  <div class="stage">
+    <div class="mock">
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>Status · Storage</span></div>
+        <div class="win-body"><div class="status-body"><section>
+          <h2><i data-i="hard-drive" data-s="15"></i>Storage</h2>
+          <div class="status-section">
+            <div class="slurm-toolbar" id="auto">
+              <span class="slurm-dim slurm-grow">Checked at 2:14:07 PM</span>
+              <label class="form-field-checkbox"><input type="checkbox" checked />Auto-recheck</label>
+              <select class="slurm-user-filter"><option>every 5 min</option></select>
+              <button class="btn btn-sm"><i data-i="refresh-cw" data-s="13"></i>Check again</button>
+            </div>
+            <form class="issue-form" id="add" onsubmit="return false">
+              <input placeholder="Add a path to check, e.g. /scratch/$USER" />
+              <button type="submit" class="btn btn-sm"><i data-i="plus" data-s="13"></i>Add</button>
+            </form>
+            <div class="slurm-node-chips" id="chips">
+              <span class="issue-status issue-status-todo slurm-mono">/scratch/$USER <button type="button" class="btn-icon"><i data-i="x" data-s="11"></i></button></span>
+              <span class="issue-status issue-status-todo slurm-mono">/projects/demo-ai <button type="button" class="btn-icon"><i data-i="x" data-s="11"></i></button></span>
+            </div>
+            <div class="storage-card" id="meters">
+              <div class="storage-card-header"><span class="slurm-mono">/scratch/alice</span><span class="issue-status issue-status-todo">lustre</span></div>
+              <div class="storage-meter">
+                <div class="storage-meter-label"><span>Your quota (lfs quota)</span><span class="slurm-mono">1.8 TiB of 2.0 TiB (90%) - over the 1.5 TiB soft limit</span></div>
+                <div class="storage-bar"><div class="storage-bar-fill storage-high" style="width:90%"></div></div>
+              </div>
+              <div class="storage-meter-label slurm-dim"><span>Files</span><span class="slurm-mono">412,880 of 1,000,000</span></div>
+              <div class="storage-meter">
+                <div class="storage-meter-label"><span>Whole filesystem (shared)</span><span class="slurm-mono">640 TiB of 1 PiB (63%)</span></div>
+                <div class="storage-bar"><div class="storage-bar-fill" style="width:63%"></div></div>
+              </div>
+            </div>
+          </div>
+        </section></div></div>
+      </div>
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>Status · Slurm · History</span></div>
+        <div class="win-body"><div class="status-body"><section>
+          <div class="status-section">
+            <div class="slurm-toolbar" id="range">
+              <h3 class="slurm-subheading slurm-grow">History</h3>
+              <label class="form-field-checkbox"><input type="checkbox" checked />All users</label>
+              <button class="btn btn-sm">Last 24 h</button><button class="btn btn-sm btn-primary">Last 7 days</button><button class="btn btn-sm">Last 30 days</button>
+            </div>
+            <div class="slurm-toolbar" id="hfilters">
+              <input class="slurm-user-filter" type="text" placeholder="Filter by job id or name..." style="width:210px" />
+              <select class="slurm-user-filter"><option>All users</option></select>
+              <input class="slurm-user-filter" type="date" value="2026-09-28" />
+              <input class="slurm-user-filter" type="date" value="2026-10-04" />
+            </div>
+            <div class="slurm-table-wrap"><table class="slurm-table">
+              <thead><tr><th>Job</th><th>User</th><th>Partition</th><th>State</th><th>Exit</th><th>Elapsed</th><th>CPU eff.</th><th>Ended</th><th>Name</th></tr></thead>
+              <tbody><tr><td class="slurm-mono">48102</td><td>alice</td><td>gpu</td><td><span class="issue-status issue-status-done">completed</span></td><td class="slurm-mono">0:0</td><td class="slurm-mono">06:41:12</td><td class="slurm-mono">87%</td><td class="slurm-mono">10-03 14:22</td><td class="slurm-name">train-resnet</td></tr><tr><td class="slurm-mono">48077</td><td>bob</td><td>gpu</td><td><span class="issue-status slurm-state-failed">failed</span></td><td class="slurm-mono">1:0</td><td class="slurm-mono">00:03:51</td><td class="slurm-mono">2%</td><td class="slurm-mono">10-03 09:10</td><td class="slurm-name">train-llm-sweep</td></tr><tr><td class="slurm-mono">48031</td><td>carol</td><td>cpu</td><td><span class="issue-status issue-status-todo">cancelled</span></td><td class="slurm-mono">0:15</td><td class="slurm-mono">01:12:08</td><td class="slurm-mono">64%</td><td class="slurm-mono">10-02 22:47</td><td class="slurm-name">preprocess-data</td></tr></tbody></table></div>
+          </div>
+        </section></div></div>
+      </div>
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>Status · Slurm · GPUs</span></div>
+        <div class="win-body"><div class="status-body"><section>
+          <div class="status-section">
+            <div class="slurm-toolbar"><h3 class="slurm-subheading slurm-grow">GPUs</h3></div>
+            <div class="slurm-table-wrap" id="gpus"><table class="slurm-table">
+              <thead><tr><th>GPU</th><th>Installed</th><th>On busy nodes</th><th>On idle nodes</th><th>On down nodes</th></tr></thead>
+              <tbody>
+                <tr><td>A100-80GB</td><td>1536</td><td>1344</td><td>168</td><td>24</td></tr>
+                <tr><td>L40S</td><td>64</td><td>48</td><td>16</td><td>0</td></tr>
+              </tbody></table></div>
+          </div>
+        </section></div></div>
+      </div>
+
+    </div>
+
+    <div class="cap" data-for="auto"><b>Auto-recheck</b>Tick the box and pick an interval (1 min to 1 hour) to re-measure usage on its own, or press Check again.</div>
+    <div class="cap" data-for="add"><b>Add a path to check</b>Type any directory, such as <code>/scratch/$USER</code>, and press Add. <code>$USER</code> and <code>$HOME</code> work.</div>
+    <div class="cap" data-for="chips"><b>Removable path chips</b>Each extra path is a chip; the X stops checking it.</div>
+    <div class="cap" data-for="meters"><b>Usage meters</b>Your quota and the shared filesystem. Bars turn amber near the limit and red when full.</div>
+    <div class="cap" data-for="range"><b>History range</b>Finished jobs from sacct. "All users" widens it beyond your own jobs; pick 24 h, 7 days or 30 days.</div>
+    <div class="cap" data-for="hfilters"><b>Narrow it down</b>Filter by job id or name, pick a user, or set an end-date range. CPU efficiency shows who wastes cores.</div>
+    <div class="cap" data-for="gpus"><b>GPU capacity</b>Installed GPUs per model, split by whether their node is busy, idle or down.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>
