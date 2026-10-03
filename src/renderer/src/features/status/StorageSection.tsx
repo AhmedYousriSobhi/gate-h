@@ -49,10 +49,14 @@ interface AutoSetting {
 function loadAuto(clusterId: string, config: StorageConfig | null | undefined): AutoSetting {
   const fallback = {
     enabled: config?.autoRefresh ?? false,
-    intervalSec: Math.max(
-      config?.intervalSec ?? DEFAULT_STORAGE_INTERVAL_SEC,
-      MIN_STORAGE_INTERVAL_SEC
-    )
+    // Snapped to an offered choice so the dropdown can show it.
+    intervalSec: (
+      INTERVALS.find(
+        (i) =>
+          i.sec >=
+          Math.max(config?.intervalSec ?? DEFAULT_STORAGE_INTERVAL_SEC, MIN_STORAGE_INTERVAL_SEC)
+      ) ?? INTERVALS[INTERVALS.length - 1]
+    ).sec
   }
   try {
     const raw: unknown = JSON.parse(
