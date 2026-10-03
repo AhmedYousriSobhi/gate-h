@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Azure sign-in</title>
+<style>
+  .stage { --r: 360px; --zoom: 1.05; }
+  .mock { display: flex; flex-direction: column; gap: 26px; }
+  .term { height: 250px; display: flex; flex-direction: column; }
+  .term .terminal-panel { flex: 1; }
+  .term .terminal-body { position: relative; }
+  .fake { padding: 12px 16px; color: var(--color-text-3); font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.6; }
+  .dgm { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+  .dgm h3 { font-size: 14px; color: var(--color-text-1); }
+  .lanes { display: grid; grid-template-columns: 1fr 34px 1.5fr 34px 1fr; align-items: center; row-gap: 14px; }
+  .box { border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface); padding: 10px 14px; font-size: 13px; line-height: 1.4; }
+  .box b { display: block; color: var(--color-text-1); font-size: 14px; }
+  .box small { color: var(--color-text-2); font-size: 12px; }
+  .prof { border-color: rgba(59, 124, 246, 0.55); background: var(--color-accent-soft); }
+  .colhead { color: var(--color-text-3); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .arr { margin: auto; }
+  .profiles { display: contents; }
+  .steps { display: flex; align-items: stretch; gap: 8px; }
+  .step { flex: 1; }
+  .step .n { color: var(--color-accent-hover); font-weight: 700; font-size: 12px; }
+  .steps svg { align-self: center; flex: none; }
+  .sep { height: 1px; background: var(--color-border); }
+  .note { color: var(--color-text-2); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Azure clusters: one isolated sign-in per tenant</h1><p>Synthetic demo data</p></div>
+  <div class="stage">
+    <div class="mock">
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>demo-gpu · Terminal</span></div>
+        <div class="term">
+          <div class="terminal-panel">
+            <div class="terminal-statusbar">
+              <span class="terminal-statusbar-label"><span class="session-dot session-dot-azure-auth-required"></span><span class="mono">alice@demo-gpu.internal via Azure tunnel :2201</span><span class="terminal-status-word">azure sign-in needed</span></span>
+            </div>
+            <div class="terminal-body">
+              <div class="terminal-container"><div class="fake">alice@login01:~$ squeue -u alice<br/>JOBID PARTITION NAME STATE<br/>48211 gpu train-resnet RUNNING<br/>alice@login01:~$</div></div>
+              <div class="terminal-shade">
+                <p class="terminal-shade-title">Azure authentication required</p>
+                <p>Azure sign-in for alice@tenant-a.example.org has expired.</p>
+                <div class="terminal-shade-actions" id="btns">
+                  <button class="btn btn-sm btn-primary" id="b1"><i data-i="log-in" data-s="13"></i>Authenticate</button>
+                  <button class="btn btn-sm" id="b2"><i data-i="log-in" data-s="13"></i>Sign in with device code</button>
+                  <button class="btn btn-sm"><i data-i="refresh-cw" data-s="13"></i>Retry connection</button>
+                  <button class="btn btn-sm" id="b3"><i data-i="eraser" data-s="13"></i>Clear cached sign-in</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>How Gate-H keeps tenants apart</span></div>
+        <div class="dgm">
+          <div class="lanes">
+            <span class="colhead">Azure tenant</span><span></span><span class="colhead">Sign-in profile on your machine</span><span></span><span class="colhead">Cluster</span>
+            <div class="box"><b>Tenant A</b><small>tenant-a.example.org</small></div><svg class="arr" width="34" height="14" viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M26 1 L34 7 L26 13z" fill="#8a8f98"/></svg><div class="box prof" id="profA"><b>Profile A</b><small>own Azure CLI config and token cache</small></div><svg class="arr" width="34" height="14" viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M26 1 L34 7 L26 13z" fill="#8a8f98"/></svg><div class="box"><b>demo-gpu</b><small>cluster A</small></div>
+            <div class="box"><b>Tenant B</b><small>tenant-b.example.org</small></div><svg class="arr" width="34" height="14" viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M26 1 L34 7 L26 13z" fill="#8a8f98"/></svg><div class="box prof" id="profB"><b>Profile B</b><small>own Azure CLI config and token cache</small></div><svg class="arr" width="34" height="14" viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M26 1 L34 7 L26 13z" fill="#8a8f98"/></svg><div class="box"><b>demo-cpu</b><small>cluster B</small></div>
+          </div>
+          <p class="note">Signing in to tenant B never replaces tenant A's session. Clusters in the same tenant share one profile, so that is one sign-in per tenant.</p>
+          <div class="sep"></div>
+          <h3>Staged connect</h3>
+          <div class="steps" id="steps">
+            <div class="box step"><span class="n">1</span><b>Sign in</b><small>az login for the cluster's tenant</small></div><svg class="arr" width="24" height="14" viewBox="0 0 24 14"><line x1="0" y1="7" x2="16" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M16 1 L24 7 L16 13z" fill="#8a8f98"/></svg>
+            <div class="box step"><span class="n">2</span><b>Subscription</b><small>must be visible to that account</small></div><svg class="arr" width="24" height="14" viewBox="0 0 24 14"><line x1="0" y1="7" x2="16" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M16 1 L24 7 L16 13z" fill="#8a8f98"/></svg>
+            <div class="box step"><span class="n">3</span><b>Tunnel</b><small>local port forward into Azure</small></div><svg class="arr" width="24" height="14" viewBox="0 0 24 14"><line x1="0" y1="7" x2="16" y2="7" stroke="#8a8f98" stroke-width="2"/><path d="M16 1 L24 7 L16 13z" fill="#8a8f98"/></svg>
+            <div class="box step"><span class="n">4</span><b>SSH</b><small>terminal session through the tunnel</small></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="cap" data-for="b1" data-lead="none"><b>Authenticate</b>Opens the browser sign-in for this cluster's tenant only.</div>
+    <div class="cap" data-for="b2" data-lead="none"><b>Device code</b>Shows a code to enter in the browser you choose, so you pick the account instead of reusing the browser's cached one.</div>
+    <div class="cap" data-for="b3" data-lead="none"><b>Clear cached sign-in</b>Signs out of this tenant's profile only, for when Authenticate keeps reusing the wrong account.</div>
+    <div class="cap" data-for="profA"><b>One profile per tenant</b>Each tenant gets its own sign-in profile, so two clusters in two tenants never overwrite each other's login.</div>
+    <div class="cap" data-for="steps"><b>Staged connect</b>Sign in, check the subscription, open the tunnel, then SSH. A failure names the stage that failed.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

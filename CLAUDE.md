@@ -1,96 +1,79 @@
 # CLAUDE.md
 
-<!-- Keep under 200 lines. Every line must prevent a mistake or save tokens. Delete what Claude already does correctly. -->
-
 ## Project
-Gate-H — a standalone Electron desktop portal for managing HPC workloads (SSH terminal, Grafana
-status, Jira tickets) across any number of clusters. Stack: Electron + React 19 + TypeScript,
-bundled with `electron-vite`/Vite; `better-sqlite3` for local storage, `ssh2` + `@xterm/xterm` for
-the terminal.
+Gate-H: an Electron + React 19 + TypeScript desktop app (`electron-vite`) for managing HPC clusters
+(SSH terminal, Slurm, Grafana, Jira, Azure/Teleport access). Storage: `better-sqlite3`. Terminal:
+`ssh2` + `@xterm/xterm`.
 
 ## Commands
-- Install: `npm install`
-- Dev: `npm run dev`
-- Test (single file): none yet - no automated test suite exists (see `docs/STATUS.md`); verify
-  with `npm run typecheck` and `npm run lint` instead
-- Lint/typecheck: `npm run lint` / `npm run typecheck` (runs both `typecheck:node` and
-  `typecheck:web`)
-- Build: `npm run build` (typechecks first); platform packages: `build:linux` / `build:win` /
-  `build:mac`
+- `npm install` · `npm run dev` · `npm run build` (typechecks first)
+- `npm run typecheck` · `npm run lint`
+- `npm test`: headless checks in `scripts/*.checks.ts`. Azure tunnel script: `scripts/test-azure-tunnel.sh`. One check
+  file: `npx tsx scripts/slurm.checks.ts` (works for files with no Electron stubs).
+- Platform packages: `build:linux` / `build:win` / `build:mac`
 
-## Architecture (map only)
-- `src/main/`: Electron main process - SQLite store (`db.ts`, `clusters.ts`), SSH sessions
-  (`ssh/manager.ts`, `ssh/knownHosts.ts`), Grafana client/embed (`grafana/`), Jira client
-  (`jira/`), background monitors (`monitor/` reachability+Jira, `notifications/`), one file per
-  IPC namespace under `ipc/`
-- `src/preload/`: the only bridge to the renderer - a narrow, explicit `contextBridge` API
-  (`window.api`); the renderer never gets direct Node/Electron access
-- `src/renderer/src/features/`: React UI, grouped by feature (`shell/` app frame + sidebar +
-  panels, `terminal/`, `status/` Grafana+Jira widgets, `clusters/` add/edit form)
-- `src/shared/types.ts`: types used by all three processes, and the `GateHApi` interface that
-  `window.api` must implement - the source of truth for a cluster's shape; a new field almost
-  always means touching main (DB column + migration + IPC handler), preload (bridge method), and
-  renderer together
-- Details: see `docs/ANALYSIS.md` (architecture rationale, prior art), `docs/STATUS.md`
-  (feature-by-feature status + known limitations), `SPEC.md` (functional spec)
+## Map
+- `src/main/`: SQLite (`db.ts`, `clusters.ts`), SSH (`ssh/`), Azure (`azure/tunnel.ts`), Grafana,
+  Jira (`jira/client.ts`), Slurm (`scheduler/`: `slurm.ts` builds/parses commands, `exec.ts` runs
+  them, `monitor.ts` polls), storage, monitors, notifications. One file per IPC namespace in `ipc/`,
+  all importing `ipcMain` from `ipc/guard.ts`.
+- `src/preload/`: the only bridge, a narrow `window.api` via `contextBridge`.
+- `src/renderer/src/features/`: `shell/` (frame, overview), `terminal/`, `status/` (Slurm, Jira,
+  Storage, Grafana), `clusters/` (form).
+- `src/shared/`: types used by all three processes (`types/`, the `GateHApi` interface) and helpers.
+  A new field usually touches main (DB column + migration + IPC), preload, and renderer.
+- Docs: `SPEC.md` (requirements), `docs/STATUS.md` (state + known issues), `docs/ANALYSIS.md`
+  (rationale).
 
-## Response Style
-- Be terse. Lead with the answer or result.
-- No preamble, no restating the question, no closing summary or offers.
-- No unsolicited suggestions, refactors, or explanations.
-- Show diffs/changed lines only, never whole files unless asked.
-- Reference code as `path:line` instead of pasting it.
+## Response style
+- Terse: the answer or result first. No preamble, recap, closing summary or unrequested suggestions.
+- Show changed lines only. Reference code as `path:line`.
 - User instructions override this file.
 
 ## Workflow
-- Read before writing. Read each file once unless it changed.
-- Search narrowly (grep/glob) before opening files. Never scan the whole repo.
-- Plan first for tasks touching 3+ files or with unclear scope; wait for approval.
-- Prefer targeted edits over rewrites. Smallest change that solves the problem.
-- Verify: run the relevant test/lint/typecheck before declaring done. Fix, don't report, failures.
-- Stop and ask if requirements are ambiguous or a step fails twice; don't loop.
-- Unsure? Say so. Never invent APIs, paths, or flags; check the code or docs.
-
-## Code Rules
-- Follow existing patterns; find a similar file first (e.g. a new per-cluster setting almost
-  always mirrors `activeMonitoring`/`setClusterActiveMonitoring` end to end).
-- No new dependencies without asking.
-- No speculative abstractions, extra config, or unused code.
-- Only comment the "why", not the "what".
-- Don't touch: `out/`, `dist/`, `node_modules/`, `package-lock.json`.
+- Read before writing; search narrowly (grep/glob) before opening files.
+- Plan first for 3+ files or unclear scope, unless the user already gave the plan.
+- Smallest change that solves the problem; follow the nearest existing pattern (a per-cluster
+  setting mirrors `activeMonitoring` end to end).
+- Verify with typecheck, lint and the relevant check before saying done. Fix failures. Stop and ask
+  if a step fails twice.
+- No new dependencies without asking. No speculative abstractions. Comment only the "why".
+- Never touch `out/`, `dist/`, `node_modules/`, `package-lock.json`.
 
 ## Gotchas
-- SQLite migrations (`src/main/db.ts`) are additive-only - `ALTER TABLE ... ADD COLUMN`, guarded
-  by `columnExists()`, run unconditionally on every launch. There's no down-migration; a shipped
-  column stays forever.
-- Secrets (`connection_secret`, `grafana_token`, `jira_token`) are encrypted with
-  `electron.safeStorage` and never sent back to the renderer - `ClusterSummary` only carries
-  `has*Secret` booleans. Never add a field that round-trips a raw secret to the renderer.
-- This environment *can* render a real Electron window - a real X server is already running
-  (`DISPLAY` is set; no `xvfb`/sudo needed). The actual blocker is `ELECTRON_RUN_AS_NODE=1` being
-  set in the shell, which forces Electron to run as plain Node. Unset it for one `npm run dev` run
-  (`env -u ELECTRON_RUN_AS_NODE npm run dev`) to open a real window; `xwininfo -root -tree` finds
-  its window id, `xwd -id <id>` + decoding the raw BGRX pixels (no `scrot`/`import` installed here)
-  screenshots it. Never commit a screenshot that shows real cluster/host data from the local
-  profile - use synthetic example data only.
-- macOS can't be built or run here; `.github/workflows/macos.yml` is the only check. Keep
-  `resources/*.sh` bash-3.2 safe (empty arrays under `set -u` need `${a[@]+"${a[@]}"}`) and keep
-  macOS shortcut/menu behavior in `src/renderer/src/lib/platform.ts` and `src/main/index.ts`.
-- `git branch --show-current`/`gh auth status` first when picking a base branch or opening a PR -
-  this repo's convention is one GitHub issue -> one branch -> one PR per task (see issues
-  #14/#16/#18 and their branches), and a branch is sometimes deliberately stacked on another
-  open PR's branch rather than on `main`.
+- **Migrations** (`src/main/db.ts`) are additive only: `ALTER TABLE ... ADD COLUMN` guarded by
+  `columnExists()`, run on every launch. No down-migration.
+- **Secrets** (`connection_secret`, `grafana_token`, `jira_token`) are encrypted with
+  `safeStorage` and never sent to the renderer; `ClusterSummary` carries `has*Secret` booleans only.
+- **Renderer security:** the window is sandboxed. Never expose `ipcRenderer` or the electron-toolkit
+  `electronAPI` from preload; a new channel is a named method on `window.api`. Handlers use
+  `ipc/guard.ts`, which rejects calls from any frame but the app page. External links go through
+  `openExternalSafely` (http/https only).
+- **Azure:** per-tenant profiles via `AZURE_CONFIG_DIR` in the spawned process's `env` only, never
+  `process.env`. `AZURE_EXTENSION_DIR` must stay set or `bastion`/`ssh` extensions vanish.
+- **Slurm:** `partitions` only narrows `squeue`; `sinfo` is always cluster-wide. Commands are fixed
+  strings built in `slurm.ts`; validate any argument before it reaches a shell. `execTarget` runs
+  `ssh <node>` from the connected node.
+- **Jira:** Cloud search is `/rest/api/3/search/jql` (v2 `search` returns 410), with a 404/405
+  fallback for Server/Data Center. A query must be restricted.
+- **Real window:** a real X server is running (`DISPLAY` set). `ELECTRON_RUN_AS_NODE=1` forces plain
+  Node, so use `env -u ELECTRON_RUN_AS_NODE npm run dev`. `xwininfo -root -tree` finds the window,
+  `xwd -id <id>` captures it. Use a throwaway `XDG_CONFIG_HOME`. Never commit a screenshot with real
+  cluster or host data; use synthetic examples.
+- **macOS** can't be built here; `.github/workflows/macos.yml` is the only check. Keep
+  `resources/*.sh` bash-3.2 safe (`${a[@]+"${a[@]}"}` for empty arrays under `set -u`) and macOS
+  shortcut/menu behaviour in `src/renderer/src/lib/platform.ts` and `src/main/index.ts`.
+- **Branches:** one issue → one branch → one PR. Run `git branch --show-current` and
+  `gh auth status` before picking a base or opening a PR; a branch is sometimes stacked on another
+  open PR's. Squash-merging a base PR makes stacked PRs conflict: merge `main` into the stacked
+  branch first.
 
-## Context and Token Hygiene
-- Delegate high-output work (tests, logs, docs lookup, wide research) to subagents; return summaries only.
-- Pipe noisy commands through `head`/`grep`/`tail`; never dump full logs.
-- Prefer CLI tools (`gh`, `aws`, etc.) over MCP servers when both work.
-- Fast/simple tasks: lowest sufficient model and effort.
-- Suggest `/clear` when the task changes; `/compact` at ~50-60% context.
-
-## Compact Instructions
-When compacting, keep: current task, decisions made, files changed, failing tests, next steps. Drop: exploration, dead ends, raw tool output.
+## Context hygiene
+- Delegate high-output work (tests, logs, wide research) to subagents and take back summaries.
+- Pipe noisy commands through `head`/`grep`/`tail`. Prefer `gh` and other CLIs over MCP servers.
+- Suggest `/clear` when the task changes and `/compact` at about 50-60% context.
+- When compacting, keep: current task, decisions, files changed, failing tests, next steps.
 
 ## Git
-- Conventional commits, small and focused.
-- Never commit secrets, force-push, or skip hooks without asking.
+- Conventional commits, small and focused. Never commit secrets, force-push or skip hooks without
+  asking.

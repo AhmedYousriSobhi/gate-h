@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Overview</title>
+<style>
+  .stage { --r: 400px; }
+  .overview { height: auto; overflow: visible; padding: 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Overview: every cluster at a glance</h1><p>Synthetic demo data</p></div>
+  <div class="stage">
+    <div class="mock"><div class="win">
+      <div class="win-bar"><i></i><i></i><i></i><span>Gate-H</span></div>
+      <div class="win-body">
+      <div class="overview">
+        <div class="overview-header"><h1>Demo profile</h1></div>
+        <div class="overview-summary">
+          <span class="overview-stat overview-stat-static"><span class="overview-stat-value">4</span><span class="overview-stat-label">Clusters</span></span>
+          <span class="overview-stat overview-stat-static"><span class="overview-stat-value overview-stat-online">3</span><span class="overview-stat-label">Online</span></span>
+          <span class="overview-stat overview-stat-static"><span class="overview-stat-value overview-stat-offline">1</span><span class="overview-stat-label">Unreachable</span></span>
+          <span class="overview-stat overview-stat-static"><span class="overview-stat-value">1</span><span class="overview-stat-label">With alerts</span></span>
+          <div class="overview-job-totals" id="fleet">
+            <span class="overview-stat overview-stat-static"><span class="overview-stat-value">148</span><span class="overview-stat-label">Jobs running</span></span>
+            <span class="overview-stat overview-stat-static"><span class="overview-stat-value">64</span><span class="overview-stat-label">Jobs pending</span></span>
+          </div>
+        </div>
+        <div class="overview-grid" style="grid-template-columns: 1fr 1fr">
+
+          <div class="cluster-card">
+            <div class="cluster-card-head">
+              <div class="cluster-card-identity">
+                <div class="cluster-card-name-row"><span class="cluster-card-name">demo-cpu</span></div>
+                <span class="status-pill status-pill-online"><i data-i="circle-check" data-s="12"></i>Online<span class="status-pill-detail"> · 9 ms</span></span>
+              </div>
+              <div class="cluster-card-menu"><button class="icon-btn"><i data-i="ellipsis" data-s="14"></i></button></div>
+            </div>
+            <button class="cluster-card-host mono"><span class="cluster-card-host-text">login.demo-cpu.example.org</span><i data-i="copy" data-s="11"></i></button>
+            <p class="cluster-card-description">General-purpose CPU nodes</p>
+            <div class="tags"><span class="tag">cpu</span></div>
+            <div class="cluster-card-slurm"><i data-i="list-checks" data-s="12"></i><span>52 running · 12 pending</span></div>
+            <div class="cluster-card-footer">
+              <div class="cluster-card-integrations">
+                <span><i data-i="chart-column" data-s="13"></i></span>
+                <span class="cluster-card-tickets"><i data-i="ticket" data-s="13"></i> 0 open</span>
+              </div>
+              <button class="btn btn-sm btn-primary">Connect</button>
+            </div>
+          </div>
+
+          <div class="cluster-card" id="card1">
+            <div class="cluster-card-head">
+              <div class="cluster-card-identity">
+                <div class="cluster-card-name-row"><span class="cluster-card-name">demo-gpu</span></div>
+                <span class="status-pill status-pill-online" id="pill"><i data-i="circle-check" data-s="12"></i>Online<span class="status-pill-detail"> · 12 ms</span></span>
+              </div>
+              <div class="cluster-card-menu"><button class="icon-btn"><i data-i="ellipsis" data-s="14"></i></button></div>
+            </div>
+            <button class="cluster-card-host mono"><span class="cluster-card-host-text">login.demo-gpu.example.org</span><i data-i="copy" data-s="11"></i></button>
+            <p class="cluster-card-description">GPU partition for training jobs</p>
+            <div class="tags"><span class="tag">gpu</span><span class="tag">prod</span></div>
+            <div class="cluster-card-slurm" id="slurm"><i data-i="list-checks" data-s="12"></i><span>96 running · 52 pending</span><span class="cluster-card-slurm-alert">2 node issues</span></div>
+            <div class="cluster-card-footer">
+              <div class="cluster-card-integrations">
+                <span><i data-i="chart-column" data-s="13"></i></span>
+                <span class="cluster-card-tickets" id="jira"><i data-i="ticket" data-s="13"></i> 12 open</span>
+              </div>
+              <button class="btn btn-sm btn-primary" id="connect">Connect</button>
+            </div>
+          </div>
+
+          <div class="cluster-card">
+            <div class="cluster-card-head">
+              <div class="cluster-card-identity">
+                <div class="cluster-card-name-row"><span class="cluster-card-name">demo-edge</span><span class="standby-badge">Standby</span></div>
+                <span class="status-pill status-pill-online"><i data-i="circle-check" data-s="12"></i>Online<span class="status-pill-detail"> · 31 ms</span></span>
+              </div>
+              <div class="cluster-card-menu"><button class="icon-btn"><i data-i="ellipsis" data-s="14"></i></button></div>
+            </div>
+            <button class="cluster-card-host mono"><span class="cluster-card-host-text">login.demo-edge.example.org</span><i data-i="copy" data-s="11"></i></button>
+            <p class="cluster-card-description">Small test cluster</p>
+            <div class="tags"><span class="tag">test</span></div>
+            <div class="cluster-card-footer">
+              <div class="cluster-card-integrations"><span class="cluster-card-tickets"><i data-i="ticket" data-s="13"></i> 3 open</span></div>
+              <button class="btn btn-sm btn-primary">Connect</button>
+            </div>
+          </div>
+
+          <div class="cluster-card">
+            <div class="cluster-card-head">
+              <div class="cluster-card-identity">
+                <div class="cluster-card-name-row"><span class="cluster-card-name">demo-archive</span></div>
+                <span class="status-pill status-pill-offline" id="offline"><i data-i="circle-x" data-s="12"></i>Unreachable<span class="status-pill-detail"> · 4 min ago</span></span>
+              </div>
+              <div class="cluster-card-menu"><button class="icon-btn"><i data-i="ellipsis" data-s="14"></i></button></div>
+            </div>
+            <button class="cluster-card-host mono"><span class="cluster-card-host-text">login.demo-archive.example.org</span><i data-i="copy" data-s="11"></i></button>
+            <p class="cluster-card-description">Cold storage and long-term jobs</p>
+            <div class="tags"><span class="tag">storage</span></div>
+            <div class="cluster-card-footer">
+              <div class="cluster-card-integrations"><span><i data-i="chart-column" data-s="13"></i></span></div>
+              <button class="btn btn-sm"><i data-i="rotate-cw" data-s="12"></i>Retry</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      </div>
+    </div></div>
+
+    <div class="cap" data-for="fleet"><b>Fleet totals</b>Jobs running and pending, summed over every cluster that has a Slurm snapshot.</div>
+    <div class="cap" data-for="pill"><b>Live status</b>Reachability with latency, or how long ago a cluster went unreachable. Never colour alone.</div>
+    <div class="cap" data-for="slurm"><b>Slurm at a glance</b>Job counts by state, plus a red "node issues" count for drained or down nodes.</div>
+    <div class="cap" data-for="connect"><b>Connect</b>Opens the cluster's terminal. The whole card does the same; Retry replaces it when unreachable.</div>
+    <div class="cap" data-for="jira" data-pt="b"><b>Open tickets</b>Unresolved Jira tickets for this cluster, from its project key, tags or JQL.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

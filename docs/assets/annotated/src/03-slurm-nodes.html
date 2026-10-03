@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Slurm nodes</title>
+<style>
+  .stage { --r: 330px; --zoom: 1; }
+  .status-body { overflow: visible; padding: 0; }
+  .mock .win { width: 100%; }
+  .dlg { width: 470px; margin: 26px 0 0 auto; }
+  .dlg .modal { width: 100%; max-width: none; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7); }
+  .dlg-note { color: var(--color-text-3); font-size: 12px; margin: 26px 0 0; position: absolute; left: 0; bottom: 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Status panel: Nodes</h1><p>demo-gpu · synthetic data</p></div>
+  <div class="stage">
+    <div class="mock">
+      <div class="win">
+      <div class="win-bar"><i></i><i></i><i></i><span>demo-gpu · Status</span></div>
+      <div class="win-body">
+      <div class="status-body"><section>
+        <h2><i data-i="list-checks" data-s="15"></i>Slurm</h2>
+        <div class="status-section">
+          <h3 class="slurm-subheading">Nodes</h3>
+          <div class="slurm-table-wrap" id="parts"><table class="slurm-table">
+            <thead><tr><th>Partition</th><th>Available</th><th>Nodes</th><th>By state</th></tr></thead>
+            <tbody>
+              <tr><td>gpu</td><td>up</td><td>192</td><td>168 mixed · 21 idle · 3 drain</td></tr>
+              <tr><td>cpu</td><td>up</td><td>256</td><td>200 allocated · 55 idle · 1 down*</td></tr>
+            </tbody></table></div>
+          <div class="node-list">
+            <input class="slurm-user-filter" id="find" type="text" placeholder="Find a node (448)..." />
+            <div class="node-problems">
+              <div class="node-group-title" id="attn">Needs attention · 4</div>
+
+              <div class="issue-row node-problem">
+                <div><span class="slurm-mono">node-017</span><div class="slurm-dim node-reason">GPU fell off the bus (XID 79)</div></div>
+                <div class="node-problem-side">
+                  <button type="button" class="btn btn-sm node-jobs-btn" id="cpu"><i data-i="cpu" data-s="13"></i>2</button>
+                  <span class="issue-status slurm-state-failed">draining</span>
+                  <button type="button" class="btn btn-sm">Details</button>
+                </div>
+              </div>
+              <div class="issue-row node-problem">
+                <div><span class="slurm-mono">node-023</span><div class="slurm-dim node-reason">Kernel panic - rebooting</div></div>
+                <div class="node-problem-side" id="side">
+                  <span class="issue-status slurm-state-failed">drained</span>
+                  <button type="button" class="btn btn-sm">Details</button>
+                </div>
+              </div>
+              <div class="issue-row node-problem">
+                <div><span class="slurm-mono">node-044</span><div class="slurm-dim node-reason">Not responding</div></div>
+                <div class="node-problem-side">
+                  <span class="issue-status slurm-state-failed">down*</span>
+                  <button type="button" class="btn btn-sm">Details</button>
+                </div>
+              </div>
+              <div class="issue-row node-problem">
+                <div><span class="slurm-mono">node-101</span><div class="slurm-dim node-reason">Scheduled maintenance</div></div>
+                <div class="node-problem-side">
+                  <span class="issue-status slurm-state-failed">drained</span>
+                  <button type="button" class="btn btn-sm">Details</button>
+                </div>
+              </div>
+            </div>
+            <div id="groups" style="display:flex;flex-direction:column;gap:8px">
+              <details class="node-group"><summary><span class="issue-status issue-status-done">idle</span><span class="slurm-dim">76 nodes</span></summary></details>
+              <details class="node-group"><summary><span class="issue-status issue-status-active">allocated</span><span class="slurm-dim">200 nodes</span></summary></details>
+              <details class="node-group"><summary><span class="issue-status issue-status-active">mixed</span><span class="slurm-dim">168 nodes</span></summary></details>
+            </div>
+          </div>
+        </div>
+      </section></div>
+      </div></div>
+
+      <div class="dlg" id="dlg"><div class="modal">
+        <h2>2 running jobs on node-017</h2>
+        <div class="issue-list">
+          <div class="node-job-card">
+            <div><span class="slurm-mono">48211</span> <span class="issue-status issue-status-active">running</span></div>
+            <div>train-resnet</div>
+            <div class="node-job-meta">
+              <span class="slurm-dim">User</span><span>alice</span>
+              <span class="slurm-dim">Partition</span><span>gpu</span>
+              <span class="slurm-dim">Time / limit</span><span class="slurm-mono">03:12:40 / 12:00:00</span>
+              <span class="slurm-dim">Started</span><span class="slurm-mono">10-04 08:55</span>
+              <span class="slurm-dim">Nodes</span><span class="slurm-mono">2 · node-[017-018]</span>
+            </div>
+          </div>
+          <div class="node-job-card">
+            <div><span class="slurm-mono">48190</span> <span class="issue-status issue-status-active">running</span></div>
+            <div>train-bert</div>
+            <div class="node-job-meta">
+              <span class="slurm-dim">User</span><span>carol</span>
+              <span class="slurm-dim">Partition</span><span>gpu</span>
+              <span class="slurm-dim">Time / limit</span><span class="slurm-mono">11:58:02 / 12:00:00</span>
+              <span class="slurm-dim">Started</span><span class="slurm-mono">10-03 21:10</span>
+              <span class="slurm-dim">Nodes</span><span class="slurm-mono">1 · node-017</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn">Close</button></div>
+      </div></div>
+    </div>
+
+    <div class="cap" data-for="parts"><b>Partition summary</b>Node counts per partition, split by state.</div>
+    <div class="cap" data-for="find"><b>Find a node</b>Type part of a name to filter every group at once.</div>
+    <div class="cap" data-for="attn"><b>Needs attention first</b>Drained and down nodes are listed on top, each with Slurm's reason.</div>
+    <div class="cap" data-for="cpu" data-pt="t"><b>Who is running there?</b>The chip counts running jobs on that node. Click it to open the job details below.</div>
+    <div class="cap" data-for="side"><b>State and Details</b>The state pill, plus Details for the Jira tickets and incident form of that node.</div>
+    <div class="cap" data-for="groups"><b>Healthy nodes stay folded</b>One collapsed group per state, so hundreds of good nodes never bury the bad ones.</div>
+    <div class="cap" data-for="dlg"><b>Running-job details</b>User, partition, time against limit, start time and nodes for every job on that node.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

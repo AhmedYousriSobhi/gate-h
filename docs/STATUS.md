@@ -34,6 +34,12 @@ this repo or its history.)
 | Profiles | ✅ Done | clusters belong to a profile (`profiles`/`app_settings` tables, migrated in automatically for existing installs); switch/create/rename/delete from the sidebar. Reachability and Jira monitoring watch every cluster in every profile regardless of which is active - only the sidebar/dashboard view is scoped |
 | Overview dashboard | ✅ Done | the default view (nothing selected) is a card grid (or a dense table, toggleable and persisted - `useOverviewViewMode`/`src/main/settings.ts`) of every cluster in the active profile - reachability, tags, Grafana/Jira badges, unread notification count, quick Connect/Status actions. A summary strip shows fleet counts plus running/pending job totals from already-cached Slurm snapshots (no new polling) |
 | Cross-cluster notifications | ⚠️ Partial | bell icon covers reachability changes, Jira ticket activity, and unexpected SSH disconnects (all generic, cluster-agnostic signals). Persisted in a SQLite `notifications` table (`src/main/db.ts`/`src/main/notifications/store.ts`) so unread state survives a restart, capped at 200 rows. Per-item delete, clear all, and client-side filtering by kind/severity are in the bell panel (`NotificationBell.tsx`). **Does not** cover scheduler-level events like Slurm node drains/downs - see the limitation below. |
+| Slurm status panel | ✅ Done (untested live) | Queue with id/name/user/partition filters and a pending-reason breakdown; node health always cluster-wide (the partition setting only narrows the jobs query, and is optional); problem nodes first with drain reasons, a running-job badge and Jira correlation; History with an All users switch, id/name/user/date filters and 24 h/7/30-day ranges; GPU capacity by node state. `src/renderer/src/features/status/` |
+| Slurm on another node | ✅ Done (untested live) | Optional `scheduler.execTarget` now runs `ssh <node>` from the connected node (`src/main/scheduler/exec.ts`); blank = the terminal's own node |
+| Jira panel | ✅ Done | Search API v3 with a v2 fallback for Server/DC; scope from JQL, or project key plus the cluster's tags (labels or text); search, assignee/group/team and Done-category filters; refresh and auto-refresh; open-ticket count on the Overview |
+| Storage panel | ✅ Done | Paths can be added in the panel and rechecked automatically at a chosen interval, alongside the configured ones |
+| Azure per-tenant sign-in | ✅ Done | One Azure CLI profile per tenant, gated connect stages, device-code sign-in, orphan-profile cleanup; see `docs/AZURE.md` |
+| Renderer hardening | ✅ Done | Sandboxed renderer, no raw `ipcRenderer`, IPC sender-frame check, http/https-only external links |
 | Automated tests | ❌ Not started | verification so far is `typecheck` + `lint` + `build` on every change, no unit/e2e suite yet |
 | Multi-session terminal (tabs) | ✅ Done | any number of tabs/splits per cluster (`MainPanel.tsx`, `splitLayout.ts`). Switching clusters never disconnects: every opened cluster stays mounted with all its sessions until closed from the sidebar (inline second-click confirm when sessions are connected). In the background a cluster stops resizing its terminals, unmounts Status (no Grafana/Jira polling or embeds), and a dropped session pauses until the cluster is selected again. The old per-cluster pin is gone (its `keep_alive` column stays, unread). A profile switch closes every open cluster |
 | Jump host with its own password | ✅ Done | its own stored, encrypted secret (`jump_host_secret`), independent of the target cluster's — falls back to reusing the target's secret only for pre-existing configs where it's unset and the auth methods happen to match |
@@ -53,6 +59,51 @@ this repo or its history.)
 | Azure tunnel: VM name, target-IP, subscription picker | ✅ Done | Bastion/`az ssh vm` accept a VM name (resolved to a resource ID at tunnel time) as an alternative to a resource ID, or a bare `--target-ip` for a target with no resource ID in reach; the subscription picker scopes every `az` call with `--subscription` instead of the process-wide `az account set`. See `docs/AZURE.md` |
 | Teleport: skip certificate verification | ✅ Done | Per-cluster **Skip certificate verification** checkbox (`tsh`'s own `--insecure`), for a self-signed/lab proxy with no real CA to point `SSL_CERT_FILE` at; off by default. See `docs/TELEPORT.md` |
 | macOS: SSL cert env adoption | ✅ Done | `adoptLoginShellPath()` also adopts `SSL_CERT_FILE`/`SSL_CERT_DIR` from the login shell at startup, the same way it already does `PATH`, so a Dock-launched app still sees an org CA exported in `.zshrc`/`.bash_profile` |
+
+## Known issues and not started
+
+Point-in-time list, last updated 2026-10-04. Items are grouped by what you can do about them.
+
+**Bugs found, not fixed**
+- Multi-byte characters can garble in the terminal when an SSH chunk splits one: `ssh:data` is
+  decoded per chunk without a streaming decoder (`src/main/ssh/manager.ts`).
+- The Slurm scheduler leaves a stale watch timer after returning early for a standby cluster
+  (`src/main/scheduler/monitor.ts`, `poll`).
+- Slurm job history filtered to your own user can come back empty when your login name differs
+  from the accounting user. "All users" is the workaround; a proper fix needs the user name
+  `sacct` records for you.
+- The cluster form's subscription picker and VM lookup read the default `~/.azure`, not the
+  per-tenant profiles.
+- Azure Bastion tunnels carry one connection at a time (azure-cli#24600), so a second terminal on
+  the same Bastion cluster can block until the first closes.
+- The macOS Keychain prompt on every rebuild comes from `safeStorage` with ad-hoc signing
+  (issue #145).
+- The Jira list and node search return at most 25 tickets, with no paging.
+- Runtime storage paths and the Jira assignee filter are remembered per machine
+  (`localStorage`), not in the cluster's saved settings.
+
+**Performance findings from an audit, not addressed**
+- One 1.46 MB renderer chunk and about 400 KB of fonts load at start.
+- Two synchronous login-shell spawns delay startup on macOS.
+- `AppShell` re-renders its whole tree on most state changes.
+- `ssh:data` IPC messages aren't batched, and the terminal `ResizeObserver` isn't throttled.
+- The Jira monitor decrypts all four stored secrets to read one.
+
+**Not verified live**
+- Slurm, Lustre, GPFS and DCGM against real installations beyond the sites it was tried on.
+- The Jira Team filter (it assumes Jira Cloud's "Team" field), and tag-based ticket scoping.
+- Running Slurm commands through `ssh <node>` from the login node.
+- Azure multi-tenant behaviour on Windows (Linux and macOS only).
+
+**Not started**
+- Automated test suite beyond the headless check scripts.
+- Confluence integration.
+- Drain and resume nodes from the UI (deliberately outside the spec for now).
+- Low GPU-use alerts on running jobs.
+- Notarized macOS builds, and Windows builds.
+- PBS and LSF.
+- Moving a cluster between profiles, and a per-cluster panel layout.
+- A "trust this new key" action after an expected host-key change.
 
 ## How each feature was verified
 

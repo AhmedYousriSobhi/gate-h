@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../../../src/renderer/src/assets/main.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/shell/shell.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/status/status.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/clusters/clusters.css" />
+<link rel="stylesheet" href="../../../../src/renderer/src/features/terminal/terminal.css" />
+<link rel="stylesheet" href="common.css" />
+<title>Node details</title>
+<style>
+  .stage { --l: 330px; --r: 330px; --zoom: 1.15; }
+  .backdrop { background: rgba(6, 6, 8, 0.6); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 28px 30px; display: flex; flex-direction: column; gap: 28px; align-items: center; }
+  .backdrop .modal .hint { margin: 8px 0 12px; }
+  .backdrop .modal { width: 100%; max-width: none; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr"><span class="logo">Gate-H</span><h1>Node details: state and related Jira tickets</h1><p>Opened with the Details button · synthetic data</p></div>
+  <div class="stage">
+    <div class="mock"><div class="backdrop">
+      <div class="modal">
+        <h2>Node node-017</h2>
+        <p class="hint" id="state">State: <span class="issue-status slurm-state-failed">draining</span> · partitions: gpu</p>
+        <div class="issue-list" id="tickets">
+<div class="issue-row"><div><a href="#">OPS-101</a> node-017: GPU fell off the bus (XID 79)</div><span class="issue-status issue-status-active" id="pill">In Progress</span></div><div class="issue-row"><div><a href="#">OPS-088</a> node-017 NVLink errors after firmware update</div><span class="issue-status issue-status-done">Done</span></div><div class="issue-row"><div><a href="#">OPS-072</a> Replace fan on node-017</div><span class="issue-status issue-status-todo">To Do</span></div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn">Close</button></div>
+      </div>
+
+      <div class="modal">
+        <h2>Node node-052</h2>
+        <p class="hint">State: <span class="issue-status slurm-state-failed">down*</span> · partitions: cpu</p>
+        <p class="hint" id="none">No Jira tickets mention this node.</p>
+        <div><button type="button" class="btn btn-primary" id="create">Create incident</button></div>
+        <div class="modal-actions"><button type="button" class="btn">Close</button></div>
+      </div>
+    </div></div>
+
+    <div class="cap" data-for="state"><b>State at a glance</b>The node's Slurm state and the partitions it belongs to.</div>
+    <div class="cap" data-for="pill"><b>Ticket status</b>Each ticket carries its Jira status, coloured as in progress, done or to do.</div>
+    <div class="cap" data-for="tickets"><b>Related tickets</b>Gate-H searches the cluster's Jira for tickets that mention this node by name, so you see its history before touching it.</div>
+    <div class="cap" data-for="none" data-side="l"><b>Nothing reported yet</b>If no ticket mentions the node, the dialog says so.</div>
+    <div class="cap" data-for="create" data-side="l"><b>Create incident</b>One click files a ticket in the cluster's project, pre-filled with the node, its state and partitions. Shown when a project key is set.</div>
+  </div>
+</div>
+<script src="common.js"></script>
+</body>
+</html>

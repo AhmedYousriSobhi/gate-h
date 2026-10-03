@@ -1,332 +1,203 @@
 # Gate-H — Functional Specification
 
-This is the functional spec: what Gate-H is supposed to do, stated as requirements. It complements
-two other docs rather than duplicating them:
-
-- [docs/ANALYSIS.md](docs/ANALYSIS.md) — *why* it's built this way (prior art, architecture
-  decisions).
-- [docs/STATUS.md](docs/STATUS.md) — the *current, point-in-time* state of each requirement below
-  (done / partial / not started) plus known limitations. When this file and STATUS.md disagree on
-  what's shipped, STATUS.md is correct — this file describes the target, not a completion log.
+What Gate-H must do, as requirements. [docs/STATUS.md](docs/STATUS.md) is the current state of each
+one (done / partial / not started, plus known issues) and wins if the two disagree;
+[docs/ANALYSIS.md](docs/ANALYSIS.md) explains why it's built this way.
 
 ## 1. Purpose
 
-A standalone desktop application (not a browser tab, no server to stand up) that lets one person
-or small team operate several independent HPC clusters — SSH access, Grafana-based status, and
-Jira ticketing — from a single window, without juggling a terminal, several browser tabs, and a
-ticket tracker separately.
+A standalone desktop app (no server to stand up) that lets one person or a small team operate
+several independent HPC clusters from one window: SSH terminals, Slurm and Grafana status, and Jira
+tickets.
 
-## 2. Core entities
+## 2. Entities
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| `Profile` | `id`, `name` | Groups a set of clusters (e.g. "Work" vs "Research"); exactly one profile is active at a time. |
-| `Cluster` | `id`, `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `activeMonitoring` | Belongs to exactly one `Profile`. `grafana`/`jira` are optional — a cluster may be SSH-only. |
-| `AzureTunnelConfig` | `mode` (`bastion`\|`az-ssh`), `subscription`, `resourceGroup`, `localPort`, Bastion name + target VM id or VM name | Optional per cluster. SSH dials `127.0.0.1:localPort`, and `connection.host`/`port` are the tunnel's far end. No secrets: the Azure CLI keeps its own tokens. |
-| `TeleportConfig` | `proxy`, optional `cluster` (leaf), `user`, `authConnector` | Optional per cluster, exclusive with an Azure tunnel or a jump host (base transports are mutually exclusive; a jump host can't be layered on Teleport either, since every node it routes to presents a certificate host key `ssh2` can't verify). `connection.host` is the Teleport node name and `connection.username` the login. No secrets: `tsh` keeps its own certificates. |
-| `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | One SSH identity per cluster. A jump host is an independent modifier composable with Direct or an Azure tunnel: that transport reaches the jump host first, then a normal SSH hop (`forwardOut`) reaches `host`/`port`. Its own secret is stored separately from the connection's. |
-| `GrafanaProfile` | `baseUrl`, `dashboardUids`, per-dashboard `panelSelections`/`panelOrientation`/`panelEmbedHeight`/`panelWidths`, optional `gpuDatasourceUid`/`gpuHostLabel` | A service-account API token is stored alongside but never returned to the renderer. The two GPU fields point GPU usage (§3.10) at a DCGM Prometheus datasource. |
-| `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`/`jql` | Cloud = email + API token (Basic auth); Data Center = Personal Access Token. |
-| `ClusterReachability` | `clusterId`, `status` (`online`\|`offline`\|`checking`), `checkedAt` | Derived, not stored — recomputed by the background monitor. |
-| `SchedulerConfig` | `kind` (`slurm`), `scope` (`mine`\|`partitions`), `partitions`, `intervalSec`, `autoRefresh`, optional `execTarget` (`host`, `port`) | Optional per cluster; `null` means no scheduler integration. Commands normally run on the cluster's own terminal session; `execTarget` routes them to a different internal node instead (e.g. a bastion/login node that doesn't host Slurm), reached through whatever jump host or tunnel is already configured. No secrets: commands run as the SSH user on the already-authenticated session. See §3.10. |
-| `StorageConfig` | `paths` | Optional per cluster: paths whose usage and quota the Status widget checks on request. See §3.10. |
-| `JobTemplate` | `id`, `name`, `body`, `createdAt`, `updatedAt` | A batch script with `{{name}}` / `{{name:default}}` placeholders. Stored per profile, not per cluster. See §3.10. |
-| `ClusterNotification` | `clusterId`, `kind` (`reachability`\|`jira`\|`ssh`), `severity`, `message`, `read` | Cross-cluster feed, persisted so unread state survives a restart. |
+| `Profile` | `id`, `name` | Groups clusters; exactly one is active. |
+| `Cluster` | `name`, `description`, `tags`, `connection`, `grafana`, `jira`, `activeMonitoring` | Belongs to one profile. Every integration is optional. Tags also scope its Jira tickets (§3.5). |
+| `ConnectionProfile` | `host`, `port`, `username`, `authMethod` (`password`\|`private-key`\|`agent`), optional `jumpHost` | A jump host composes with Direct or an Azure tunnel, and keeps its own stored secret. |
+| `AzureTunnelConfig` | `mode` (`bastion`\|`az-ssh`), `subscription`, `tenant`, `resourceGroup`, `localPort`, target | SSH dials `127.0.0.1:localPort`. No secrets: the Azure CLI holds its own tokens. |
+| `TeleportConfig` | `proxy`, `cluster`, `user`, `authConnector` | Exclusive with an Azure tunnel or jump host. No secrets: `tsh` holds its own certificates. |
+| `GrafanaProfile` | `baseUrl`, `dashboardUids`, panel layout, optional `gpuDatasourceUid` | Service-account token stored, never returned to the renderer. |
+| `JiraProfile` | `baseUrl`, `authMode` (`cloud`\|`datacenter`), `projectKey`, `jql` | Cloud = email + API token; Data Center = personal access token. |
+| `SchedulerConfig` | `kind` (`slurm`), `scope` (`mine`\|`partitions`), optional `partitions`, `intervalSec`, `autoRefresh`, optional `execTarget` | `partitions` only narrows the jobs query. `execTarget` names another node to read Slurm from (§3.10). |
+| `StorageConfig` | `paths`, `autoRefresh`, `intervalSec` | Paths whose usage and quota the Status widget checks. |
+| `JobTemplate` | `name`, `body` | `{{name}}` / `{{name:default}}` placeholders, per profile. |
+| `ClusterNotification` | `clusterId`, `kind`, `severity`, `message`, `read` | Persisted feed. |
 
-Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted at rest via
-`electron.safeStorage` and are write-only from the renderer's perspective: a cluster read back
-from the store only ever reports `hasConnectionSecret`/`hasGrafanaToken`/`hasJiraToken` booleans,
-never the plaintext or ciphertext.
+Secrets (SSH password/passphrase, Grafana token, Jira token) are encrypted with
+`electron.safeStorage` and write-only from the renderer: a cluster read back carries only
+`has*Secret` booleans.
 
-## 3. Functional requirements
+## 3. Requirements
 
-### 3.1 Cluster & profile management
-- Create, edit, and remove a cluster; each belongs to the profile active at creation time.
-- Register any number of clusters, each fully self-contained (its own SSH/Grafana/Jira config) —
-  nothing about one cluster's setup constrains another's.
-- Clusters can be imported from `~/.ssh/config` (and its `Include` files): the user picks which
-  hosts to bring in from a list read from the file. Host, port, username, and identity file carry
-  over; a host using `ProxyJump`/`ProxyCommand` is flagged rather than imported, since that
-  routing isn't representable by a single cluster's fields.
-- Create, rename, delete, and switch between profiles; switching profiles clears the current
-  selection (a cluster from the old profile can't stay "selected" under the new one) and closes
-  every open cluster (§3.6) — a profile is a separate context, often with separate credentials.
-- Background monitors (reachability, Jira polling) watch every cluster in every profile
-  regardless of which is active — only the sidebar/dashboard *view* is scoped to the active
-  profile.
+### 3.1 Clusters and profiles
+- Create, edit and remove clusters; any number, each self-contained.
+- Import hosts from `~/.ssh/config` (and `Include`s); hosts using `ProxyJump`/`ProxyCommand` are
+  flagged, not imported.
+- Create, rename, delete and switch profiles. Switching clears the selection and closes every open
+  cluster. Background monitors watch every cluster in every profile; only the view is scoped.
 
-### 3.2 Reachability monitoring
-- Every registered cluster's SSH port is probed on a fixed interval (not just a bare TCP connect —
-  the probe confirms an actual SSH banner), independent of whether the cluster is selected,
-  open, or in standby (§3.6).
-- A per-cluster LED (online/offline/checking) is shown in the sidebar and the overview dashboard,
-  updated in real time as probes complete, with the probe's round-trip time available on hover.
-- Regaining window focus triggers an immediate re-check (throttled to avoid extra probing if
-  focus events fire in quick succession), so the LED catches up quickly after e.g. a VPN
-  reconnect without waiting for the next scheduled sweep.
-- An online→offline or offline→online transition raises a notification (§3.7).
+### 3.2 Reachability
+- Probe every cluster's SSH port on an interval, confirming an SSH banner, whether or not the
+  cluster is selected or in standby. Show a per-cluster LED with the round-trip time on hover.
+- Re-check on window focus (throttled). A transition raises a notification (§3.7).
 
 ### 3.3 SSH terminal
-- Open an interactive shell to a cluster's login node (or through a configured jump host) from
-  inside the app — no external terminal required.
-- Auth methods: password, private key (with optional passphrase), or the local SSH agent.
-- Host keys are pinned trust-on-first-use (the same model as OpenSSH's `known_hosts`); a key that
-  changes after being trusted blocks the connection and raises a notification rather than
-  silently proceeding.
-- SSH-level keepalive detects a silently-dropped connection (e.g. through a NAT/firewall that
-  drops idle connections without a clean close) instead of leaving the session sitting in a
-  falsely "connected" state.
-- A dropped or failed session retries automatically with bounded, backed-off attempts (a small
-  fixed number of tries within a rolling time window, exponential backoff with jitter between
-  them), then pauses rather than retrying indefinitely — a persistently unreachable cluster must
-  never be hammered with repeated connection attempts. A paused session re-checks the cluster's
-  reachability reading on every update and retries as soon as it reads online, in addition to
-  offering a manual "Reconnect" action.
-- While a session isn't connected (initial connect, a retry in progress, or paused), the terminal
-  view makes that state unmistakable — a stale output buffer must never be mistakable for a live,
-  responsive prompt.
+- Interactive shell to the login node, directly or through a jump host. Auth: password, key (with
+  passphrase) or agent.
+- Host keys are pinned on first use; a changed key blocks the connection and notifies.
+- Keepalive detects silently dropped connections.
+- A dropped session retries a bounded number of times with backed-off, jittered delays, then
+  pauses. A paused session retries when reachability reads online, or on a manual Reconnect. A
+  persistently down cluster is never hammered.
+- A session that isn't connected must look unmistakably so.
 
-### 3.3.0 Terminal sessions and layout
-- A cluster can have any number of terminal sessions. Each is named after what its shell reports
-  (for example `user@host: ~/logs`), has its own connection-state dot, and can be renamed by the
-  user.
-- Sessions appear as tabs, in a side list (the default) or along the top; the user chooses. The
-  side list's width is drag-resizable, and double-clicking the divider resets it.
-- Sessions can be shown together. The user drags a tab, or a session's header bar, onto an edge
-  of another session to place it beside, above or below it, and drags the borders between
-  sessions to resize them. Dropping a tab onto the middle of another tab stacks the two into one
-  view, and a stack can be unstacked. Any grid results, for example two sessions side by side
-  above a third.
-- Any session in a stack can be maximized and then restored, and split or closed from its header
-  bar or its context menu.
-- The terminal offers scrollback search and clickable links. Copy and paste, search, split and
-  session switching have keyboard shortcuts, and macOS uses Cmd where Linux uses Ctrl+Shift (so
-  plain Ctrl keys still reach the shell). Ctrl+Tab switches sessions on both.
-- Sessions, their layout and these tab settings live only as long as the app runs; none of them
-  is saved across restarts. (The Terminal/Status layout of §3.8 is.)
-- Each session keeps a timestamped log of its own connect/reconnect/disconnect history, viewable
-  from a popover in the terminal header, so what happened to a session the user wasn't watching
-  is still visible afterward.
-- The user can save named command snippets (per profile) and insert one into the active session
-  from a popover in the terminal header, without retyping it or searching shell history.
+**Sessions and layout**
+- Any number of sessions per cluster, as tabs (side list or top) or split panes: drag a tab to an
+  edge to place it, drag borders to resize, drop on a tab to stack. Sessions can be renamed,
+  maximized and restored. Session state lives only while the app runs.
+- Scrollback search, clickable links, copy/paste and split/switch shortcuts (Cmd on macOS,
+  Ctrl+Shift on Linux so plain Ctrl reaches the shell).
+- Each session keeps a timestamped connection log. Named command snippets (per profile) insert into
+  the active session.
 
-### 3.3.1 Azure tunnel pre-flight
-- A cluster may require an Azure tunnel. Before attempting one, the app checks the local Azure
-  CLI's cached sign-in itself (not scoped to any one cluster's subscription) - unlike Teleport
-  (§3.3.2), this is a point-in-time pre-flight check, not a continuously watched session. A
-  missing or expired sign-in shows a distinct "Azure authentication required" terminal state (the
-  cached account and why, when known) instead of a generic connection failure, with an explicit
-  "Authenticate" action and a "Retry connection" action; like Teleport, nothing retries
-  automatically and the app never signs in by itself. Authenticating runs `az login` (a
-  device-code prompt on a headless Linux box, the system browser otherwise), streamed into the
-  terminal view the same way the rest of this pre-flight is. A "Sign in with device code" action
-  forces the device-code flow anywhere, so the user picks the account instead of the browser's
-  cached SSO being reused.
+### 3.3.1 Azure tunnel
+- Before tunneling, check the Azure CLI sign-in **for the cluster's tenant**. A missing or expired
+  one shows an "Azure authentication required" state with **Authenticate**, **Sign in with device
+  code** (the user picks the account; no cached browser SSO) and **Clear cached sign-in**. Nothing
+  signs in or retries by itself.
 - Each tenant gets its own Azure CLI profile (`AZURE_CONFIG_DIR`, passed per spawned process, never
-  set on the app's own environment) under the app's data directory, shared by clusters in the same
-  tenant, so clusters in different tenants can stay open at once without replacing each other's
-  sign-in. "Clear cached sign-in" removes only that tenant's profile; a profile no cluster refers
-  to any more is deleted. A cluster with no tenant uses the CLI's default profile.
-- Connecting runs as ordered stages, each gated on the previous one: sign-in for the tenant, the
-  configured subscription being available, the tunnel opening, then a live SSH banner arriving.
-- Once signed in, selecting the configured subscription and opening the tunnel follow the same
-  way, each step shown in the terminal view. Every `az` call is scoped to the configured
-  subscription per-invocation (`--subscription`), never through the CLI's own process-wide
-  `az account set`, so configuring one cluster never changes what another cluster (or a manual
-  `az` session elsewhere) resolves against.
-- Azure Bastion and `az ssh vm` both accept a VM name instead of a full resource ID; the app
-  resolves it to one itself when the tunnel opens. Bastion also accepts a bare target IP address
-  (needing no resource ID at all), for a target the signed-in account can reach but doesn't have
-  a resource ID for (a different resource group, subscription, or tenant).
-- The tunnel outlives individual SSH sessions: reconnecting reuses it, and reopens it if it died.
-  A connect failure through the tunnel replaces it, since a hung tunnel can keep listening.
-  Retries follow the same bounded backoff as §3.3.
-- The tunnel is closed on quit, on edit/removal of the cluster, and in standby (§3.6).
-- A tunneled cluster's reachability (§3.2) reflects the tunnel's health.
+  set on the app's own environment), shared by that tenant's clusters, so clusters in different
+  tenants stay signed in together. Clear removes only that tenant's profile. Unused profiles are
+  pruned. Profile files are owner-only. Extensions stay shared (`AZURE_EXTENSION_DIR`).
+- Connecting runs as gated stages: sign-in, subscription available, tunnel open, live SSH banner.
+  Every `az` call is scoped per invocation with `--subscription`, never `az account set`.
+- Bastion and `az ssh vm` accept a VM name (resolved at open time); Bastion also accepts a bare IP.
+- The tunnel outlives sessions and is reopened if it died, replaced if a connect through it fails,
+  and closed on quit, edit, removal or standby. A tunneled cluster's reachability reflects the
+  tunnel. Every `az` call has stdin closed; the app warns when the CLI is older than 2.70.0.
 
-### 3.3.2 Teleport-protected clusters
-- A cluster may sit behind a Teleport proxy. Its terminal session is `tsh ssh` on a local
-  pseudo-terminal, behind the same terminal behavior as §3.3: resize, the connection-state
-  shade, and bounded reconnects.
-- Before `tsh ssh`, the app checks for a valid Teleport session for that proxy. A terminal never
-  starts a login by itself: a session that is missing or about to expire shows *Teleport login
-  needed*, and nothing retries until the user logs in. This applies to background
-  clusters too.
-- Logging in is an explicit user action in its own dialog (password/OTP prompts, or SSO in the
-  browser). The app never answers a prompt on the user's behalf. One login serves every cluster
-  behind the same proxy and Teleport user, and their terminals reconnect. A `tsh login` done
-  outside the app counts too.
-- 15 minutes before a session expires, the user is notified once and can renew it from the
-  terminal without interrupting open sessions.
-- Session tracking is event-driven: no polling, and no `tsh` process at all when there are no
-  Teleport clusters.
-- A failed session check (proxy unreachable, login failed or timed out, `tsh` missing) is shown
-  as the terminal's error and raises a notification.
-- A Teleport cluster's reachability (§3.2) reflects its proxy.
-- A cluster behind a self-signed or lab proxy with no real CA to trust can skip certificate
-  verification (`tsh`'s own `--insecure`), off by default since it drops TLS verification
-  entirely. A proxy behind a real organisation CA instead points `SSL_CERT_FILE`/`SSL_CERT_DIR` at
-  it, which the app adopts from the user's login shell at startup the same way it already does
-  `PATH` (needed on macOS, where a Dock-launched app doesn't inherit the login shell's exports).
+### 3.3.2 Teleport
+- The terminal is `tsh ssh` on a local PTY with the same behaviour as §3.3.
+- A terminal never starts a login. A missing or soon-to-expire session shows *Teleport login
+  needed*. Logging in is an explicit action in its own dialog; the app never answers a prompt. One
+  login serves every cluster behind the same proxy and user.
+- Notify once 15 minutes before expiry and allow renewal without interrupting sessions. Tracking is
+  event-driven, with no polling and no `tsh` process when no Teleport cluster exists.
+- Reachability reflects the proxy. Skipping certificate verification is opt-in per cluster.
 
 ### 3.4 Grafana status
-- Per cluster, list configured dashboards and show a health check (reachable + version, or the
-  failure reason).
-- Per dashboard, let the user pick which panels to embed live (not just a static snapshot), lay
-  them out stacked or side by side, resize the embedded height, and — when side by side — resize
-  each panel's width relative to its neighbors independently.
-- Status refreshes automatically on a fixed interval and whenever the cluster's reachability
-  reading changes, with backoff on repeated failures, rather than only ever fetching once per
-  view.
-- Switching back to a cluster shows its last status (and scroll position) at once while a fresh
-  one loads, and a failed refresh keeps the last good dashboards on screen. Live panel embeds do
-  reload, since a background cluster keeps none running (§3.6), but never flash white while
-  they do.
+- List dashboards with a health check. Embed chosen panels live, stacked or side by side, with
+  resizable height and width.
+- Refresh on an interval and when reachability changes, with backoff. Show the last good state at
+  once and keep it on a failed refresh.
 
-### 3.5 Jira integration
-- Per cluster with a Jira profile configured: list issues matching a saved JQL/project filter, and
-  file a new issue against that project directly from the cluster's view.
-- Works against both Jira Cloud and Jira Data Center/Server, without the user needing to know
-  which auth scheme that entails.
-- Clicking a compute node in the Slurm node-health view (§3.10) searches the same configured Jira
-  project/JQL filter for tickets mentioning that node by name, and offers a one-click "Create
-  incident" (through the same filing path as above) when nothing matches.
+### 3.5 Jira
+- List tickets in the cluster's scope and file a new one from its view. Works on Cloud and Data
+  Center (Cloud's search API v3, falling back to v2 on Server/Data Center).
+- **Scope:** an explicit JQL wins. Otherwise the project key and the cluster's tags narrow it; a tag
+  matches a ticket's label or its text. A tagless, keyless cluster is shown a hint, and the list
+  is limited to recent tickets.
+- **Panel:** refresh button and auto-refresh; text search; Unresolved only (status category not
+  Done); assigned to me, unassigned, a user, a group or a team.
+- **Overview:** each cluster with a scope shows its unresolved ticket count. Standby clusters are
+  skipped.
+- Clicking a node in the Slurm view searches that scope for tickets mentioning it and offers
+  **Create incident** when none match.
 
-### 3.6 Connection lifecycle: open, background and standby
-- **Open**: selecting a cluster opens it. Switching away never ends its sessions — every
-  terminal tab and split stays connected in the background until the user closes the cluster
-  explicitly (or it goes into standby, is removed, or the profile is switched; §3.1). Closing a
-  cluster with connected sessions asks for a second click on the same control, not a dialog.
-- **Background**: an open cluster that isn't selected stays quiet — its terminals keep
-  receiving output but stop resizing, and no Grafana/Jira polling or live panel embeds run. A
-  session that drops there pauses instead of retrying and reconnects when the cluster is
-  selected again, so many open clusters can't all be retrying against their login nodes at once.
-  Reconnect-on-failure (§3.3) otherwise applies as usual once the cluster is selected.
-- **Standby** (`activeMonitoring: false`): a master per-cluster switch — no SSH session, no
-  Grafana polling, and no reconnect/backoff loop exist for that cluster at all, even if it's
-  currently selected. Selecting a standby cluster shows a placeholder
-  (with a one-click way to resume) instead of silently connecting. Turning monitoring back on
-  behaves exactly like a fresh selection — same connect flow, same backoff policy, no fast path
-  that bypasses rate-limiting. The lightweight reachability probe (§3.2) is unaffected by standby;
-  it is cheap enough to always run for every cluster.
+### 3.6 Connection lifecycle
+- **Open:** selecting a cluster opens it. Switching away keeps its sessions until the user closes
+  it (a second click confirms when sessions are live), puts it in standby, removes it, or switches
+  profile.
+- **Background:** an open, unselected cluster stays quiet: terminals keep receiving but stop
+  resizing, no Grafana/Jira polling, and a dropped session pauses until selected.
+- **Standby** (`activeMonitoring: false`): no session, polling or reconnects at all; a placeholder
+  offers one-click resume, which behaves like a fresh selection. Reachability probes still run.
 
-### 3.7 Cross-cluster notifications
-- A single feed collects reachability transitions, Jira ticket activity, unexpected SSH
-  disconnects, and (opt-in) Slurm job and node changes from every cluster, so the user doesn't have to check each cluster individually to
-  notice something changed.
-- Unread count is visible at a glance; clicking a notification jumps straight to the relevant
-  cluster and the specific widget (Terminal or Status) it concerns.
-- Notifications persist across restarts until marked read.
+### 3.7 Notifications
+- One feed for reachability changes, Jira activity, unexpected SSH disconnects and (opt-in) Slurm
+  job and node changes. Unread count is visible; clicking one opens the cluster and the widget it
+  concerns. Persisted until read.
 
-### 3.8 Panel layout
-- A cluster's Terminal and Status widgets render side by side (or stacked) rather than behind
-  tabs, so both are visible at once.
-- The user can toggle either widget on/off, swap their pane order, switch orientation, and
-  drag-resize the split between them; the layout choice persists across restarts.
-- Independently, the Status widget's own sections (Grafana, Slurm, Storage, Jira) can each be
-  shown or hidden from a picker in its toolbar - a user who only cares about some of them doesn't
-  see a placeholder for the rest. This choice persists the same way as the Terminal/Status layout
-  above, one shared preference for the whole app rather than per cluster.
+### 3.8 Layout
+- Terminal and Status render side by side or stacked. The user toggles either, swaps order, flips
+  orientation and resizes the split; the choice persists. Status sections (Grafana, Slurm, Storage,
+  Jira) can each be shown or hidden. Both are app-wide preferences.
 
-### 3.9 Overview dashboard
-- The default view (nothing selected) is a grid of every cluster in the active profile, showing
-  reachability, tags, which integrations (Grafana/Jira) are configured, and unread notification
-  count — never a blank "pick something" screen. A summary strip above it shows fleet-wide counts
-  (total, online, unreachable, with alerts) that double as filters, plus running/pending job totals
-  from whatever Slurm snapshots are already cached (never a new poll) once at least one is.
-- The grid can be switched to a dense table (one row per cluster: status, name, host, job summary,
-  configured integrations, unread count, actions) for a fleet too large for cards to stay
-  scannable. The choice persists across restarts, the same way the Terminal/Status layout does
-  (§3.8).
+### 3.9 Overview
+- The default view is every cluster in the active profile as cards or a dense table (persisted):
+  reachability, tags, integrations, Slurm summary, open-ticket count, unread count, quick actions.
+- A summary strip shows fleet counts that double as filters, plus running/pending job totals from
+  already-cached snapshots, never a new poll.
 
 ### 3.10 HPC orchestration
-Shipped, and not yet verified against real infrastructure (see docs/STATUS.md). The design is in
-[docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
-- **Job queue and node health (Slurm).** For a cluster with a `SchedulerConfig`, show the user's
-  own jobs, or every user's jobs in named partitions (never the whole queue). Each job shows its
-  state, elapsed/limit, nodes, and expected start or pending reason, and job arrays stay
-  collapsed until expanded. Also show per-partition node counts by state and drain reasons, and
-  every individual node Slurm reports, each one clickable through to its Jira correlation (§3.5).
-- **Job history.** On request, the user's own finished jobs from the last 24 hours or 7 days
-  (from `sacct`), with final state, exit code, and CPU efficiency (time actually used vs. time
-  reserved - the same figure `seff` reports, computed from the same `sacct` row). Never polled.
-- **Scheduler commands never open a connection.** They run only on a session the user already has
-  open: an extra `ssh2` channel on the terminal's connection, or, for Teleport, a non-interactive
-  `tsh ssh` while the Teleport session is valid. With no live session, nothing runs, and a
-  scheduler query never triggers a login or MFA prompt.
-- **Fixed commands only.** The renderer asks for a cluster's snapshot, never for a command, and
-  any user-supplied argument (partition names) is validated before it reaches a shell. Each run
-  has a timeout and an output cap, and a cluster never has more than one scheduler command in
-  flight.
-- **Scheduler polling is scoped to what the user is looking at.** It polls only while the cluster
-  is selected, not in standby, and a scheduler widget is visible, with a floor on the interval,
-  the same failure backoff as §3.4, and a slower cadence while the window is unfocused.
-  Background clusters (§3.6) don't poll, with one opt-in exception: notifications (below). On
-  Teleport clusters, where each run is an audited session, refresh is manual unless the user opts
-  in per cluster.
-- **Scheduler notifications (opt-in per cluster).** Notify when the user's own jobs finish (with
-  their final state and exit code) or start, and when nodes go down or are drained. Bursts become
-  one summary. While the cluster is open in the background, it's checked at most every 5 minutes,
-  on its terminal's existing SSH connection only, with backoff, and never on Teleport clusters. A
-  closed or standby cluster runs nothing.
-- **Storage quota.** For configured paths, show the whole filesystem's usage and the user's own
-  quota where the filesystem has one (Lustre, GPFS), flagging usage over the soft limit. Checked
-  on request by default, over the existing session; auto-refresh is opt-in per cluster (off by
-  default, a longer floor/interval than Slurm's since quota doesn't change minute to minute),
-  only while the cluster is selected and the section is visible, with the same backoff on
-  repeated failure as the rest of this section.
-- **GPU telemetry.** Per-GPU utilization, memory and temperature for the nodes of the user's
-  running jobs. It comes from the cluster's Grafana/Prometheus (DCGM exporter) through the
-  existing Grafana token where available. Otherwise it is an on-demand `nvidia-smi` sample inside
-  one of the user's own jobs (`srun --overlap`), never polled and never over direct SSH to compute
-  nodes.
-- **File transfer.** Browse, upload and download over SFTP on the existing connection, with
-  progress. Local paths come only from native file dialogs, and overwriting asks first. Not
-  available on Teleport clusters yet.
-- **Job submission helper.** A local library of batch script templates, per profile
-  (`{{placeholders}}` with optional defaults). Submitting
-  shows the full rendered script and the exact command, and runs `sbatch` only after an explicit
-  confirmation that the main process asks for itself, so the renderer can't skip it.
-  Cancelling a job has the same confirmation and applies only to the user's own jobs.
+Design: [docs/HPC_ORCHESTRATION.md](docs/HPC_ORCHESTRATION.md).
+
+**Slurm status**
+- **Jobs:** the user's jobs, or everyone's (capped). `partitions` in the settings is optional and
+  narrows only this query. The panel filters by job id, name, user, partition and state, and
+  breaks pending jobs down by reason (clickable). Arrays stay collapsed until expanded.
+- **Nodes:** always cluster-wide, never narrowed by partitions. Per-partition counts by state;
+  down, draining and drained nodes first, each with its drain reason; a node with running jobs
+  shows a badge that opens those jobs; healthy nodes group by state; a search finds any node.
+  **Details** shows tickets mentioning the node (§3.5).
+- **History:** on request, finished jobs for 24 hours, 7 days or 30 days from `sacct`, with state,
+  exit code and CPU efficiency. Filter by id, name, user and date. "All users" drops the user
+  filter. Never polled; loaded on open except on Teleport clusters.
+- **GPUs:** installed GPUs per model split by node state (busy, idle, down), plus per-GPU
+  utilization, memory and temperature for the user's running jobs, from Grafana/DCGM where
+  available, otherwise an on-demand `nvidia-smi` inside one of the user's jobs (`srun --overlap`).
+
+**Rules for scheduler commands**
+- They never open a connection or log in. They run on the terminal's open session (an extra
+  channel; for Teleport, a non-interactive `tsh ssh` while the session is valid). With no live
+  session, nothing runs.
+- **Another node:** when `execTarget` is set, the app runs `ssh <node>` from the connected node, so
+  that node's keys, agent and config apply. The host must be a plain hostname and the port an
+  integer. Blank means the connected node itself.
+- Commands are fixed; the renderer never supplies one. Arguments are validated before reaching a
+  shell. Each run has a timeout and output cap, and a cluster has at most one in flight.
+- Polling happens only while the cluster is selected, not in standby, and a Slurm widget is
+  visible, with a floor on the interval, backoff on failure and a slower cadence when the window is
+  unfocused. Teleport clusters refresh manually unless opted in.
+- **Notifications (opt-in):** the user's jobs finishing or starting, and nodes going down or
+  drained. Bursts become one summary. A background cluster is checked at most every 5 minutes on
+  its existing connection, never on Teleport; closed or standby clusters run nothing.
+
+**Storage**
+- Usage of the whole filesystem and the user's own quota where known (Lustre, GPFS), flagging
+  usage over the soft limit. Paths come from the cluster settings and from the Status panel.
+- Checked on request, or automatically at an interval chosen in the panel (the cluster's saved
+  setting applies until then). Only while the section is visible, with backoff.
+
+**Files and jobs**
+- Browse, upload and download over SFTP on the existing connection, with progress; local paths come
+  only from native dialogs; overwriting asks first. Not available on Teleport.
+- Batch templates per profile. Submitting shows the rendered script and exact command, and runs
+  `sbatch` only after a confirmation the main process requests itself. Cancelling has the same
+  confirmation and applies only to the user's own jobs.
 
 ## 4. Non-functional requirements
 
-- **Secrets never leave the main process in plaintext or ciphertext** — see §2; enforced by
-  `ClusterSummary` never carrying the underlying token/password fields.
-- **No connection-attempt storms** — every reconnect/re-poll path (Terminal, Grafana) is bounded
-  and backed off (§3.3, §3.4); a target that's genuinely down must degrade to a slow, capped retry
-  cadence, not sustained pressure. This matters specifically because the "clusters" on the other
-  end are real HPC login nodes and shared infrastructure, not disposable test endpoints. The
-  reachability sweep (§3.2) and Jira polling, which run against every cluster in every profile at
-  once, cap how many checks run concurrently rather than firing all of them in the same instant -
-  needed once a fleet reaches into the tens or hundreds of clusters.
-- **Linux and macOS** — developed and verified on Linux. macOS (Apple Silicon and Intel) is
-  built, tested and smoke-tested per architecture in CI (`.github/workflows/macos.yml`) and
-  follows its conventions: native window controls, an app menu, Cmd shortcuts, and the login
-  shell's PATH for tools like `tsh`/`az`. Windows packaging exists in the `electron-builder`
-  config but is unverified (see `docs/STATUS.md`).
-- **Packaging and releases.** Linux ships as an AppImage, built reproducibly inside Docker
-  (`./build-desktop.sh`). macOS ships as a `.dmg` and `.zip` per chip (arm64, x64), built natively
-  by the same script, because a Mac app can only be built on a Mac. Pushing a `v*` tag makes CI
-  build both and publish a GitHub release with the four files and a `SHA256SUMS`. Build steps skip
-  an unchanged dependency install, retry transient npm network failures, and pin Node 22. macOS
-  builds are ad-hoc signed and not notarized, so the first launch needs a manual approval.
-- **Dependencies stay clear of known high-severity advisories** — `npm audit` reports none at the
-  pinned Electron version.
-- **No telemetry** — Gate-H does not phone home; the only network calls it makes are to the
-  Grafana/Jira/SSH endpoints the user explicitly configured per cluster.
+- **Secrets stay in the main process**, as plaintext or ciphertext (§2).
+- **No connection storms.** Every reconnect and re-poll path is bounded and backed off. Reachability
+  and Jira sweeps cap their concurrency.
+- **Hardened renderer.** Sandboxed, no raw `ipcRenderer` exposed, the app's own page is the only
+  sender IPC accepts, external links open only as http/https, and navigation away is blocked.
+- **No telemetry.** The only network calls go to endpoints the user configured.
+- **Platforms.** Developed and verified on Linux. macOS (Apple Silicon and Intel) is built and
+  smoke-tested in CI. Windows packaging exists but is unverified.
+- **Releases.** Linux AppImage built in Docker (`./build-desktop.sh`); macOS `.dmg`/`.zip` per chip,
+  ad-hoc signed and not notarized. A `v*` tag publishes both with `SHA256SUMS`.
+- **Dependencies** stay free of known high-severity advisories (`npm audit`).
 
 ## 5. Out of scope
 
-- Cluster **provisioning** or lifecycle management (that's Bright/Base Command Manager's job, not
-  Gate-H's) — Gate-H only connects to clusters that already exist.
-- A **multi-tenant, server-hosted** portal (that's Open OnDemand's niche) — Gate-H is a
-  single-user desktop app; there is no server component and no concept of other users.
-- **Becoming a scheduler client or admin tool.** Gate-H won't talk to `slurmrestd`, won't
-  perform admin actions (drain/resume nodes, change partitions, manage accounts), and won't
-  submit or cancel anything without an explicit per-action confirmation. The
-  job-queue, node-health, GPU and submission features (§3.10) run ordinary user-level scheduler
-  commands over the session the user already has open.
-- **Notarized macOS builds and Windows builds** for now. They need a Developer ID and a Windows
-  test machine respectively.
-- **PBS/LSF** for now. `SchedulerConfig.kind` leaves room for them, but only Slurm is designed.
+- Provisioning or lifecycle management of clusters.
+- A multi-user, server-hosted portal.
+- Admin actions (drain/resume nodes, change partitions, manage accounts) and `slurmrestd`. Nothing
+  is submitted or cancelled without per-action confirmation.
+- Notarized macOS and Windows builds, for now.
+- PBS and LSF, for now.
