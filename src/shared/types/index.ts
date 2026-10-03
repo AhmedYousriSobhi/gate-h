@@ -91,6 +91,16 @@ export interface GrafanaStatusResult {
   dashboards: GrafanaDashboardStatus[]
 }
 
+/** Extra, per-view narrowing applied on top of the cluster's own Jira scope. */
+export type JiraAssignKind = 'me' | 'unassigned' | 'user' | 'group' | 'team'
+
+export interface JiraListFilter {
+  text?: string
+  openOnly?: boolean
+  /** Who the ticket is currently assigned to. `value` is the user, group or team name. */
+  assigned?: { kind: JiraAssignKind; value?: string }
+}
+
 export interface JiraIssueSummary {
   key: string
   summary: string
@@ -382,7 +392,9 @@ export interface GateHApi {
     gpuUsage(clusterId: string, nodelists: string[]): Promise<GpuSample[]>
   }
   jira: {
-    list(clusterId: string): Promise<JiraIssueSummary[]>
+    list(clusterId: string, filter?: JiraListFilter): Promise<JiraIssueSummary[]>
+    /** Unresolved tickets in the cluster's Jira scope. */
+    openCount(clusterId: string): Promise<number>
     create(clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary>
     /** Tickets mentioning this node name, scoped by the cluster's own Jira project/JQL filter -
      *  see docs/JIRA_GUIDE.md section 4. */
@@ -447,7 +459,7 @@ export interface GateHApi {
   }
   storage: {
     /** Usage and quota for the cluster's configured paths, run once on request. */
-    usage(clusterId: string): Promise<StorageUsage[]>
+    usage(clusterId: string, extraPaths?: string[]): Promise<StorageUsage[]>
   }
   files: {
     /** A remote directory over SFTP on the terminal's connection; defaults to the home directory. */

@@ -125,11 +125,18 @@ export function parseUsage(stdout: string): StorageUsage[] {
     })
 }
 
-export function fetchStorageUsage(clusterId: string): Promise<StorageUsage[]> {
-  return reuseRecent(`${clusterId}:storage`, async () => {
+/** `extraPaths` are the ones the user typed into the Status panel; they add to the configured ones
+ *  and are validated by usageCommand the same way. */
+export function fetchStorageUsage(
+  clusterId: string,
+  extraPaths: string[] = []
+): Promise<StorageUsage[]> {
+  const requested = [...new Set(extraPaths)].sort().join(',')
+  return reuseRecent(`${clusterId}:storage:${requested}`, async () => {
     const cluster = getCluster(clusterId)
-    const paths = cluster?.storage?.paths
-    if (!cluster || !paths?.length) throw new Error('No storage paths configured for this cluster.')
+    if (!cluster) throw new Error('Cluster not found.')
+    const paths = [...new Set([...(cluster.storage?.paths ?? []), ...extraPaths])]
+    if (paths.length === 0) throw new Error('No storage paths to check.')
     if (!cluster.activeMonitoring) throw new Error('This cluster is in standby.')
     const result = await runOnCluster(cluster, usageCommand(paths))
     return parseUsage(result.stdout)

@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
-import type { ClusterSummary, JiraIssueSummary } from '../../../../shared/types'
+import type {
+  ClusterSummary,
+  JiraAssignKind,
+  JiraIssueSummary,
+  JiraListFilter
+} from '../../../../shared/types'
 
 function issueStatusClass(status: string): string {
   const normalized = status.toLowerCase()
@@ -24,6 +29,23 @@ interface JiraSectionProps {
   cluster: ClusterSummary
 }
 
+const NEEDS_VALUE: Array<JiraAssignKind | 'any'> = ['team', 'group', 'user']
+
+function loadAssigned(clusterId: string): { kind: JiraAssignKind | 'any'; value: string } {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`gateh.jira.assigned.${clusterId}`) ?? 'null') as {
+      kind?: string
+      value?: string
+    } | null
+    if (raw && ['me', 'unassigned', 'user', 'group', 'team'].includes(raw.kind ?? '')) {
+      return { kind: raw.kind as JiraAssignKind, value: raw.value ?? '' }
+    }
+  } catch {
+    // No saved choice.
+  }
+  return { kind: 'any', value: '' }
+}
+
 export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.Element {
   const [issues, setIssues] = useState<JiraIssueSummary[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -31,12 +53,42 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
   const [newSummary, setNewSummary] = useState('')
   const [creating, setCreating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [text, setText] = useState('')
+  const [openOnly, setOpenOnly] = useState(false)
+  const [assignKind, setAssignKind] = useState<JiraAssignKind | 'any'>(
+    () => loadAssigned(cluster.id).kind
+  )
+  const [assignValue, setAssignValue] = useState(() => loadAssigned(cluster.id).value)
+  const [filter, setFilter] = useState<JiraListFilter>(() => {
+    const saved = loadAssigned(cluster.id)
+    return saved.kind === 'any' ? {} : { assigned: { kind: saved.kind, value: saved.value } }
+  })
+
+  function applyFilter(next: {
+    text?: string
+    openOnly?: boolean
+    kind?: JiraAssignKind | 'any'
+    value?: string
+  }): void {
+    const kind = next.kind ?? assignKind
+    const value = next.value ?? assignValue
+    try {
+      localStorage.setItem(`gateh.jira.assigned.${cluster.id}`, JSON.stringify({ kind, value }))
+    } catch {
+      // Applies for this session only.
+    }
+    setFilter({
+      text: (next.text ?? text).trim(),
+      openOnly: next.openOnly ?? openOnly,
+      assigned: kind === 'any' ? undefined : { kind, value }
+    })
+  }
   const [autoRefresh, setAutoRefresh] = useState(loadAutoRefresh)
 
   async function refresh(): Promise<void> {
     setRefreshing(true)
     try {
-      setIssues(await window.api.jira.list(cluster.id))
+      setIssues(await window.api.jira.list(cluster.id, filter))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Jira issues.')
@@ -58,7 +110,7 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
   useEffect(() => {
     let cancelled = false
     window.api.jira
-      .list(cluster.id)
+      .list(cluster.id, filter)
       .then((result) => {
         if (!cancelled) setIssues(result)
       })
@@ -71,14 +123,14 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
     return () => {
       cancelled = true
     }
-  }, [cluster.id])
+  }, [cluster.id, filter])
 
   useEffect(() => {
     if (!autoRefresh || !cluster.jira) return
     const timer = setInterval(() => void refresh(), AUTO_REFRESH_MS)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, cluster.id, cluster.jira])
+  }, [autoRefresh, cluster.id, cluster.jira, filter])
 
   async function handleCreate(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -103,6 +155,70 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
 
   return (
     <div className="status-section">
+      {!cluster.jira.projectKey && !cluster.jira.jql?.trim() && cluster.tags.length === 0 && (
+        <p className="hint">
+          This cluster has no Jira project key, JQL filter or tags, so this lists every ticket you
+          can see (last 90 days). Add a tag or a project key to the cluster to scope it.
+        </p>
+      )}
+      <form
+        className="slurm-toolbar"
+        onSubmit={(e) => {
+          e.preventDefault()
+          applyFilter({})
+        }}
+      >
+        <input
+          className="slurm-user-filter"
+          type="text"
+          placeholder="Search these tickets..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="Search Jira tickets"
+        />
+        <label className="form-field-checkbox">
+          <input
+            type="checkbox"
+            checked={openOnly}
+            onChange={(e) => {
+              setOpenOnly(e.target.checked)
+              applyFilter({ openOnly: e.target.checked })
+            }}
+          />
+          Unresolved only
+        </label>
+        <select
+          className="slurm-user-filter"
+          value={assignKind}
+          onChange={(e) => {
+            const kind = e.target.value as JiraAssignKind | 'any'
+            setAssignKind(kind)
+            // Kinds with a name wait for it; the rest apply straight away.
+            if (!NEEDS_VALUE.includes(kind)) applyFilter({ kind })
+          }}
+          aria-label="Filter by assignee"
+        >
+          <option value="any">Assigned to anyone</option>
+          <option value="me">Assigned to me</option>
+          <option value="unassigned">Unassigned</option>
+          <option value="team">Assigned to team...</option>
+          <option value="group">Assigned to group...</option>
+          <option value="user">Assigned to user...</option>
+        </select>
+        {NEEDS_VALUE.includes(assignKind) && (
+          <input
+            className="slurm-user-filter"
+            type="text"
+            placeholder={assignKind === 'user' ? 'Name or account' : `${assignKind} name`}
+            value={assignValue}
+            onChange={(e) => setAssignValue(e.target.value)}
+            aria-label="Assignee, team or group name"
+          />
+        )}
+        <button type="submit" className="btn btn-sm">
+          Search
+        </button>
+      </form>
       <div className="slurm-toolbar">
         <label className="form-field-checkbox">
           <input

@@ -1,4 +1,9 @@
-import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
+import type {
+  CreateJiraIssueInput,
+  JiraIssueSummary,
+  JiraListFilter,
+  JiraProfile
+} from '../../shared/types'
 import { toClusterSlug } from '../../shared/clusterSlug'
 
 // Talks to a cluster's Jira instance (Cloud or Data Center/Server) over its REST API. Uses the
@@ -61,8 +66,29 @@ function toSummary(profile: JiraProfile, issue: JiraApiIssue): JiraIssueSummary 
   }
 }
 
-function baseJql(profile: JiraProfile): string {
-  return profile.jql?.trim() || (profile.projectKey ? `project = "${profile.projectKey}"` : '')
+/** The cluster's own scope, parenthesised so a user's `a OR b` can't swallow the clauses added
+ *  after it, and without a trailing ORDER BY (each caller adds its own). Empty when unscoped. */
+function baseJql(profile: JiraProfile, tags: string[] = []): string {
+  const labels = [...new Set(tags.map(toClusterSlug))]
+  const mentions = [...new Set(tags.map((t) => t.trim()).filter(Boolean))]
+  // An explicit JQL wins; otherwise the project key and the cluster's own tags narrow it. A tag
+  // matches a ticket carrying it as a label or mentioning it, since existing tickets are rarely
+  // labelled by hand.
+  const tagClause = [
+    labels.length ? `labels in (${labels.map((l) => `"${l}"`).join(', ')})` : '',
+    ...mentions.map((t) => `text ~ "${t.replace(/[\\"]/g, '\\$&')}"`)
+  ]
+    .filter(Boolean)
+    .join(' OR ')
+  const derived = [
+    profile.projectKey ? `project = "${profile.projectKey}"` : '',
+    tagClause && `(${tagClause})`
+  ]
+    .filter(Boolean)
+    .join(' AND ')
+  const raw = profile.jql?.trim() || derived
+  const scope = raw.replace(/\s+order\s+by\s.*$/i, '').trim()
+  return scope ? `(${scope})` : ''
 }
 
 async function searchJiraIssues(
@@ -87,13 +113,71 @@ async function searchJiraIssues(
   return data.issues.map((issue) => toSummary(profile, issue))
 }
 
+function quoteJql(value: string): string {
+  return `"${value.replace(/[\\"]/g, '\\$&')}"`
+}
+
+function assignedClause(assigned: JiraListFilter['assigned']): string {
+  if (!assigned) return ''
+  const value = assigned.value?.trim() ?? ''
+  switch (assigned.kind) {
+    case 'me':
+      return 'assignee = currentUser()'
+    case 'unassigned':
+      return 'assignee is EMPTY'
+    case 'user':
+      return value ? `assignee = ${quoteJql(value)}` : ''
+    case 'group':
+      return value ? `assignee in membersOf(${quoteJql(value)})` : ''
+    // Jira Cloud's Team field; Server/Data Center sites without it get Jira's own error.
+    case 'team':
+      return value ? `Team = ${quoteJql(value)}` : ''
+    default:
+      return ''
+  }
+}
+
 export async function listJiraIssues(
   profile: JiraProfile,
-  token: string
+  token: string,
+  tags: string[],
+  filter: JiraListFilter = {}
 ): Promise<JiraIssueSummary[]> {
   // The v3 search rejects a query with no restriction at all, so an unscoped profile gets a window.
-  const scope = baseJql(profile) || 'updated >= -90d'
-  return searchJiraIssues(profile, token, `${scope} ORDER BY updated DESC`)
+  const clauses = [baseJql(profile, tags) || 'updated >= -90d']
+  const text = filter.text?.trim()
+  if (text) clauses.push(`text ~ "${text.replace(/[\\"]/g, '\\$&')}"`)
+  if (filter.openOnly) clauses.push('statusCategory != Done')
+  const assigned = assignedClause(filter.assigned)
+  if (assigned) clauses.push(assigned)
+  return searchJiraIssues(profile, token, `${clauses.join(' AND ')} ORDER BY updated DESC`)
+}
+
+/** How many tickets in the cluster's own scope are still unresolved. Jira Cloud's approximate-count
+ *  endpoint; Server/Data Center has none, so it falls back to the old search's `total`. */
+export async function countOpenJiraIssues(
+  profile: JiraProfile,
+  token: string,
+  tags: string[]
+): Promise<number> {
+  const scope = baseJql(profile, tags)
+  // Without a project, tag or JQL this would count every ticket the account can see - not the cluster's.
+  if (!scope) throw new Error('This cluster has no Jira project key, tags or JQL filter.')
+  const jql = `${scope} AND statusCategory != Done`
+  try {
+    const res = await jiraFetch(profile, token, '/rest/api/3/search/approximate-count', {
+      method: 'POST',
+      body: JSON.stringify({ jql })
+    })
+    return ((await res.json()) as { count: number }).count
+  } catch (err) {
+    if (!(err instanceof Error) || !/HTTP (404|405)\b/.test(err.message)) throw err
+    const res = await jiraFetch(profile, token, '/rest/api/2/search', {
+      method: 'POST',
+      body: JSON.stringify({ jql, maxResults: 0 })
+    })
+    return ((await res.json()) as { total: number }).total
+  }
 }
 
 /** Tickets mentioning a given compute node, scoped the same way as listJiraIssues (the cluster's
@@ -114,7 +198,8 @@ export async function createJiraIssue(
   profile: JiraProfile,
   token: string,
   input: CreateJiraIssueInput,
-  clusterName: string
+  clusterName: string,
+  tags: string[]
 ): Promise<JiraIssueSummary> {
   if (!profile.projectKey) {
     throw new Error('This cluster has no default Jira project key configured.')
@@ -139,7 +224,10 @@ export async function createJiraIssue(
 
   let created: { key: string }
   try {
-    created = await createIssue({ ...baseFields, labels: [toClusterSlug(clusterName)] })
+    created = await createIssue({
+      ...baseFields,
+      labels: [...new Set([clusterName, ...tags].map(toClusterSlug))]
+    })
   } catch {
     created = await createIssue(baseFields)
   }
