@@ -10,6 +10,7 @@ import {
 import GpuUsage from './GpuUsage'
 import NodeDetailDialog from './NodeDetailDialog'
 import SlurmHistory from './SlurmHistory'
+import NodeJobsDialog from './NodeJobsDialog'
 import NodeList from './NodeList'
 import { shortTime, stateClass } from './slurmState'
 
@@ -104,6 +105,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const [arrays, setArrays] = useState<Record<string, ArrayTasks>>({})
   const [actionError, setActionError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<SlurmNode | null>(null)
+  const [jobsOnNode, setJobsOnNode] = useState<{ node: SlurmNode; jobs: SlurmJob[] } | null>(null)
   const [visibleSections, setVisibleSections] = useState<Set<SlurmSubsection>>(
     () => new Set(ALL_SUBSECTIONS)
   )
@@ -459,7 +461,12 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                 </div>
               )}
               {snapshot.nodes.length > 0 && (
-                <NodeList nodes={snapshot.nodes} onSelect={setSelectedNode} />
+                <NodeList
+                  nodes={snapshot.nodes}
+                  onSelect={setSelectedNode}
+                  jobs={snapshot.jobs}
+                  onShowJobs={(node, jobs) => setJobsOnNode({ node, jobs })}
+                />
               )}
             </>
           )}
@@ -468,13 +475,19 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
 
       <SlurmHistory clusterId={cluster.id} autoLoad={!cluster.teleport} />
 
+      {jobsOnNode && (
+        <NodeJobsDialog
+          node={jobsOnNode.node}
+          jobs={jobsOnNode.jobs}
+          onClose={() => setJobsOnNode(null)}
+        />
+      )}
+
       {selectedNode && (
         <NodeDetailDialog
           key={selectedNode.name}
           cluster={cluster}
           node={selectedNode}
-          jobs={snapshot?.jobs ?? []}
-          allUsers={scheduler.scope === 'partitions'}
           onClose={() => setSelectedNode(null)}
         />
       )}

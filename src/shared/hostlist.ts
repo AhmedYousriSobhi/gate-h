@@ -51,9 +51,3 @@ export function expandHostlist(list: string, limit = DEFAULT_HOSTLIST_LIMIT): st
   }
   return hosts
 }
-
-/** Whether `name` is in the hostlist, without the usual 64-name cap - a node on a wide job must
- *  still be found. */
-export function hostlistContains(list: string, name: string): boolean {
-  return expandHostlist(list, 100_000).includes(name)
-}
