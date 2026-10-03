@@ -14,7 +14,8 @@ const MAX_BACKOFF_MULTIPLIER = 8
  *  pulled out into a hook - pure code motion, same state/effect, no behavior change. */
 export function useStorageUsage(
   cluster: ClusterSummary,
-  extraPaths: string[] = []
+  extraPaths: string[] = [],
+  auto?: { enabled: boolean; intervalSec: number }
 ): {
   usage: StorageUsage[] | null
   loading: boolean
@@ -46,9 +47,10 @@ export function useStorageUsage(
     }
   }
 
-  const autoRefresh = cluster.storage?.autoRefresh ?? false
+  // The Status panel's own toggle adds to whatever the cluster's settings already turn on.
+  const autoRefresh = auto?.enabled ?? cluster.storage?.autoRefresh ?? false
   const intervalSec = Math.max(
-    cluster.storage?.intervalSec ?? MIN_STORAGE_INTERVAL_SEC,
+    auto?.intervalSec ?? cluster.storage?.intervalSec ?? MIN_STORAGE_INTERVAL_SEC,
     MIN_STORAGE_INTERVAL_SEC
   )
 
@@ -75,7 +77,8 @@ export function useStorageUsage(
         timer = setTimeout(tick, intervalSec * 1000 * backoff)
       })
     }
-    timer = setTimeout(tick, intervalSec * 1000)
+    // First check right away, so turning auto-recheck on (or opening Status) shows data now.
+    timer = setTimeout(tick, 0)
 
     return () => {
       disposed = true

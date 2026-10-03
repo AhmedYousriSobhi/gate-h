@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Plus, RefreshCw, X } from 'lucide-react'
 import {
+  DEFAULT_STORAGE_INTERVAL_SEC,
   MIN_STORAGE_INTERVAL_SEC,
   STORAGE_PATH_PATTERN,
-  type ClusterSummary
+  type ClusterSummary,
+  type StorageConfig
 } from '../../../../shared/types'
 import { useStorageUsage } from '../../hooks/useStorageUsage'
 
@@ -29,6 +31,43 @@ function loadPaths(clusterId: string): string[] {
   } catch {
     return []
   }
+}
+
+const INTERVALS = [
+  { sec: 60, label: '1 min' },
+  { sec: 300, label: '5 min' },
+  { sec: 900, label: '15 min' },
+  { sec: 3600, label: '1 hour' }
+]
+
+interface AutoSetting {
+  enabled: boolean
+  intervalSec: number
+}
+
+/** The panel's own choice wins; until one is made, the cluster's saved settings apply. */
+function loadAuto(clusterId: string, config: StorageConfig | null | undefined): AutoSetting {
+  const fallback = {
+    enabled: config?.autoRefresh ?? false,
+    intervalSec: Math.max(
+      config?.intervalSec ?? DEFAULT_STORAGE_INTERVAL_SEC,
+      MIN_STORAGE_INTERVAL_SEC
+    )
+  }
+  try {
+    const raw: unknown = JSON.parse(
+      localStorage.getItem(`gateh.storage.auto.${clusterId}`) ?? 'null'
+    )
+    if (raw && typeof raw === 'object') {
+      const { enabled, intervalSec } = raw as Partial<AutoSetting>
+      if (typeof enabled === 'boolean' && INTERVALS.some((i) => i.sec === intervalSec)) {
+        return { enabled, intervalSec: intervalSec as number }
+      }
+    }
+  } catch {
+    // Fall through to the cluster's settings.
+  }
+  return fallback
 }
 
 function Meter({
@@ -76,13 +115,23 @@ export default function StorageSection({
   const [extraPaths, setExtraPaths] = useState(() => loadPaths(cluster.id))
   const [draft, setDraft] = useState('')
   const [draftError, setDraftError] = useState<string | null>(null)
-  const { usage, loading, error, checkedAt, check } = useStorageUsage(cluster, extraPaths)
+  const [auto, setAuto] = useState(() => loadAuto(cluster.id, cluster.storage))
+  const { usage, loading, error, checkedAt, check } = useStorageUsage(cluster, extraPaths, {
+    enabled: auto.enabled,
+    intervalSec: auto.intervalSec
+  })
   const configured = cluster.storage?.paths ?? []
-  const autoRefresh = cluster.storage?.autoRefresh ?? false
-  const intervalSec = Math.max(
-    cluster.storage?.intervalSec ?? MIN_STORAGE_INTERVAL_SEC,
-    MIN_STORAGE_INTERVAL_SEC
-  )
+  const autoRefresh = auto.enabled
+  const intervalSec = auto.intervalSec
+
+  function saveAuto(next: AutoSetting): void {
+    setAuto(next)
+    try {
+      localStorage.setItem(`gateh.storage.auto.${cluster.id}`, JSON.stringify(next))
+    } catch {
+      // Kept for this session only.
+    }
+  }
 
   function savePaths(next: string[]): void {
     setExtraPaths(next)
@@ -113,8 +162,28 @@ export default function StorageSection({
           {checkedAt
             ? `Checked at ${checkedAt.toLocaleTimeString()}`
             : [...configured, ...extraPaths].join(', ') || 'No paths yet'}
-          {autoRefresh && ` · auto-refreshing every ${intervalSec}s`}
         </span>
+        <label className="form-field-checkbox">
+          <input
+            type="checkbox"
+            checked={autoRefresh}
+            onChange={(e) => saveAuto({ ...auto, enabled: e.target.checked })}
+          />
+          Auto-recheck
+        </label>
+        <select
+          className="slurm-user-filter"
+          value={intervalSec}
+          disabled={!autoRefresh}
+          onChange={(e) => saveAuto({ ...auto, intervalSec: Number(e.target.value) })}
+          aria-label="Auto-recheck interval"
+        >
+          {INTERVALS.map((i) => (
+            <option key={i.sec} value={i.sec}>
+              every {i.label}
+            </option>
+          ))}
+        </select>
         <button
           className="btn btn-sm"
           disabled={loading || configured.length + extraPaths.length === 0}
