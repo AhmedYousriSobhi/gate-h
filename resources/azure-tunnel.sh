@@ -164,7 +164,22 @@ validate_port() {
     die "$EXIT_USAGE" "$flag must be a port number (1-65535), got '$value'"
 }
 
+# Every value below ends up as an argv element of `az`/`ssh` (never through a shell), but a value
+# starting with "-" would still be parsed as one of their options (e.g. a "resource group" of
+# "--query ..."), and whitespace/control characters have no place in an Azure name, host or id.
+reject_unsafe_values() {
+  local pair name value
+  for pair in NAME RESOURCE_GROUP SUBSCRIPTION TENANT BASTION_NAME TARGET_ID TARGET_IP VM_NAME REMOTE_HOST LOCAL_USER; do
+    name=$pair
+    value=${!name:-}
+    if [[ -z "$value" ]]; then continue; fi
+    [[ "$value" =~ ^[^-[:space:][:cntrl:]][^[:space:][:cntrl:]]*$ ]] ||
+      die "$EXIT_USAGE" "Invalid value for $name: must not start with '-' or contain whitespace/control characters"
+  done
+}
+
 validate_up_args() {
+  reject_unsafe_values
   [[ -n "$LOCAL_PORT" ]] || die "$EXIT_USAGE" "--local-port is required"
   validate_port "$LOCAL_PORT" --local-port
   validate_port "$REMOTE_PORT" --remote-port

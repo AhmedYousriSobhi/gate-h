@@ -372,6 +372,43 @@ const BANNER_WAIT_MS = 30_000
 // succeeded well inside its own window, so this is a liveness retry, not a longer single wait.
 const BANNER_WAIT_ATTEMPTS = 2
 
+// Azure CLI 2.69.0 and earlier are listed as affected by CVE-2025-24049 (local privilege
+// escalation through command injection); sources disagree on whether 2.69.0 itself is fixed, so
+// the warning threshold is the first release after it. A warning only - a distro may have
+// backported the fix, and signing in is not something to block on.
+const MIN_AZ_VERSION = [2, 70, 0]
+let azVersionChecked = false
+
+function versionBelow(version: string, min: number[]): boolean {
+  const parts = version.split('.').map((n) => parseInt(n, 10))
+  for (let i = 0; i < min.length; i++) {
+    const have = Number.isNaN(parts[i]) ? 0 : (parts[i] ?? 0)
+    if (have !== min[i]) return have < min[i]
+  }
+  return false
+}
+
+/** Once per app run, warns (through the cluster's own progress feed) about an outdated Azure CLI. */
+function warnIfAzOutdated(clusterId: string): void {
+  if (azVersionChecked) return
+  azVersionChecked = true
+  execAz(['version', '--output', 'json'], { timeout: AUTH_CHECK_TIMEOUT_MS }, (err, stdout) => {
+    if (err) return
+    try {
+      const version = (JSON.parse(stdout) as Record<string, string>)['azure-cli']
+      if (version && versionBelow(version, MIN_AZ_VERSION)) {
+        broadcast?.({
+          clusterId,
+          phase: 'auth',
+          message: `Warning: Azure CLI ${version} is older than ${MIN_AZ_VERSION.join('.')} - versions up to 2.69.0 have a known local privilege-escalation advisory (CVE-2025-24049). Consider updating it.`
+        })
+      }
+    } catch {
+      // Unparseable output - nothing to compare.
+    }
+  })
+}
+
 /** Stage 2: the cluster's configured subscription must be visible to the account signed in for its
  *  tenant. Checked here, scoped per call (`--subscription`, never `az account set`), so a wrong or
  *  missing subscription fails with a clear message instead of a raw error from deep inside the
@@ -432,6 +469,7 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
   const pending = pendingUps.get(cluster.id)
   if (pending) return pending
   const run = (async () => {
+    warnIfAzOutdated(cluster.id)
     const auth = await checkAzureAuth(cluster.azureTunnel?.tenant)
     if (auth.status !== 'valid') {
       throw new Error(
