@@ -14,7 +14,7 @@ import { registerProfileIpcHandlers } from './ipc/profiles'
 import { registerLayoutIpcHandlers } from './ipc/layout'
 import { registerOverviewIpcHandlers } from './ipc/overview'
 import { registerAzureIpcHandlers } from './ipc/azure'
-import { setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
+import { pruneUnusedAzureProfiles, setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
 import { registerTeleportIpcHandlers } from './ipc/teleport'
 import { startTeleportSessionMonitor, stopTeleportSessionMonitor } from './teleport/sessionState'
 import { closeAllSessions } from './ssh/manager'
@@ -177,6 +177,8 @@ app.whenReady().then(() => {
   registerLayoutIpcHandlers()
   registerOverviewIpcHandlers()
   registerAzureIpcHandlers()
+  // Catches profiles orphaned by anything that bypassed the remove/edit handlers (a crash mid-way).
+  pruneUnusedAzureProfiles()
   registerTeleportIpcHandlers()
   registerSchedulerIpcHandlers()
   registerStorageIpcHandlers()

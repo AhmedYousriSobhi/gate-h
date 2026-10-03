@@ -1,6 +1,6 @@
 import { app } from 'electron'
-import { execFile, spawn } from 'child_process'
-import { mkdirSync, readdirSync, rmSync } from 'fs'
+import { execFile, spawn, type ChildProcess, type ExecFileException } from 'child_process'
+import { chmodSync, mkdirSync, readdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { createInterface } from 'readline'
 import scriptPath from '../../../resources/azure-tunnel.sh?asset&asarUnpack'
@@ -96,12 +96,40 @@ function upArgs(cluster: ClusterSummary): string[] {
 // tooling) spawns. A cluster with no tenant keeps the CLI's default profile, unchanged.
 const TENANT_PATTERN = /^[A-Za-z0-9.-]+$/
 
+/** `execFile('az', ...)` with stdin closed straight away: execFile leaves it as an open pipe, so an
+ *  unexpected prompt would otherwise sit there until the timeout instead of failing at once. */
+function execAz(
+  args: string[],
+  options: { timeout: number; env?: NodeJS.ProcessEnv; maxBuffer?: number },
+  callback: (error: ExecFileException | null, stdout: string) => void
+): ChildProcess {
+  const child = execFile('az', args, options, (err, stdout) => callback(err, stdout))
+  child.stdin?.end()
+  return child
+}
+
 function profilesRoot(): string {
   return join(app.getPath('userData'), 'azure')
 }
 
 function profileDir(tenant: string): string {
   return join(profilesRoot(), tenant.toLowerCase())
+}
+
+/** Owner-only on the profile dir and everything in it (the CLI keeps tokens there as a plaintext
+ *  file on Linux/macOS). `mkdirSync`'s mode only applies on creation and the CLI's own files take
+ *  whatever umask it runs under, so this is re-applied rather than assumed. */
+function lockDown(path: string): void {
+  try {
+    chmodSync(path, 0o700)
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const child = join(path, entry.name)
+      if (entry.isDirectory()) lockDown(child)
+      else chmodSync(child, 0o600)
+    }
+  } catch {
+    // Best effort (e.g. a file vanishing mid-walk, or Windows where chmod is mostly a no-op).
+  }
 }
 
 function azureEnv(tenant?: string): NodeJS.ProcessEnv {
@@ -113,6 +141,8 @@ function azureEnv(tenant?: string): NodeJS.ProcessEnv {
   if (tenant && TENANT_PATTERN.test(tenant)) {
     const dir = profileDir(tenant)
     mkdirSync(dir, { recursive: true, mode: 0o700 })
+    chmodSync(profilesRoot(), 0o700)
+    lockDown(dir)
     env.AZURE_CONFIG_DIR = dir
   }
   return env
@@ -220,7 +250,7 @@ export function checkAzureAuth(tenant?: string): Promise<AzureAuthState> {
         ]
       : ['account', 'show', '--only-show-errors', '--query', 'user.name', '--output', 'tsv']
     const env = azureEnv(scopedTenant)
-    execFile('az', listArgs, { timeout: AUTH_CHECK_TIMEOUT_MS, env }, (err, stdout) => {
+    execAz(listArgs, { timeout: AUTH_CHECK_TIMEOUT_MS, env }, (err, stdout) => {
       if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
         resolve({ status: 'cli-missing' })
         return
@@ -232,7 +262,7 @@ export function checkAzureAuth(tenant?: string): Promise<AzureAuthState> {
       }
       const tokenArgs = ['account', 'get-access-token', '--only-show-errors', '--output', 'none']
       if (scopedTenant) tokenArgs.push('--tenant', scopedTenant)
-      execFile('az', tokenArgs, { timeout: AUTH_CHECK_TIMEOUT_MS, env }, (tokenErr) =>
+      execAz(tokenArgs, { timeout: AUTH_CHECK_TIMEOUT_MS, env }, (tokenErr) =>
         resolve({ status: tokenErr ? 'expired' : 'valid', account })
       )
     })
@@ -249,6 +279,8 @@ function needsDeviceCode(): boolean {
  *  status, or its eventual error) through the same `azure:status` channel a tunnel pre-flight uses
  *  - see TerminalPanel's "Authenticate" action. Only ever started from that explicit click, never
  *  automatically. */
+const LOGIN_TIMEOUT_MS = 10 * 60_000
+
 export function loginAzure(cluster: ClusterSummary, deviceCode = false): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = ['login', '--only-show-errors', '--output', 'none']
@@ -258,7 +290,12 @@ export function loginAzure(cluster: ClusterSummary, deviceCode = false): Promise
     const tenant = cluster.azureTunnel?.tenant
     if (tenant) args.push('--tenant', tenant)
 
-    const child = spawn('az', args, { stdio: ['ignore', 'pipe', 'pipe'], env: azureEnv(tenant) })
+    // Capped: a device-code login the user walks away from would otherwise wait forever.
+    const child = spawn('az', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: azureEnv(tenant),
+      timeout: LOGIN_TIMEOUT_MS
+    })
     let lastError = ''
 
     createInterface({ input: child.stdout }).on('line', (line) => {
@@ -278,11 +315,19 @@ export function loginAzure(cluster: ClusterSummary, deviceCode = false): Promise
     })
     child.on('close', (code) => {
       if (code === 0) {
+        if (tenant && TENANT_PATTERN.test(tenant)) lockDown(profileDir(tenant))
         broadcast?.({ clusterId: cluster.id, phase: 'auth', message: 'Logged in to Azure' })
         resolve()
         return
       }
-      reject(new Error(lastError || `az login failed (exit code ${code})`))
+      reject(
+        new Error(
+          lastError ||
+            (code === null
+              ? 'az login timed out - start again with Authenticate'
+              : `az login failed (exit code ${code})`)
+        )
+      )
     })
   })
 }
@@ -300,7 +345,7 @@ export function clearAzureAuth(cluster: ClusterSummary): Promise<void> {
     return Promise.resolve()
   }
   return new Promise((resolve, reject) => {
-    execFile('az', ['account', 'clear', '--only-show-errors'], { timeout: 20_000 }, (err) => {
+    execAz(['account', 'clear', '--only-show-errors'], { timeout: 20_000 }, (err) => {
       if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
         reject(new Error("Could not run the Azure CLI (is 'az' installed?)"))
         return
@@ -334,8 +379,7 @@ const BANNER_WAIT_ATTEMPTS = 2
 function checkSubscription(cluster: ClusterSummary, account?: string): Promise<string> {
   const tunnel = cluster.azureTunnel
   return new Promise((resolve, reject) => {
-    execFile(
-      'az',
+    execAz(
       [
         'account',
         'show',
@@ -490,8 +534,7 @@ export function isTunnelUp(clusterId: string): Promise<boolean> {
  *  isn't logged in yet. */
 export function listSubscriptions(): Promise<AzureSubscription[]> {
   return new Promise((resolve, reject) => {
-    execFile(
-      'az',
+    execAz(
       [
         'account',
         'list',
@@ -536,8 +579,7 @@ const VM_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
 function vmsNamed(name: string, subscription: AzureSubscription): Promise<AzureVmMatch[]> {
   return new Promise((resolve) => {
-    execFile(
-      'az',
+    execAz(
       [
         'vm',
         'list',
