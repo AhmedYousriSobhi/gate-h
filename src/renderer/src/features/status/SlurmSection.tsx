@@ -10,6 +10,7 @@ import {
 import GpuUsage from './GpuUsage'
 import NodeDetailDialog from './NodeDetailDialog'
 import SlurmHistory from './SlurmHistory'
+import NodeJobsDialog from './NodeJobsDialog'
 import NodeList from './NodeList'
 import { shortTime, stateClass } from './slurmState'
 
@@ -104,12 +105,14 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const [arrays, setArrays] = useState<Record<string, ArrayTasks>>({})
   const [actionError, setActionError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<SlurmNode | null>(null)
+  const [jobsOnNode, setJobsOnNode] = useState<{ node: SlurmNode; jobs: SlurmJob[] } | null>(null)
   const [visibleSections, setVisibleSections] = useState<Set<SlurmSubsection>>(
     () => new Set(ALL_SUBSECTIONS)
   )
   const [stateFilter, setStateFilter] = useState<Set<string>>(new Set())
   const [textFilter, setTextFilter] = useState('')
   const [partitionFilter, setPartitionFilter] = useState('')
+  const [reasonFilter, setReasonFilter] = useState('')
   const watching = active && scheduler !== null
   // Re-watch after the settings change, so the next snapshot reflects them.
   const configKey = scheduler ? JSON.stringify(scheduler) : null
@@ -183,7 +186,15 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const counts = new Map<string, number>()
   for (const job of snapshot.jobs) counts.set(job.state, (counts.get(job.state) ?? 0) + 1)
   const needle = textFilter.trim().toLowerCase()
-  const filtersActive = stateFilter.size > 0 || needle.length > 0 || partitionFilter !== ''
+  const filtersActive =
+    stateFilter.size > 0 || needle.length > 0 || partitionFilter !== '' || reasonFilter !== ''
+  // Why jobs are waiting: squeue prints it as `(Priority)`; the same reason counts together.
+  const pendingReasons = new Map<string, number>()
+  for (const job of snapshot.jobs) {
+    if (job.state !== 'PENDING') continue
+    const reason = job.reason.replace(/^\(|\)$/g, '') || 'Unknown'
+    pendingReasons.set(reason, (pendingReasons.get(reason) ?? 0) + 1)
+  }
   const jobPartitions = [...new Set(snapshot.jobs.map((job) => job.partition))].sort()
   // Counts/pills above the table always reflect every job, even while filtered, so there's
   // something to filter back to - only the table body is narrowed.
@@ -191,6 +202,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
     (job) =>
       (stateFilter.size === 0 || stateFilter.has(job.state)) &&
       (partitionFilter === '' || job.partition === partitionFilter) &&
+      (reasonFilter === '' ||
+        (job.state === 'PENDING' && job.reason.replace(/^\(|\)$/g, '') === reasonFilter)) &&
       (!needle ||
         [job.id, job.name, job.user ?? ''].some((field) => field.toLowerCase().includes(needle)))
   )
@@ -207,6 +220,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
     setStateFilter(new Set())
     setTextFilter('')
     setPartitionFilter('')
+    setReasonFilter('')
   }
 
   return (
@@ -260,6 +274,30 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
           />
         </button>
       </div>
+
+      {visibleSections.has('jobs') && pendingReasons.size > 0 && (
+        <div className="slurm-toolbar">
+          <span className="slurm-dim">Waiting because:</span>
+          <div className="slurm-counts">
+            {[...pendingReasons]
+              .sort((a, b) => b[1] - a[1])
+              .map(([reason, count]) => (
+                <button
+                  key={reason}
+                  type="button"
+                  title={`Show only jobs waiting for ${reason}`}
+                  aria-pressed={reasonFilter === reason}
+                  className={`issue-status issue-status-todo slurm-count-pill${
+                    reasonFilter === reason ? ' slurm-count-pill-selected' : ''
+                  }${reasonFilter !== '' && reasonFilter !== reason ? ' slurm-count-pill-dimmed' : ''}`}
+                  onClick={() => setReasonFilter(reasonFilter === reason ? '' : reason)}
+                >
+                  {count} {reason}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
 
       {visibleSections.has('jobs') && snapshot.jobs.length > 0 && (
         <div className="slurm-toolbar">
@@ -423,7 +461,12 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                 </div>
               )}
               {snapshot.nodes.length > 0 && (
-                <NodeList nodes={snapshot.nodes} onSelect={setSelectedNode} />
+                <NodeList
+                  nodes={snapshot.nodes}
+                  onSelect={setSelectedNode}
+                  jobs={snapshot.jobs}
+                  onShowJobs={(node, jobs) => setJobsOnNode({ node, jobs })}
+                />
               )}
             </>
           )}
@@ -431,6 +474,14 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
       )}
 
       <SlurmHistory clusterId={cluster.id} autoLoad={!cluster.teleport} />
+
+      {jobsOnNode && (
+        <NodeJobsDialog
+          node={jobsOnNode.node}
+          jobs={jobsOnNode.jobs}
+          onClose={() => setJobsOnNode(null)}
+        />
+      )}
 
       {selectedNode && (
         <NodeDetailDialog
