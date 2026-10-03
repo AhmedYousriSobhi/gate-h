@@ -86,7 +86,7 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       // Only for embedding a cluster's own Grafana panels live (see grafana/embed.ts) - the
       // webview is pointed exclusively at Grafana origins the user configured, in their own
       // dedicated session partition.
