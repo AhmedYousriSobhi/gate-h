@@ -147,7 +147,7 @@ export async function listJiraIssues(
   const clauses = [baseJql(profile, tags) || 'updated >= -90d']
   const text = filter.text?.trim()
   if (text) clauses.push(`text ~ "${text.replace(/[\\"]/g, '\\$&')}"`)
-  if (filter.openOnly) clauses.push('resolution = Unresolved')
+  if (filter.openOnly) clauses.push('statusCategory != Done')
   const assigned = assignedClause(filter.assigned)
   if (assigned) clauses.push(assigned)
   return searchJiraIssues(profile, token, `${clauses.join(' AND ')} ORDER BY updated DESC`)
@@ -163,7 +163,7 @@ export async function countOpenJiraIssues(
   const scope = baseJql(profile, tags)
   // Without a project, tag or JQL this would count every ticket the account can see - not the cluster's.
   if (!scope) throw new Error('This cluster has no Jira project key, tags or JQL filter.')
-  const jql = `${scope} AND resolution = Unresolved`
+  const jql = `${scope} AND statusCategory != Done`
   try {
     const res = await jiraFetch(profile, token, '/rest/api/3/search/approximate-count', {
       method: 'POST',
