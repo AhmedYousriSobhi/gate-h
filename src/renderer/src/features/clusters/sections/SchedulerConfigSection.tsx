@@ -127,12 +127,11 @@ export default function SchedulerConfigSection({
             )}
           </div>
           <p className="hint">
-            A hostname, not a command - leave this blank unless squeue/sinfo need to run on a
-            different node than the terminal&apos;s own (e.g. a bastion/login node that doesn&apos;t
-            host Slurm itself). Gate-H already runs sinfo/squeue automatically above once Slurm is
-            enabled; this field doesn&apos;t change what runs, only which node it runs on. The name
-            is resolved by the already-connected node reached through whatever jump host or tunnel
-            is configured above, not by your own machine - it must be resolvable from there.
+            A hostname, not a command. Once connected, Gate-H runs <code>ssh &lt;node&gt;</code>{' '}
+            from the terminal&apos;s node and collects squeue/sinfo there. That is your login
+            node&apos;s own ssh, so it needs passwordless ssh (a key or agent) from that node to
+            this one, and the name must resolve from there. Leave it blank if squeue/sinfo work on
+            the terminal&apos;s own node.
           </p>
         </>
       )}

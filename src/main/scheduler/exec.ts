@@ -1,7 +1,5 @@
 import { spawn } from 'child_process'
 import type { Client } from 'ssh2'
-import { getClusterSecrets } from '../clusters'
-import { buildConnectConfig, connectClient, openForward } from '../ssh/connect'
 import { getLiveClient } from '../ssh/manager'
 import { getTeleportSessions } from '../teleport/sessionState'
 import { EXIT_NO_SESSION, teleportExecCommand } from '../teleport/session'
@@ -11,9 +9,9 @@ import type { ClusterSummary } from '../../shared/types'
 // session the user already has open. It never opens a connection or logs in: an ssh2 cluster
 // gets an extra channel on its terminal's connection, which also covers jump hosts and Azure
 // tunnels, and a Teleport cluster gets a `tsh ssh --no-login`, only while its tsh session is
-// valid. When `scheduler.execTarget` is set, the command instead runs on that internal node - one
-// more forwarded ssh2 hop for an already-live client, or `tsh ssh --no-login` to that node for a
-// Teleport cluster. Runs for one cluster are queued, so a cluster never has more than one
+// valid. When `scheduler.execTarget` is set, the command instead runs on that internal node - an
+// `ssh <node>` run from the connected node for an already-live client, or `tsh ssh --no-login` to
+// that node for a Teleport cluster. Runs for one cluster are queued, so a cluster never has more than one
 // scheduler channel open, and OpenSSH's MaxSessions (10 by default) is left to the terminal tabs.
 
 const TIMEOUT_MS = 15_000
@@ -99,43 +97,22 @@ function execOverSsh(client: Client, command: string, stdin?: string): Promise<E
   })
 }
 
-/** Runs on one more ssh2 `forwardOut` hop from the cluster's already-live client to
- *  `scheduler.execTarget` - same identity/credentials as `cluster.connection`, since the target is
- *  just a different node reachable through the same already-authenticated chain. Opened and closed
- *  per run, same per-run cost as execOverTeleport's fresh `tsh` spawn - not worth caching for a
- *  30-second-minimum poll interval. */
-async function execViaForward(
-  client: Client,
-  cluster: ClusterSummary,
-  target: { host: string; port?: number },
-  command: string,
-  stdin?: string
-): Promise<ExecResult> {
-  const secrets = getClusterSecrets(cluster.id)
-  const forwardStream = await openForward(
-    client,
-    target.host,
-    target.port ?? cluster.connection.port
-  )
-  const targetClient = await connectClient({
-    ...buildConnectConfig(
-      {
-        host: target.host,
-        port: target.port ?? cluster.connection.port,
-        username: cluster.connection.username,
-        authMethod: cluster.connection.authMethod,
-        privateKeyPath: cluster.connection.privateKeyPath
-      },
-      secrets.connectionSecret,
-      { clusterId: cluster.id, clusterName: cluster.name, role: 'Slurm execution target' }
-    ),
-    sock: forwardStream
-  })
-  try {
-    return await execOverSsh(targetClient, command, stdin)
-  } finally {
-    targetClient.end()
+/** Hostnames only: the value lands in a shell command on the login node, and must never read as
+ *  an ssh option. */
+const EXEC_HOST_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+/** Runs the command on `scheduler.execTarget` the way a person would: from the connected node,
+ *  `ssh <node> <command>`. It uses that node's own keys, agent and ssh config, so it needs
+ *  passwordless ssh between the two - BatchMode makes a missing key fail at once with ssh's own
+ *  message, instead of hanging on a password prompt nobody can answer. */
+export function sshHopCommand(target: { host: string; port?: number }, command: string): string {
+  if (!EXEC_HOST_PATTERN.test(target.host)) throw new Error(`Invalid node name: ${target.host}`)
+  const { port } = target
+  if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    throw new Error(`Invalid port: ${port}`)
   }
+  const escaped = command.replace(/'/g, `'\\''`)
+  return `ssh -o BatchMode=yes -o ConnectTimeout=10${port === undefined ? '' : ` -p ${port}`} -- ${target.host} '${escaped}'`
 }
 
 function execOverTeleport(
@@ -187,8 +164,7 @@ function runNow(cluster: ClusterSummary, command: string, stdin?: string): Promi
   }
   const client = getLiveClient(cluster.id)
   if (!client) return Promise.reject(new NoSessionError('Waiting for a terminal session.'))
-  if (execTarget) return execViaForward(client, cluster, execTarget, wrapped, stdin)
-  return execOverSsh(client, wrapped, stdin)
+  return execOverSsh(client, execTarget ? sshHopCommand(execTarget, wrapped) : wrapped, stdin)
 }
 
 /** Whether an ssh2 cluster has a terminal connection a command could run on right now. */
