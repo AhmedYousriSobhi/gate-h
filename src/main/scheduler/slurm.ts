@@ -28,7 +28,8 @@ const SECTION_MARKER = '@@gateh@@'
 const MINE_JOB_FORMAT = '%i|%P|%T|%M|%l|%D|%S|%R|%j'
 const PARTITION_JOB_FORMAT = '%i|%P|%u|%T|%M|%l|%D|%S|%R|%j'
 // --parsable2 separates with | and doesn't end lines with one; JobName is free text, so last.
-const HISTORY_FORMAT = 'JobID,Partition,State,ExitCode,Elapsed,Start,End,TotalCPU,AllocCPUS,JobName'
+const HISTORY_FORMAT =
+  'JobID,User,Partition,State,ExitCode,Elapsed,Start,End,TotalCPU,AllocCPUS,JobName'
 export const HISTORY_DAYS = [1, 7]
 
 function partitionArg(config: SchedulerConfig): string {
@@ -79,10 +80,10 @@ export function arrayTasksCommand(config: SchedulerConfig, arrayJobId: string): 
 
 /** The SSH user's finished and running allocations (no job steps) over the last `days` days,
  *  newest first. sacct reads slurmdbd, not slurmctld, and is only ever run on request. */
-export function historyCommand(days: number): string {
+export function historyCommand(days: number, allUsers = false): string {
   if (!HISTORY_DAYS.includes(days)) throw new Error(`Unsupported history range: ${days} days`)
   return (
-    `LC_ALL=C sacct --user="$(id -un)" --allocations --noheader --parsable2 ` +
+    `LC_ALL=C sacct ${allUsers ? '--allusers' : '--user="$(id -un)"'} --allocations --noheader --parsable2 ` +
     `--starttime=now-${days}days '--format=${HISTORY_FORMAT}'`
   )
 }
@@ -194,11 +195,12 @@ function cpuEfficiencyPct(totalCpu: string, allocCpus: string, elapsed: string):
 export function parseHistory(text: string): SlurmHistoryJob[] {
   const jobs: SlurmHistoryJob[] = []
   for (const row of lines(text).slice(-MAX_SLURM_JOBS)) {
-    const f = splitFields(row, 10)
+    const f = splitFields(row, 11)
     if (!f) continue
-    const [id, partition, state, exitCode, elapsed, start, end, totalCpu, allocCpus, name] = f
+    const [id, user, partition, state, exitCode, elapsed, start, end, totalCpu, allocCpus, name] = f
     jobs.push({
       id,
+      user,
       partition,
       state,
       exitCode,

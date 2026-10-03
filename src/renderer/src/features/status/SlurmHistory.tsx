@@ -19,15 +19,16 @@ export default function SlurmHistory({
 }): React.JSX.Element {
   const [days, setDays] = useState<number | null>(autoLoad ? 1 : null)
   const [jobs, setJobs] = useState<SlurmHistoryJob[] | null>(null)
+  const [allUsers, setAllUsers] = useState(false)
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
 
-  async function load(range: number): Promise<void> {
+  async function load(range: number, everyone = allUsers): Promise<void> {
     setDays(range)
     setLoading(true)
     setError(null)
     try {
-      setJobs(await window.api.scheduler.history(clusterId, range))
+      setJobs(await window.api.scheduler.history(clusterId, range, everyone))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load the job history.')
       setJobs(null)
@@ -59,6 +60,18 @@ export default function SlurmHistory({
     <>
       <div className="slurm-toolbar">
         <h3 className="slurm-subheading slurm-grow">History</h3>
+        <label className="form-field-checkbox">
+          <input
+            type="checkbox"
+            checked={allUsers}
+            disabled={loading}
+            onChange={(e) => {
+              setAllUsers(e.target.checked)
+              void load(days ?? 1, e.target.checked)
+            }}
+          />
+          All users
+        </label>
         {RANGES.map((range) => (
           <button
             key={range.days}
@@ -82,6 +95,7 @@ export default function SlurmHistory({
             <thead>
               <tr>
                 <th>Job</th>
+                {allUsers && <th>User</th>}
                 <th>Partition</th>
                 <th>State</th>
                 <th>Exit</th>
@@ -95,6 +109,7 @@ export default function SlurmHistory({
               {jobs.map((job) => (
                 <tr key={job.id}>
                   <td className="slurm-mono">{job.id}</td>
+                  {allUsers && <td>{job.user}</td>}
                   <td>{job.partition}</td>
                   <td>
                     <span className={`issue-status ${stateClass(job.state)}`}>
