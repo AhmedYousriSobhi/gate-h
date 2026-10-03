@@ -1,4 +1,5 @@
-import { BrowserWindow, dialog, ipcMain, type WebContents } from 'electron'
+import { BrowserWindow, dialog, type WebContents } from 'electron'
+import { ipcMain } from './guard'
 import { basename, join } from 'path'
 import { homedir } from 'os'
 import { listDirectory, remoteExists, remoteJoin, transfer } from '../files/sftp'

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain } from './guard'
 import { pruneUnusedAzureProfiles, stopTunnel } from '../azure/tunnel'
 import { listClustersByProfile } from '../clusters'
 import {

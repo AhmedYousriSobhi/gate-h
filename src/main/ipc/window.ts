@@ -1,4 +1,5 @@
-import { ipcMain, type BrowserWindow } from 'electron'
+import { type BrowserWindow } from 'electron'
+import { ipcMain } from './guard'
 
 /** IPC for the custom title bar (see src/renderer/src/features/shell/TitleBar.tsx) - the window
  *  is frameless, so minimize/maximize/close and double-click-to-maximize all have to be wired up

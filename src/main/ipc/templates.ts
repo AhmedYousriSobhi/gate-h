@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain } from './guard'
 import { listTemplates, removeTemplate, saveTemplate } from '../templates'
 import type { JobTemplateInput } from '../../shared/types'
 
