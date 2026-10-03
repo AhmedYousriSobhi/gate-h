@@ -79,10 +79,11 @@ export default function JiraConfigSection({
             </div>
           </div>
           <p className="hint">
-            Multiple clusters sharing one Jira project will show identical tickets unless you scope
-            this JQL by something unique to the cluster (a label or component) - login, compute, and
-            controller hostnames differ per cluster and aren&apos;t a useful Jira key. See
-            docs/JIRA_GUIDE.md for the recommended pattern.
+            With no JQL set, this cluster&apos;s tags are used as Jira labels (together with the
+            project key), so only tickets carrying one of those labels are listed - and new tickets
+            created here get them. Label your existing tickets, or write a JQL here to override.
+            Hostnames differ per cluster and aren&apos;t a useful Jira key. See docs/JIRA_GUIDE.md
+            for the recommended pattern.
           </p>
           <div className="form-field">
             <label htmlFor="jiraApiToken">

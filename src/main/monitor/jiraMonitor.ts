@@ -34,7 +34,7 @@ async function sweepCluster(cluster: ClusterSummary): Promise<void> {
 
   let issues
   try {
-    issues = await listJiraIssues(cluster.jira, token)
+    issues = await listJiraIssues(cluster.jira, token, cluster.tags)
   } catch {
     // Transient Jira API errors (auth expired, network blip) shouldn't spam notifications - the
     // Status tab already surfaces the error when the user looks at it.

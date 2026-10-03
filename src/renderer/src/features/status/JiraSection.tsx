@@ -106,10 +106,10 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
 
   return (
     <div className="status-section">
-      {!cluster.jira.projectKey && !cluster.jira.jql?.trim() && (
+      {!cluster.jira.projectKey && !cluster.jira.jql?.trim() && cluster.tags.length === 0 && (
         <p className="hint">
-          This cluster has no Jira project key or JQL filter, so this lists every ticket you can see
-          (last 90 days). Edit the cluster and set one to scope it to this cluster.
+          This cluster has no Jira project key, JQL filter or tags, so this lists every ticket you
+          can see (last 90 days). Add a tag or a project key to the cluster to scope it.
         </p>
       )}
       <form
