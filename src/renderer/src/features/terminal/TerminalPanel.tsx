@@ -717,10 +717,43 @@ export default function TerminalPanel({
                         ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
                         : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
                 </p>
-                <button className="btn btn-sm" onClick={auth.resetAndReconnectNow}>
-                  <RefreshCw size={13} strokeWidth={2} />
-                  Reconnect now
-                </button>
+                <div className="terminal-shade-actions">
+                  <button className="btn btn-sm" onClick={auth.resetAndReconnectNow}>
+                    <RefreshCw size={13} strokeWidth={2} />
+                    Reconnect now
+                  </button>
+                  {cluster.azureTunnel && (
+                    <>
+                      {/* The sign-in check can read "valid" while the tunnel still fails (wrong
+                          account, a tenant mix-up), so these stay reachable from here too. */}
+                      <button
+                        className="btn btn-sm"
+                        disabled={auth.azureAuthenticating || auth.azureClearing}
+                        onClick={() => auth.authenticateAzure()}
+                      >
+                        <LogIn size={13} strokeWidth={2} />
+                        {auth.azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        disabled={auth.azureAuthenticating || auth.azureClearing}
+                        title="Signs out of this cluster's Azure tenant only - use when Authenticate silently reuses the wrong account"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "Clear the cached Azure sign-in for this cluster's tenant? You'll need to authenticate again."
+                            )
+                          ) {
+                            auth.clearAzureAuth()
+                          }
+                        }}
+                      >
+                        <Eraser size={13} strokeWidth={2} />
+                        {auth.azureClearing ? 'Clearing...' : 'Clear cached sign-in'}
+                      </button>
+                    </>
+                  )}
+                </div>
               </>
             )}
           </div>

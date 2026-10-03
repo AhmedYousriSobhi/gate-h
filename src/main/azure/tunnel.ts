@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { execFile, spawn, type ChildProcess, type ExecFileException } from 'child_process'
 import { chmodSync, mkdirSync, readdirSync, rmSync } from 'fs'
+import { homedir } from 'os'
 import { join } from 'path'
 import { createInterface } from 'readline'
 import scriptPath from '../../../resources/azure-tunnel.sh?asset&asarUnpack'
@@ -144,6 +145,11 @@ function azureEnv(tenant?: string): NodeJS.ProcessEnv {
     chmodSync(profilesRoot(), 0o700)
     lockDown(dir)
     env.AZURE_CONFIG_DIR = dir
+    // The CLI looks for extensions (`bastion` for `az network bastion`, `ssh` for `az ssh vm`)
+    // relative to its config dir, so without this the per-tenant profile starts with none of them
+    // and fails with "'bastion' is misspelled or not recognized". Extensions aren't credentials,
+    // so they stay shared in the user's own location instead of being duplicated per tenant.
+    env.AZURE_EXTENSION_DIR ??= join(homedir(), '.azure', 'cliextensions')
   }
   return env
 }
