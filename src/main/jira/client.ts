@@ -113,6 +113,30 @@ async function searchJiraIssues(
   return data.issues.map((issue) => toSummary(profile, issue))
 }
 
+function quoteJql(value: string): string {
+  return `"${value.replace(/[\\"]/g, '\\$&')}"`
+}
+
+function assignedClause(assigned: JiraListFilter['assigned']): string {
+  if (!assigned) return ''
+  const value = assigned.value?.trim() ?? ''
+  switch (assigned.kind) {
+    case 'me':
+      return 'assignee = currentUser()'
+    case 'unassigned':
+      return 'assignee is EMPTY'
+    case 'user':
+      return value ? `assignee = ${quoteJql(value)}` : ''
+    case 'group':
+      return value ? `assignee in membersOf(${quoteJql(value)})` : ''
+    // Jira Cloud's Team field; Server/Data Center sites without it get Jira's own error.
+    case 'team':
+      return value ? `Team = ${quoteJql(value)}` : ''
+    default:
+      return ''
+  }
+}
+
 export async function listJiraIssues(
   profile: JiraProfile,
   token: string,
@@ -124,6 +148,8 @@ export async function listJiraIssues(
   const text = filter.text?.trim()
   if (text) clauses.push(`text ~ "${text.replace(/[\\"]/g, '\\$&')}"`)
   if (filter.openOnly) clauses.push('resolution = Unresolved')
+  const assigned = assignedClause(filter.assigned)
+  if (assigned) clauses.push(assigned)
   return searchJiraIssues(profile, token, `${clauses.join(' AND ')} ORDER BY updated DESC`)
 }
 

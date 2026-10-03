@@ -92,9 +92,13 @@ export interface GrafanaStatusResult {
 }
 
 /** Extra, per-view narrowing applied on top of the cluster's own Jira scope. */
+export type JiraAssignKind = 'me' | 'unassigned' | 'user' | 'group' | 'team'
+
 export interface JiraListFilter {
   text?: string
   openOnly?: boolean
+  /** Who the ticket is currently assigned to. `value` is the user, group or team name. */
+  assigned?: { kind: JiraAssignKind; value?: string }
 }
 
 export interface JiraIssueSummary {

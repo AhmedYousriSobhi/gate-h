@@ -37,7 +37,14 @@ export function registerJiraIpcHandlers(): void {
       const { jira, token, tags } = requireJiraContext(clusterId)
       return listJiraIssues(jira, token, tags, {
         text: typeof filter?.text === 'string' ? filter.text : undefined,
-        openOnly: filter?.openOnly === true
+        openOnly: filter?.openOnly === true,
+        assigned:
+          filter?.assigned && typeof filter.assigned.kind === 'string'
+            ? {
+                kind: filter.assigned.kind,
+                value: typeof filter.assigned.value === 'string' ? filter.assigned.value : undefined
+              }
+            : undefined
       })
     }
   )
