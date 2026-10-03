@@ -8,7 +8,7 @@ import {
   updateCluster
 } from '../clusters'
 import { refreshCluster } from '../monitor/clusterMonitor'
-import { stopTunnel } from '../azure/tunnel'
+import { pruneUnusedAzureProfiles, stopTunnel } from '../azure/tunnel'
 import { refreshTeleportSessions } from '../teleport/sessionState'
 import { getActiveProfileId } from '../profiles'
 import { importFromSshConfig } from '../sshConfigImport'
@@ -33,6 +33,7 @@ export function registerClusterIpcHandlers(): void {
       JSON.stringify(existing?.azureTunnel ?? null) !== JSON.stringify(input.azureTunnel ?? null)
     if (existing?.azureTunnel && azureTunnelChanged) await stopTunnel(id)
     const updated = updateCluster(id, input)
+    if (azureTunnelChanged) pruneUnusedAzureProfiles()
     refreshCluster(updated)
     // Also when Teleport was just turned off, so the cluster drops out of the session state.
     void refreshTeleportSessions()
@@ -42,6 +43,7 @@ export function registerClusterIpcHandlers(): void {
     if (getCluster(id)?.azureTunnel) await stopTunnel(id)
     const wasTeleport = Boolean(getCluster(id)?.teleport)
     removeCluster(id)
+    pruneUnusedAzureProfiles()
     if (wasTeleport) void refreshTeleportSessions()
   })
   ipcMain.handle('clusters:setActiveMonitoring', async (_event, id: string, active: boolean) => {

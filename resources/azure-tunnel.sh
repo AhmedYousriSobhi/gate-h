@@ -217,6 +217,15 @@ ensure_login() {
   status auth "Logged in to Azure"
 }
 
+# `up` never signs in by itself: the app signs in as its own explicit, earlier step (see
+# ensureTunnel), so a session that is missing here is a hard stop, not a prompt.
+require_login() {
+  local probe_args=(--only-show-errors --output none)
+  if [[ -n "$TENANT" ]]; then probe_args+=(--tenant "$TENANT"); fi
+  az account get-access-token "${probe_args[@]}" >/dev/null 2>&1 ||
+    die "$EXIT_AUTH" "No valid Azure session for this tenant - sign in first"
+}
+
 list_subscriptions() {
   az account list --only-show-errors --output tsv \
     --query "[?state=='Enabled'].[id, name, isDefault]"
@@ -443,7 +452,7 @@ cmd_up() {
     die "$EXIT_PORT_IN_USE" "Local port $LOCAL_PORT is already in use by another process"
   fi
 
-  ensure_login
+  require_login
   select_subscription
   resolve_target_id
   build_tunnel_cmd

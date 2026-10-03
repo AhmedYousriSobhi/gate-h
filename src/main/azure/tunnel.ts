@@ -1,6 +1,10 @@
+import { app } from 'electron'
 import { execFile, spawn } from 'child_process'
+import { mkdirSync, readdirSync, rmSync } from 'fs'
+import { join } from 'path'
 import { createInterface } from 'readline'
 import scriptPath from '../../../resources/azure-tunnel.sh?asset&asarUnpack'
+import { listClusters } from '../clusters'
 import { checkTcpReachable } from '../monitor/reachability'
 import type {
   AzureAuthState,
@@ -83,10 +87,66 @@ function upArgs(cluster: ClusterSummary): string[] {
   return args
 }
 
+// Every tenant gets its own Azure CLI profile (config dir + MSAL token cache), because the CLI's
+// default one is machine-wide: signing into tenant B there replaces tenant A's active session, and
+// concurrent `az` processes can corrupt each other's token cache writes (Microsoft's own guidance
+// is one AZURE_CONFIG_DIR per concurrent context). Clusters in the same tenant share a profile, so
+// it's one sign-in per tenant. Passed through the spawned process's `env` only - never written to
+// `process.env`, which would leak into every other `az`/ssh child this app (or the user's shell
+// tooling) spawns. A cluster with no tenant keeps the CLI's default profile, unchanged.
+const TENANT_PATTERN = /^[A-Za-z0-9.-]+$/
+
+function profilesRoot(): string {
+  return join(app.getPath('userData'), 'azure')
+}
+
+function profileDir(tenant: string): string {
+  return join(profilesRoot(), tenant.toLowerCase())
+}
+
+function azureEnv(tenant?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    // The CLI >= 2.61 subscription picker waits on stdin, which none of our spawns provide.
+    AZURE_CORE_LOGIN_EXPERIENCE_V2: 'off'
+  }
+  if (tenant && TENANT_PATTERN.test(tenant)) {
+    const dir = profileDir(tenant)
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    env.AZURE_CONFIG_DIR = dir
+  }
+  return env
+}
+
+/** Deletes a tenant's profile - i.e. signs it out. Only ever the app's own directory under
+ *  userData, never the CLI's default `~/.azure`. */
+function removeProfile(tenant: string): void {
+  if (TENANT_PATTERN.test(tenant)) rmSync(profileDir(tenant), { recursive: true, force: true })
+}
+
+/** Drops profiles no cluster's tunnel refers to any more (cluster removed, or its tenant
+ *  changed), so signed-in state doesn't pile up on disk for tenants that are no longer used. Not
+ *  tied to a session closing - that would force a fresh sign-in on every reconnect. */
+export function pruneUnusedAzureProfiles(): void {
+  const used = new Set(
+    listClusters().flatMap((c) =>
+      c.azureTunnel?.tenant ? [c.azureTunnel.tenant.toLowerCase()] : []
+    )
+  )
+  let dirs: string[]
+  try {
+    dirs = readdirSync(profilesRoot())
+  } catch {
+    return
+  }
+  for (const name of dirs) if (!used.has(name)) removeProfile(name)
+}
+
 function runUp(cluster: ClusterSummary): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn('bash', [scriptPath, ...upArgs(cluster)], {
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: azureEnv(cluster.azureTunnel?.tenant)
     })
     let lastError = ''
     const stderrTail: string[] = []
@@ -143,9 +203,7 @@ const AUTH_CHECK_TIMEOUT_MS = 10_000
  *  no filter just reports whichever account is currently active CLI-wide. `az account list` is
  *  used instead of `account show` so a cached-but-inactive tenant still resolves instead of only
  *  ever reporting the active one. */
-// A tenant is a GUID or a verified domain name (e.g. contoso.onmicrosoft.com) - this also keeps
-// it safe to interpolate into the JMESPath query below (a quote in it would break the query).
-const TENANT_PATTERN = /^[A-Za-z0-9.-]+$/
+// TENANT_PATTERN (above) also keeps the tenant safe to interpolate into the JMESPath query below.
 
 export function checkAzureAuth(tenant?: string): Promise<AzureAuthState> {
   return new Promise((resolve) => {
@@ -161,7 +219,8 @@ export function checkAzureAuth(tenant?: string): Promise<AzureAuthState> {
           'tsv'
         ]
       : ['account', 'show', '--only-show-errors', '--query', 'user.name', '--output', 'tsv']
-    execFile('az', listArgs, { timeout: AUTH_CHECK_TIMEOUT_MS }, (err, stdout) => {
+    const env = azureEnv(scopedTenant)
+    execFile('az', listArgs, { timeout: AUTH_CHECK_TIMEOUT_MS, env }, (err, stdout) => {
       if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
         resolve({ status: 'cli-missing' })
         return
@@ -173,7 +232,7 @@ export function checkAzureAuth(tenant?: string): Promise<AzureAuthState> {
       }
       const tokenArgs = ['account', 'get-access-token', '--only-show-errors', '--output', 'none']
       if (scopedTenant) tokenArgs.push('--tenant', scopedTenant)
-      execFile('az', tokenArgs, { timeout: AUTH_CHECK_TIMEOUT_MS }, (tokenErr) =>
+      execFile('az', tokenArgs, { timeout: AUTH_CHECK_TIMEOUT_MS, env }, (tokenErr) =>
         resolve({ status: tokenErr ? 'expired' : 'valid', account })
       )
     })
@@ -190,14 +249,16 @@ function needsDeviceCode(): boolean {
  *  status, or its eventual error) through the same `azure:status` channel a tunnel pre-flight uses
  *  - see TerminalPanel's "Authenticate" action. Only ever started from that explicit click, never
  *  automatically. */
-export function loginAzure(cluster: ClusterSummary): Promise<void> {
+export function loginAzure(cluster: ClusterSummary, deviceCode = false): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = ['login', '--only-show-errors', '--output', 'none']
-    if (needsDeviceCode()) args.push('--use-device-code')
+    // Device-code login never touches the browser's cached SSO, so it's also how the user picks
+    // exactly which account signs in (they open the code page in whichever browser profile they like).
+    if (deviceCode || needsDeviceCode()) args.push('--use-device-code')
     const tenant = cluster.azureTunnel?.tenant
     if (tenant) args.push('--tenant', tenant)
 
-    const child = spawn('az', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('az', args, { stdio: ['ignore', 'pipe', 'pipe'], env: azureEnv(tenant) })
     let lastError = ''
 
     createInterface({ input: child.stdout }).on('line', (line) => {
@@ -226,13 +287,18 @@ export function loginAzure(cluster: ClusterSummary): Promise<void> {
   })
 }
 
-/** Wipes the Azure CLI's entire local token cache (`az account clear`) - every tenant/account, not
- *  just one cluster's. Needed because the browser's own Microsoft SSO session silently reuses
- *  whatever account is already cached, with no "choose an account" step, so switching to a
- *  different tenant can silently fail (or silently succeed with the wrong account) instead of
- *  prompting - clearing the cache is the only way to force a real sign-in prompt on the next
- *  `az login`. Only ever started from the user's explicit "Clear cached sign-in" action. */
-export function clearAzureAuth(): Promise<void> {
+/** Signs a cluster's tenant out by deleting its app-owned Azure CLI profile - only that tenant, so
+ *  other clusters' sessions are untouched. Needed because the browser's own Microsoft SSO session
+ *  silently reuses whatever account is cached, so a wrong-account sign-in can only be redone from a
+ *  clean slate. A cluster with no tenant has no profile of its own, so it falls back to
+ *  `az account clear` on the CLI's default one. Only ever started from the user's explicit "Clear
+ *  cached sign-in" action. */
+export function clearAzureAuth(cluster: ClusterSummary): Promise<void> {
+  const tenant = cluster.azureTunnel?.tenant
+  if (tenant && TENANT_PATTERN.test(tenant)) {
+    removeProfile(tenant)
+    return Promise.resolve()
+  }
   return new Promise((resolve, reject) => {
     execFile('az', ['account', 'clear', '--only-show-errors'], { timeout: 20_000 }, (err) => {
       if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -261,7 +327,50 @@ const BANNER_WAIT_MS = 30_000
 // succeeded well inside its own window, so this is a liveness retry, not a longer single wait.
 const BANNER_WAIT_ATTEMPTS = 2
 
-/** Resolves once the cluster's tunnel is listening *and* actually carries traffic - reusing the
+/** Stage 2: the cluster's configured subscription must be visible to the account signed in for its
+ *  tenant. Checked here, scoped per call (`--subscription`, never `az account set`), so a wrong or
+ *  missing subscription fails with a clear message instead of a raw error from deep inside the
+ *  tunnel script. */
+function checkSubscription(cluster: ClusterSummary, account?: string): Promise<string> {
+  const tunnel = cluster.azureTunnel
+  return new Promise((resolve, reject) => {
+    execFile(
+      'az',
+      [
+        'account',
+        'show',
+        '--only-show-errors',
+        '--subscription',
+        tunnel?.subscription ?? '',
+        '--query',
+        'name',
+        '--output',
+        'tsv'
+      ],
+      { timeout: AUTH_CHECK_TIMEOUT_MS, env: azureEnv(tunnel?.tenant) },
+      (err, stdout) => {
+        const name = err ? '' : stdout.trim()
+        if (name) {
+          resolve(name)
+          return
+        }
+        reject(
+          new Error(
+            `Signed in${account ? ` as ${account}` : ''}, but subscription '${tunnel?.subscription}' ` +
+              `isn't available${tunnel?.tenant ? ` in tenant ${tunnel.tenant}` : ''} - check the ` +
+              "cluster's Azure subscription and tenant settings."
+          )
+        )
+      }
+    )
+  })
+}
+
+/** Runs strictly in order, each stage gated on the previous one fully succeeding: (1) Azure
+ *  sign-in for the cluster's tenant, (2) the configured subscription is available, (3) the tunnel
+ *  opens (target resolved, local port listening), (4) a live SSH banner arrives through it.
+ *
+ *  Resolves once the cluster's tunnel is listening *and* actually carries traffic - reusing the
  *  tunnel if it's already up (the script's `up` is idempotent). Fails fast on a missing/expired
  *  Azure sign-in instead of falling through to the script's own `az login` fallback, which would
  *  otherwise start an unannounced device-code wait on every connect attempt - signing in is only
@@ -289,8 +398,24 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
             : 'No Azure sign-in found - authenticate and retry.'
       )
     }
+    broadcast?.({
+      clusterId: cluster.id,
+      phase: 'auth',
+      message: `Step 1/4: signed in${auth.account ? ` as ${auth.account}` : ''}`
+    })
+    const subscriptionName = await checkSubscription(cluster, auth.account)
+    broadcast?.({
+      clusterId: cluster.id,
+      phase: 'subscription',
+      message: `Step 2/4: subscription '${subscriptionName}' available`
+    })
     const tunnel = cluster.azureTunnel
     for (let attempt = 1; attempt <= BANNER_WAIT_ATTEMPTS; attempt++) {
+      broadcast?.({
+        clusterId: cluster.id,
+        phase: 'tunnel',
+        message: 'Step 3/4: opening the tunnel'
+      })
       await runUp(cluster)
       if (!tunnel) return
       broadcast?.({
@@ -298,7 +423,7 @@ export function ensureTunnel(cluster: ClusterSummary): Promise<void> {
         phase: 'tunnel',
         message:
           attempt === 1
-            ? 'Waiting for a live SSH banner through the tunnel'
+            ? 'Step 4/4: waiting for a live SSH banner through the tunnel'
             : 'Still no banner - opened a fresh tunnel, waiting again'
       })
       const bannerReceived = await checkTcpReachable('127.0.0.1', tunnel.localPort, BANNER_WAIT_MS)

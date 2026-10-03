@@ -152,8 +152,9 @@ const api: GateHApi = {
     findVm: (vmName: string) => ipcRenderer.invoke('azure:findVm', vmName),
     verifyTunnel: (clusterId: string) => ipcRenderer.invoke('azure:verifyTunnel', clusterId),
     checkAuth: (clusterId: string) => ipcRenderer.invoke('azure:checkAuth', clusterId),
-    login: (clusterId: string) => ipcRenderer.invoke('azure:login', clusterId),
-    clearAuth: () => ipcRenderer.invoke('azure:clearAuth'),
+    login: (clusterId: string, deviceCode?: boolean) =>
+      ipcRenderer.invoke('azure:login', clusterId, deviceCode),
+    clearAuth: (clusterId: string) => ipcRenderer.invoke('azure:clearAuth', clusterId),
     onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AzureTunnelStatusEvent): void =>
         callback(payload)

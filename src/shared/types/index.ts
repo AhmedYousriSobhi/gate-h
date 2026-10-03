@@ -477,12 +477,12 @@ export interface GateHApi {
     /** Runs `az login` (device-code on a headless Linux box, the system browser otherwise),
      *  broadcasting progress through `onStatus` the same way a tunnel pre-flight does. Resolves
      *  once signed in; never attempted automatically, only from an explicit "Authenticate" click. */
-    login(clusterId: string): Promise<void>
-    /** Runs `az account clear`, wiping every cached Azure CLI sign-in (all tenants/accounts, not
-     *  just one cluster's) - the only way to force a fresh account prompt on the next `login()`
-     *  when the browser's own Microsoft SSO session would otherwise silently reuse whatever's
-     *  cached. Never attempted automatically, only from an explicit "Clear cached sign-in" click. */
-    clearAuth(): Promise<void>
+    login(clusterId: string, deviceCode?: boolean): Promise<void>
+    /** Signs the cluster's tenant out by deleting its app-owned Azure CLI profile (other tenants'
+     *  sessions are untouched); a cluster with no tenant runs `az account clear` on the CLI's
+     *  default profile instead. Never attempted automatically, only from an explicit "Clear cached
+     *  sign-in" click. */
+    clearAuth(clusterId: string): Promise<void>
   }
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>

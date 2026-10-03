@@ -87,13 +87,13 @@ export interface UseTerminalAuthResult {
   azureAuthenticating: boolean
   /** Transitions into azure-auth-required, cancelling any pending retry first. */
   setAzureAuthRequired: (state: AzureAuthState) => void
-  /** The Terminal's "Authenticate" button handler. */
-  authenticateAzure: () => void
+  /** The Terminal's "Authenticate" button handler; `deviceCode` forces the device-code flow,
+   *  which skips the browser's cached SSO so the user picks the account themselves. */
+  authenticateAzure: (deviceCode?: boolean) => void
   /** Whether a "Clear cached sign-in" click is in flight. */
   azureClearing: boolean
-  /** The Terminal's "Clear cached sign-in" button handler - wipes every tenant's cached `az`
-   *  sign-in, not just this cluster's, so the next Authenticate gets a real account prompt instead
-   *  of the browser's SSO silently reusing whatever's cached. */
+  /** The Terminal's "Clear cached sign-in" button handler - wipes only this cluster's tenant's
+   *  cached `az` sign-in, so the next Authenticate starts from a clean slate. */
   clearAzureAuth: () => void
 }
 
@@ -258,7 +258,7 @@ export function useTerminalAuth({
     logEvent('Azure authentication required')
   }
 
-  function authenticateAzure(): void {
+  function authenticateAzure(deviceCode?: boolean): void {
     setAzureAuthenticating(true)
     setConnectError(null)
     // `az login`'s own progress (and its ERROR, if any) now streams in as connection-log entries -
@@ -266,7 +266,7 @@ export function useTerminalAuth({
     // the terminal shade that the next line immediately replaces.
     setLogOpen(true)
     window.api.azure
-      .login(clusterId)
+      .login(clusterId, deviceCode)
       .then(() => {
         setAzureAuthenticating(false)
         resetAndReconnectNow()
@@ -280,9 +280,9 @@ export function useTerminalAuth({
 
   function clearAzureAuth(): void {
     setAzureClearing(true)
-    logEvent('Clearing cached Azure sign-in (all tenants)')
+    logEvent('Clearing cached Azure sign-in for this tenant')
     window.api.azure
-      .clearAuth()
+      .clearAuth(clusterId)
       .then(() => {
         setAzureClearing(false)
         logEvent('Cleared - Authenticate will prompt for an account again')

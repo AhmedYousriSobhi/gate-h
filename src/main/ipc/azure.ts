@@ -26,8 +26,12 @@ export function registerAzureIpcHandlers(): void {
   ipcMain.handle('azure:checkAuth', (_event: IpcMainInvokeEvent, clusterId: string) =>
     checkAzureAuth(getAzureCluster(clusterId).azureTunnel?.tenant)
   )
-  ipcMain.handle('azure:login', (_event: IpcMainInvokeEvent, clusterId: string) =>
-    loginAzure(getAzureCluster(clusterId))
+  ipcMain.handle(
+    'azure:login',
+    (_event: IpcMainInvokeEvent, clusterId: string, deviceCode?: boolean) =>
+      loginAzure(getAzureCluster(clusterId), deviceCode === true)
   )
-  ipcMain.handle('azure:clearAuth', () => clearAzureAuth())
+  ipcMain.handle('azure:clearAuth', (_event: IpcMainInvokeEvent, clusterId: string) =>
+    clearAzureAuth(getAzureCluster(clusterId))
+  )
 }

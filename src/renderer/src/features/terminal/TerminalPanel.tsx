@@ -654,10 +654,21 @@ export default function TerminalPanel({
                     <button
                       className="btn btn-sm btn-primary"
                       disabled={auth.azureAuthenticating}
-                      onClick={auth.authenticateAzure}
+                      onClick={() => auth.authenticateAzure()}
                     >
                       <LogIn size={13} strokeWidth={2} />
                       {auth.azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                    </button>
+                  )}
+                  {auth.azureAuthState?.status !== 'cli-missing' && (
+                    <button
+                      className="btn btn-sm"
+                      disabled={auth.azureAuthenticating}
+                      title="Shows a code to enter in a browser of your choice, so you pick the account instead of the browser's cached sign-in being reused"
+                      onClick={() => auth.authenticateAzure(true)}
+                    >
+                      <LogIn size={13} strokeWidth={2} />
+                      Sign in with device code
                     </button>
                   )}
                   <button
@@ -672,11 +683,11 @@ export default function TerminalPanel({
                     <button
                       className="btn btn-sm"
                       disabled={auth.azureAuthenticating || auth.azureClearing}
-                      title="Signs out of every cluster's cached Azure session, not just this one - use when Authenticate silently reuses the wrong account for this cluster's tenant"
+                      title="Signs out of this cluster's Azure tenant only - use when Authenticate silently reuses the wrong account"
                       onClick={() => {
                         if (
                           confirm(
-                            "Clear the Azure CLI's cached sign-in for every cluster (not just this one)? You'll need to authenticate again."
+                            "Clear the cached Azure sign-in for this cluster's tenant? You'll need to authenticate again."
                           )
                         ) {
                           auth.clearAzureAuth()
