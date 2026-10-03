@@ -30,7 +30,7 @@ const PARTITION_JOB_FORMAT = '%i|%P|%u|%T|%M|%l|%D|%S|%R|%j'
 // --parsable2 separates with | and doesn't end lines with one; JobName is free text, so last.
 const HISTORY_FORMAT =
   'JobID,User,Partition,State,ExitCode,Elapsed,Start,End,TotalCPU,AllocCPUS,JobName'
-export const HISTORY_DAYS = [1, 7]
+export const HISTORY_DAYS = [1, 7, 30]
 
 function partitionArg(config: SchedulerConfig): string {
   for (const name of config.partitions) {

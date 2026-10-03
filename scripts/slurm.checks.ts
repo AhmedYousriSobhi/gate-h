@@ -205,7 +205,7 @@ report(
   'all-users history drops the user filter'
 )
 report(
-  throws(() => historyCommand(30)) && throws(() => historyCommand(1.5)),
+  throws(() => historyCommand(90)) && throws(() => historyCommand(1.5)),
   'only the offered ranges are accepted'
 )
 const history = parseHistory(
