@@ -164,7 +164,22 @@ validate_port() {
     die "$EXIT_USAGE" "$flag must be a port number (1-65535), got '$value'"
 }
 
+# Every value below ends up as an argv element of `az`/`ssh` (never through a shell), but a value
+# starting with "-" would still be parsed as one of their options (e.g. a "resource group" of
+# "--query ..."), and whitespace/control characters have no place in an Azure name, host or id.
+reject_unsafe_values() {
+  local pair name value
+  for pair in NAME RESOURCE_GROUP SUBSCRIPTION TENANT BASTION_NAME TARGET_ID TARGET_IP VM_NAME REMOTE_HOST LOCAL_USER; do
+    name=$pair
+    value=${!name:-}
+    if [[ -z "$value" ]]; then continue; fi
+    [[ "$value" =~ ^[^-[:space:][:cntrl:]][^[:space:][:cntrl:]]*$ ]] ||
+      die "$EXIT_USAGE" "Invalid value for $name: must not start with '-' or contain whitespace/control characters"
+  done
+}
+
 validate_up_args() {
+  reject_unsafe_values
   [[ -n "$LOCAL_PORT" ]] || die "$EXIT_USAGE" "--local-port is required"
   validate_port "$LOCAL_PORT" --local-port
   validate_port "$REMOTE_PORT" --remote-port
@@ -194,7 +209,12 @@ ensure_login() {
   status auth "Checking Azure CLI session"
   # `az account show` only reads the local cache and succeeds even when the
   # refresh token has expired; minting a token proves the session is usable.
-  if az account get-access-token --only-show-errors --output none >/dev/null 2>&1; then
+  # Scoped to $TENANT when set, so a valid session for a *different* tenant
+  # (e.g. another cluster's) doesn't short-circuit this and skip the login
+  # this cluster's own tenant actually needs.
+  local probe_args=(--only-show-errors --output none)
+  if [[ -n "$TENANT" ]]; then probe_args+=(--tenant "$TENANT"); fi
+  if az account get-access-token "${probe_args[@]}" >/dev/null 2>&1; then
     status auth "Azure CLI session is valid"
     return
   fi
@@ -210,6 +230,15 @@ ensure_login() {
   fi
   az login "${args[@]}" >&2 || die "$EXIT_AUTH" "az login failed"
   status auth "Logged in to Azure"
+}
+
+# `up` never signs in by itself: the app signs in as its own explicit, earlier step (see
+# ensureTunnel), so a session that is missing here is a hard stop, not a prompt.
+require_login() {
+  local probe_args=(--only-show-errors --output none)
+  if [[ -n "$TENANT" ]]; then probe_args+=(--tenant "$TENANT"); fi
+  az account get-access-token "${probe_args[@]}" >/dev/null 2>&1 ||
+    die "$EXIT_AUTH" "No valid Azure session for this tenant - sign in first"
 }
 
 list_subscriptions() {
@@ -438,7 +467,7 @@ cmd_up() {
     die "$EXIT_PORT_IN_USE" "Local port $LOCAL_PORT is already in use by another process"
   fi
 
-  ensure_login
+  require_login
   select_subscription
   resolve_target_id
   build_tunnel_cmd

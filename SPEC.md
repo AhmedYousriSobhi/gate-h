@@ -119,7 +119,16 @@ never the plaintext or ciphertext.
   "Authenticate" action and a "Retry connection" action; like Teleport, nothing retries
   automatically and the app never signs in by itself. Authenticating runs `az login` (a
   device-code prompt on a headless Linux box, the system browser otherwise), streamed into the
-  terminal view the same way the rest of this pre-flight is.
+  terminal view the same way the rest of this pre-flight is. A "Sign in with device code" action
+  forces the device-code flow anywhere, so the user picks the account instead of the browser's
+  cached SSO being reused.
+- Each tenant gets its own Azure CLI profile (`AZURE_CONFIG_DIR`, passed per spawned process, never
+  set on the app's own environment) under the app's data directory, shared by clusters in the same
+  tenant, so clusters in different tenants can stay open at once without replacing each other's
+  sign-in. "Clear cached sign-in" removes only that tenant's profile; a profile no cluster refers
+  to any more is deleted. A cluster with no tenant uses the CLI's default profile.
+- Connecting runs as ordered stages, each gated on the previous one: sign-in for the tenant, the
+  configured subscription being available, the tunnel opening, then a live SSH banner arriving.
 - Once signed in, selecting the configured subscription and opening the tunnel follow the same
   way, each step shown in the terminal view. Every `az` call is scoped to the configured
   subscription per-invocation (`--subscription`), never through the CLI's own process-wide

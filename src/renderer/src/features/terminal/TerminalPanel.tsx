@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import {
+  Eraser,
   FileCode2,
   History,
   LogIn,
@@ -653,10 +654,21 @@ export default function TerminalPanel({
                     <button
                       className="btn btn-sm btn-primary"
                       disabled={auth.azureAuthenticating}
-                      onClick={auth.authenticateAzure}
+                      onClick={() => auth.authenticateAzure()}
                     >
                       <LogIn size={13} strokeWidth={2} />
                       {auth.azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                    </button>
+                  )}
+                  {auth.azureAuthState?.status !== 'cli-missing' && (
+                    <button
+                      className="btn btn-sm"
+                      disabled={auth.azureAuthenticating}
+                      title="Shows a code to enter in a browser of your choice, so you pick the account instead of the browser's cached sign-in being reused"
+                      onClick={() => auth.authenticateAzure(true)}
+                    >
+                      <LogIn size={13} strokeWidth={2} />
+                      Sign in with device code
                     </button>
                   )}
                   <button
@@ -667,6 +679,25 @@ export default function TerminalPanel({
                     <RefreshCw size={13} strokeWidth={2} />
                     Retry connection
                   </button>
+                  {auth.azureAuthState?.status !== 'cli-missing' && (
+                    <button
+                      className="btn btn-sm"
+                      disabled={auth.azureAuthenticating || auth.azureClearing}
+                      title="Signs out of this cluster's Azure tenant only - use when Authenticate silently reuses the wrong account"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Clear the cached Azure sign-in for this cluster's tenant? You'll need to authenticate again."
+                          )
+                        ) {
+                          auth.clearAzureAuth()
+                        }
+                      }}
+                    >
+                      <Eraser size={13} strokeWidth={2} />
+                      {auth.azureClearing ? 'Clearing...' : 'Clear cached sign-in'}
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -686,10 +717,43 @@ export default function TerminalPanel({
                         ? `Waiting for ${cluster.connection.host} to come back online - will reconnect automatically.`
                         : `Couldn't reach the SSH service on ${cluster.connection.host}.`}
                 </p>
-                <button className="btn btn-sm" onClick={auth.resetAndReconnectNow}>
-                  <RefreshCw size={13} strokeWidth={2} />
-                  Reconnect now
-                </button>
+                <div className="terminal-shade-actions">
+                  <button className="btn btn-sm" onClick={auth.resetAndReconnectNow}>
+                    <RefreshCw size={13} strokeWidth={2} />
+                    Reconnect now
+                  </button>
+                  {cluster.azureTunnel && (
+                    <>
+                      {/* The sign-in check can read "valid" while the tunnel still fails (wrong
+                          account, a tenant mix-up), so these stay reachable from here too. */}
+                      <button
+                        className="btn btn-sm"
+                        disabled={auth.azureAuthenticating || auth.azureClearing}
+                        onClick={() => auth.authenticateAzure()}
+                      >
+                        <LogIn size={13} strokeWidth={2} />
+                        {auth.azureAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        disabled={auth.azureAuthenticating || auth.azureClearing}
+                        title="Signs out of this cluster's Azure tenant only - use when Authenticate silently reuses the wrong account"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "Clear the cached Azure sign-in for this cluster's tenant? You'll need to authenticate again."
+                            )
+                          ) {
+                            auth.clearAzureAuth()
+                          }
+                        }}
+                      >
+                        <Eraser size={13} strokeWidth={2} />
+                        {auth.azureClearing ? 'Clearing...' : 'Clear cached sign-in'}
+                      </button>
+                    </>
+                  )}
+                </div>
               </>
             )}
           </div>

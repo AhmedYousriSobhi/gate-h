@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { WebviewTag } from 'electron'
 import {
   CircleCheck,
   CircleX,
@@ -39,7 +40,7 @@ function trimBaseUrl(baseUrl: string): string {
 // which flashed on every cluster switch against the dark UI (see .panel-embed-loaded).
 function prepareWebview(el: HTMLElement | null): void {
   if (!el) return
-  const webview = el as Electron.WebviewTag
+  const webview = el as WebviewTag
   const onDomReady = (): void => {
     webview.insertCSS('[data-testid*="Panel menu"] { display: none !important; }')
     webview.classList.add('panel-embed-loaded')

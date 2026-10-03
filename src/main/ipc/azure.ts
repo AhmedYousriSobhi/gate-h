@@ -1,6 +1,8 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { type IpcMainInvokeEvent } from 'electron'
+import { ipcMain } from './guard'
 import {
   checkAzureAuth,
+  clearAzureAuth,
   findVm,
   listSubscriptions,
   loginAzure,
@@ -22,11 +24,15 @@ export function registerAzureIpcHandlers(): void {
     if (!cluster) throw new Error('Cluster not found')
     return verifyTunnel(cluster)
   })
-  ipcMain.handle('azure:checkAuth', (_event: IpcMainInvokeEvent, clusterId: string) => {
-    getAzureCluster(clusterId)
-    return checkAzureAuth()
-  })
-  ipcMain.handle('azure:login', (_event: IpcMainInvokeEvent, clusterId: string) =>
-    loginAzure(getAzureCluster(clusterId))
+  ipcMain.handle('azure:checkAuth', (_event: IpcMainInvokeEvent, clusterId: string) =>
+    checkAzureAuth(getAzureCluster(clusterId).azureTunnel?.tenant)
+  )
+  ipcMain.handle(
+    'azure:login',
+    (_event: IpcMainInvokeEvent, clusterId: string, deviceCode?: boolean) =>
+      loginAzure(getAzureCluster(clusterId), deviceCode === true)
+  )
+  ipcMain.handle('azure:clearAuth', (_event: IpcMainInvokeEvent, clusterId: string) =>
+    clearAzureAuth(getAzureCluster(clusterId))
   )
 }

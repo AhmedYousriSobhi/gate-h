@@ -470,13 +470,19 @@ export interface GateHApi {
     onStatus(callback: (event: AzureTunnelStatusEvent) => void): () => void
     /** The local Azure CLI's cached sign-in state - checked before a connect attempt (and again
      *  on a connect failure) so the Terminal can show "Azure authentication required" instead of
-     *  a generic connection error. `clusterId` only picks which cluster's tunnel config to read
-     *  (e.g. its tenant); the result isn't scoped to that cluster's subscription. */
+     *  a generic connection error. `clusterId` picks which cluster's tunnel config to read its
+     *  tenant from, so two clusters in different tenants (same account) are checked
+     *  independently - a valid sign-in for one tenant doesn't read as valid for the other. */
     checkAuth(clusterId: string): Promise<AzureAuthState>
     /** Runs `az login` (device-code on a headless Linux box, the system browser otherwise),
      *  broadcasting progress through `onStatus` the same way a tunnel pre-flight does. Resolves
      *  once signed in; never attempted automatically, only from an explicit "Authenticate" click. */
-    login(clusterId: string): Promise<void>
+    login(clusterId: string, deviceCode?: boolean): Promise<void>
+    /** Signs the cluster's tenant out by deleting its app-owned Azure CLI profile (other tenants'
+     *  sessions are untouched); a cluster with no tenant runs `az account clear` on the CLI's
+     *  default profile instead. Never attempted automatically, only from an explicit "Clear cached
+     *  sign-in" click. */
+    clearAuth(clusterId: string): Promise<void>
   }
   reachability: {
     getAll(): Promise<Record<string, ClusterReachability>>

@@ -1,4 +1,5 @@
-import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron'
+import { type IpcMainInvokeEvent, type IpcMainEvent } from 'electron'
+import { ipcMain } from './guard'
 import { closeSession, openSshSession, resizeSession, writeToSession } from '../ssh/manager'
 
 export function registerSshIpcHandlers(): void {

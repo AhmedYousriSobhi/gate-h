@@ -347,19 +347,10 @@ export default function AzureTunnelSection({
               {verifyResult && !verifyResult.tunnelOpened && (
                 <p className="hint">Tunnel failed to open: {verifyResult.tunnelError}</p>
               )}
-              {verifyResult && verifyResult.tunnelOpened && verifyResult.bannerReceived && (
+              {verifyResult && verifyResult.tunnelOpened && (
                 <p className="hint">
                   Tunnel is open and an SSH banner arrived in {verifyResult.latencyMs}ms - the path
                   to sshd is working end to end.
-                </p>
-              )}
-              {verifyResult && verifyResult.tunnelOpened && !verifyResult.bannerReceived && (
-                <p className="hint">
-                  Tunnel opened and az reports it listening, but no SSH banner arrived within 10s -
-                  the session may have silently died while its local port kept listening (a known az
-                  CLI issue, azure-cli#28367). Try closing the cluster and reconnecting to force a
-                  fresh tunnel; if it keeps happening, run the command below by hand and compare it
-                  against a plain `ssh` to the same local port.
                 </p>
               )}
               {verifyCommand && (

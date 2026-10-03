@@ -87,8 +87,14 @@ export interface UseTerminalAuthResult {
   azureAuthenticating: boolean
   /** Transitions into azure-auth-required, cancelling any pending retry first. */
   setAzureAuthRequired: (state: AzureAuthState) => void
-  /** The Terminal's "Authenticate" button handler. */
-  authenticateAzure: () => void
+  /** The Terminal's "Authenticate" button handler; `deviceCode` forces the device-code flow,
+   *  which skips the browser's cached SSO so the user picks the account themselves. */
+  authenticateAzure: (deviceCode?: boolean) => void
+  /** Whether a "Clear cached sign-in" click is in flight. */
+  azureClearing: boolean
+  /** The Terminal's "Clear cached sign-in" button handler - wipes only this cluster's tenant's
+   *  cached `az` sign-in, so the next Authenticate starts from a clean slate. */
+  clearAzureAuth: () => void
 }
 
 /** TerminalPanel's reconnect/backoff state machine and Azure authentication state, pulled out
@@ -112,6 +118,7 @@ export function useTerminalAuth({
   const [logOpen, setLogOpen] = useState(false)
   const [azureAuthState, setAzureAuthState] = useState<AzureAuthState | null>(null)
   const [azureAuthenticating, setAzureAuthenticating] = useState(false)
+  const [azureClearing, setAzureClearing] = useState(false)
 
   const statusRef = useRef<SessionStatus>(status)
   useEffect(() => {
@@ -251,11 +258,15 @@ export function useTerminalAuth({
     logEvent('Azure authentication required')
   }
 
-  function authenticateAzure(): void {
+  function authenticateAzure(deviceCode?: boolean): void {
     setAzureAuthenticating(true)
     setConnectError(null)
+    // `az login`'s own progress (and its ERROR, if any) now streams in as connection-log entries -
+    // open the log so it's visible without an extra click, instead of only the single line under
+    // the terminal shade that the next line immediately replaces.
+    setLogOpen(true)
     window.api.azure
-      .login(clusterId)
+      .login(clusterId, deviceCode)
       .then(() => {
         setAzureAuthenticating(false)
         resetAndReconnectNow()
@@ -263,6 +274,21 @@ export function useTerminalAuth({
       .catch((err: Error) => {
         setAzureAuthenticating(false)
         setConnectError(err.message)
+        logEvent(err.message)
+      })
+  }
+
+  function clearAzureAuth(): void {
+    setAzureClearing(true)
+    logEvent('Clearing cached Azure sign-in for this tenant')
+    window.api.azure
+      .clearAuth(clusterId)
+      .then(() => {
+        setAzureClearing(false)
+        logEvent('Cleared - Authenticate will prompt for an account again')
+      })
+      .catch((err: Error) => {
+        setAzureClearing(false)
         logEvent(err.message)
       })
   }
@@ -289,6 +315,8 @@ export function useTerminalAuth({
     azureAuthState,
     azureAuthenticating,
     setAzureAuthRequired,
-    authenticateAzure
+    authenticateAzure,
+    azureClearing,
+    clearAzureAuth
   }
 }

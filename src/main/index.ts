@@ -14,7 +14,7 @@ import { registerProfileIpcHandlers } from './ipc/profiles'
 import { registerLayoutIpcHandlers } from './ipc/layout'
 import { registerOverviewIpcHandlers } from './ipc/overview'
 import { registerAzureIpcHandlers } from './ipc/azure'
-import { setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
+import { pruneUnusedAzureProfiles, setAzureStatusBroadcaster, stopAllTunnels } from './azure/tunnel'
 import { registerTeleportIpcHandlers } from './ipc/teleport'
 import { startTeleportSessionMonitor, stopTeleportSessionMonitor } from './teleport/sessionState'
 import { closeAllSessions } from './ssh/manager'
@@ -55,6 +55,17 @@ const isMac = process.platform === 'darwin'
 
 let mainWindow: BrowserWindow | null = null
 
+/** `shell.openExternal` hands the URL to the OS, so anything but a web link (file:, a custom app
+ *  scheme, ...) coming out of a window.open or navigation could launch something local. */
+function openExternalSafely(url: string): void {
+  try {
+    const { protocol } = new URL(url)
+    if (protocol === 'https:' || protocol === 'http:') void shell.openExternal(url)
+  } catch {
+    // Not a URL - nothing to open.
+  }
+}
+
 function createWindow(): void {
   // Create the browser window. Frameless with a custom title bar (see
   // src/renderer/src/features/shell/TitleBar.tsx) rather than the OS-native one - double-click-to-
@@ -75,7 +86,7 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       // Only for embedding a cluster's own Grafana panels live (see grafana/embed.ts) - the
       // webview is pointed exclusively at Grafana origins the user configured, in their own
       // dedicated session partition.
@@ -102,8 +113,20 @@ function createWindow(): void {
   win.on('blur', () => setSchedulerWindowFocused(false))
 
   win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    openExternalSafely(details.url)
     return { action: 'deny' }
+  })
+
+  // The window has the preload bridge, so it must never end up showing anything but the app itself.
+  win.webContents.on('will-navigate', (event, url) => {
+    const appUrl = is.dev && process.env['ELECTRON_RENDERER_URL']
+    const sameApp = appUrl
+      ? new URL(url).origin === new URL(appUrl).origin
+      : url.startsWith('file://')
+    if (!sameApp) {
+      event.preventDefault()
+      openExternalSafely(url)
+    }
   })
 
   // HMR for renderer base on electron-vite cli.
@@ -161,7 +184,7 @@ app.whenReady().then(() => {
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'webview') return
     contents.setWindowOpenHandler((details) => {
-      shell.openExternal(details.url)
+      openExternalSafely(details.url)
       return { action: 'deny' }
     })
   })
@@ -177,6 +200,8 @@ app.whenReady().then(() => {
   registerLayoutIpcHandlers()
   registerOverviewIpcHandlers()
   registerAzureIpcHandlers()
+  // Catches profiles orphaned by anything that bypassed the remove/edit handlers (a crash mid-way).
+  pruneUnusedAzureProfiles()
   registerTeleportIpcHandlers()
   registerSchedulerIpcHandlers()
   registerStorageIpcHandlers()

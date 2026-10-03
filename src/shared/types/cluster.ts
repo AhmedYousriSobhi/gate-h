@@ -132,25 +132,26 @@ export interface AzureTunnelStatusEvent {
  *  died (azure-cli#28367), which looks identical to a healthy tunnel until something tries to use
  *  it. */
 export interface AzureTunnelVerifyResult {
+  /** True only once a live SSH banner actually arrived through the tunnel - `ensureTunnel` itself
+   *  waits for one, so this already rules out azure-cli#28367's stale-listening-port case, not
+   *  just that `az` reported the tunnel open. */
   tunnelOpened: boolean
-  /** Set when `tunnelOpened` is false - the real `az` CLI failure reason. */
+  /** Set when `tunnelOpened` is false - the real failure reason (an `az` CLI error, or no banner
+   *  within the wait). */
   tunnelError?: string
-  /** Whether an SSH banner arrived through the tunnel within the check's timeout. Only meaningful
-   *  when `tunnelOpened` is true. */
-  bannerReceived: boolean
   latencyMs?: number
 }
 
 export type AzureAuthStatus = 'valid' | 'expired' | 'signed-out' | 'cli-missing'
 
-/** The local Azure CLI's cached sign-in state, independent of any one cluster's subscription -
- *  checked before a tunnel connect attempt instead of letting it fail and only then explaining
- *  why (see `GateHApi.azure.checkAuth`). */
+/** The local Azure CLI's cached sign-in state, scoped to the checked cluster's tenant when it has
+ *  one configured - checked before a tunnel connect attempt instead of letting it fail and only
+ *  then explaining why (see `GateHApi.azure.checkAuth`). */
 export interface AzureAuthState {
   status: AzureAuthStatus
-  /** The cached account's sign-in name. Present even when `status` is 'expired' - `az account
-   *  show` reads only the local cache and succeeds even with an expired refresh token - but
-   *  absent when signed out or when the CLI itself is missing. */
+  /** The cached account's sign-in name. Present even when `status` is 'expired' - reading the
+   *  local cache succeeds even with an expired refresh token - but absent when signed out or when
+   *  the CLI itself is missing. */
   account?: string
 }
 

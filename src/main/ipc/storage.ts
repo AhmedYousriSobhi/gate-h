@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain } from './guard'
 import { fetchStorageUsage } from '../storage/usage'
 
 export function registerStorageIpcHandlers(): void {

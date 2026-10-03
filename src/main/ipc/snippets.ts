@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain } from './guard'
 import { listSnippets, removeSnippet, saveSnippet } from '../snippets'
 import type { SnippetInput } from '../../shared/types'
 

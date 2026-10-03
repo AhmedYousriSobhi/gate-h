@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain } from './guard'
 import {
   getClusterOrder,
   getPanelLayout,

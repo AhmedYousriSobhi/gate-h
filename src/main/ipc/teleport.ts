@@ -1,4 +1,5 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { type IpcMainInvokeEvent } from 'electron'
+import { ipcMain } from './guard'
 import { openTeleportLogin } from '../ssh/manager'
 import { getTeleportSessions } from '../teleport/sessionState'
 

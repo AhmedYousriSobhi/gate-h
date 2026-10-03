@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AzureTunnelStatusEvent,
   ClusterInput,
@@ -152,7 +151,9 @@ const api: GateHApi = {
     findVm: (vmName: string) => ipcRenderer.invoke('azure:findVm', vmName),
     verifyTunnel: (clusterId: string) => ipcRenderer.invoke('azure:verifyTunnel', clusterId),
     checkAuth: (clusterId: string) => ipcRenderer.invoke('azure:checkAuth', clusterId),
-    login: (clusterId: string) => ipcRenderer.invoke('azure:login', clusterId),
+    login: (clusterId: string, deviceCode?: boolean) =>
+      ipcRenderer.invoke('azure:login', clusterId, deviceCode),
+    clearAuth: (clusterId: string) => ipcRenderer.invoke('azure:clearAuth', clusterId),
     onStatus: (callback: (event: AzureTunnelStatusEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: AzureTunnelStatusEvent): void =>
         callback(payload)
@@ -225,19 +226,15 @@ const api: GateHApi = {
   }
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
+// Only `window.api` is exposed - never the toolkit's `electronAPI`, whose raw `ipcRenderer` would let
+// the renderer call any IPC channel, and whose import is not loadable from a sandboxed preload.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
   // @ts-ignore (define in dts)
   window.api = api
 }

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain } from './guard'
 import { getCluster, getClusterSecrets } from '../clusters'
 import { createJiraIssue, listJiraIssues, searchJiraIssuesByNode } from '../jira/client'
 import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
