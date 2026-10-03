@@ -4,7 +4,12 @@
 // that nothing runs without a live session. Takes ~15s: the timeout checks wait out the real one.
 
 import { EventEmitter } from 'events'
-import { asLoginShell, NoSessionError, runOnCluster } from '../src/main/scheduler/exec'
+import {
+  asLoginShell,
+  NoSessionError,
+  runOnCluster,
+  sshHopCommand
+} from '../src/main/scheduler/exec'
 
 interface Globals {
   __clients: Record<string, unknown>
@@ -62,6 +67,14 @@ function fakeClient(scripts: Script[]): {
     }
   }
   return state
+}
+const throws = (fn: () => unknown): boolean => {
+  try {
+    fn()
+    return false
+  } catch {
+    return true
+  }
 }
 const finish =
   (stdout: string, stderr = '', code = 0, delay = 0): Script =>
@@ -196,21 +209,25 @@ async function main(): Promise<void> {
   )
 
   console.log('-- Slurm execTarget')
-  const primary = fakeClient([])
-  const execTargetClient = fakeClient([finish('nodes\n')])
+  const primary = fakeClient([finish('nodes\n')])
   g.__clients = { et1: primary }
-  g.__execTargetClient = execTargetClient
   const etResult = await runOnCluster(
-    sshWithExecTarget('et1', { host: 'bastion', port: 2222 }),
+    sshWithExecTarget('et1', { host: 'slurm-ctl', port: 2222 }),
     'sinfo'
   )
-  report(etResult.stdout === 'nodes\n', 'runs on the forwarded execTarget client')
-  report(primary.commands.length === 0, 'never runs the command on the primary session client')
+  report(etResult.stdout === 'nodes\n', 'runs through ssh from the connected node')
   report(
-    execTargetClient.commands[0] === asLoginShell('sinfo'),
-    'the exact command reaches the execTarget client'
+    primary.commands[0] ===
+      `ssh -o BatchMode=yes -o ConnectTimeout=10 -p 2222 -- slurm-ctl '${asLoginShell('sinfo').replace(/'/g, `'\\''`)}'`,
+    'the hop command is a non-interactive ssh to the target with the quoted command',
+    primary.commands[0]
   )
-  report(execTargetClient.ended, 'the short-lived execTarget client is closed after the run')
+  report(
+    throws(() => sshHopCommand({ host: '-oProxyCommand=x' }, 'sinfo')) &&
+      throws(() => sshHopCommand({ host: 'a b' }, 'sinfo')) &&
+      throws(() => sshHopCommand({ host: 'node', port: 22.5 }, 'sinfo')),
+    'a host that could read as an option or a bad port is refused'
+  )
 
   g.__teleport = {
     ...g.__teleport,
