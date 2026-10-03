@@ -58,8 +58,8 @@ report(
   partCmd
 )
 report(
-  throws(() => snapshotCommand({ ...byPartition, partitions: [] })),
-  "scope 'partitions' refuses to run without a partition (no whole-queue scope)"
+  !throws(() => snapshotCommand({ ...byPartition, partitions: [] })),
+  "scope 'partitions' with no partition lists the whole queue"
 )
 report(
   throws(() => snapshotCommand({ ...mine, partitions: ["gpu'; rm -rf ~; '"] })),
@@ -201,14 +201,18 @@ report(
   "history is the user's own allocations over the range"
 )
 report(
-  throws(() => historyCommand(30)) && throws(() => historyCommand(1.5)),
+  historyCommand(1, true).includes('--allusers') && !historyCommand(1, true).includes('--user'),
+  'all-users history drops the user filter'
+)
+report(
+  throws(() => historyCommand(90)) && throws(() => historyCommand(1.5)),
   'only the offered ranges are accepted'
 )
 const history = parseHistory(
   [
-    '100|cpu|COMPLETED|0:0|00:10:00|2026-09-28T08:00:00|2026-09-28T08:10:00|00:05:00|2|prep',
-    '101|gpu|CANCELLED by 1234|0:15|00:01:00|2026-09-28T09:00:00|2026-09-28T09:01:00||1|a|b',
-    '102|gpu|RUNNING|0:0|00:05:00|2026-09-29T09:00:00|Unknown|00:20:00|4|train'
+    '100|alice|cpu|COMPLETED|0:0|00:10:00|2026-09-28T08:00:00|2026-09-28T08:10:00|00:05:00|2|prep',
+    '101|bob|gpu|CANCELLED by 1234|0:15|00:01:00|2026-09-28T09:00:00|2026-09-28T09:01:00||1|a|b',
+    '102|alice|gpu|RUNNING|0:0|00:05:00|2026-09-29T09:00:00|Unknown|00:20:00|4|train'
   ].join('\n')
 )
 report(history.length === 3 && history[0].id === '102', 'newest first')

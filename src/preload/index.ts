@@ -111,8 +111,8 @@ const api: GateHApi = {
     },
     arrayTasks: (clusterId: string, arrayJobId: string) =>
       ipcRenderer.invoke('scheduler:arrayTasks', clusterId, arrayJobId),
-    history: (clusterId: string, days: number) =>
-      ipcRenderer.invoke('scheduler:history', clusterId, days),
+    history: (clusterId: string, days: number, allUsers?: boolean) =>
+      ipcRenderer.invoke('scheduler:history', clusterId, days, allUsers),
     submit: (clusterId: string, script: string, label: string) =>
       ipcRenderer.invoke('scheduler:submit', clusterId, script, label),
     cancel: (clusterId: string, jobId: string) =>

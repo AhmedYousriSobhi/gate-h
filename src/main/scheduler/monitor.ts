@@ -347,9 +347,13 @@ export function fetchArrayTasks(clusterId: string, arrayJobId: string): Promise<
   )
 }
 
-export function fetchJobHistory(clusterId: string, days: number): Promise<SlurmHistoryJob[]> {
-  return reuseRecent(`${clusterId}:history:${days}`, () =>
-    runOnDemand(clusterId, () => historyCommand(days), parseHistory)
+export function fetchJobHistory(
+  clusterId: string,
+  days: number,
+  allUsers: boolean
+): Promise<SlurmHistoryJob[]> {
+  return reuseRecent(`${clusterId}:history:${days}:${allUsers}`, () =>
+    runOnDemand(clusterId, () => historyCommand(days, allUsers), parseHistory)
   )
 }
 

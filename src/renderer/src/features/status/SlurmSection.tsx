@@ -108,7 +108,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
     () => new Set(ALL_SUBSECTIONS)
   )
   const [stateFilter, setStateFilter] = useState<Set<string>>(new Set())
-  const [userFilter, setUserFilter] = useState('')
+  const [textFilter, setTextFilter] = useState('')
+  const [partitionFilter, setPartitionFilter] = useState('')
   const watching = active && scheduler !== null
   // Re-watch after the settings change, so the next snapshot reflects them.
   const configKey = scheduler ? JSON.stringify(scheduler) : null
@@ -181,14 +182,17 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
   const columns = showUser ? 9 : 8
   const counts = new Map<string, number>()
   for (const job of snapshot.jobs) counts.set(job.state, (counts.get(job.state) ?? 0) + 1)
-  const trimmedUserFilter = userFilter.trim().toLowerCase()
-  const filtersActive = stateFilter.size > 0 || trimmedUserFilter.length > 0
+  const needle = textFilter.trim().toLowerCase()
+  const filtersActive = stateFilter.size > 0 || needle.length > 0 || partitionFilter !== ''
+  const jobPartitions = [...new Set(snapshot.jobs.map((job) => job.partition))].sort()
   // Counts/pills above the table always reflect every job, even while filtered, so there's
   // something to filter back to - only the table body is narrowed.
   const filteredJobs = snapshot.jobs.filter(
     (job) =>
       (stateFilter.size === 0 || stateFilter.has(job.state)) &&
-      (!trimmedUserFilter || (job.user ?? '').toLowerCase().includes(trimmedUserFilter))
+      (partitionFilter === '' || job.partition === partitionFilter) &&
+      (!needle ||
+        [job.id, job.name, job.user ?? ''].some((field) => field.toLowerCase().includes(needle)))
   )
 
   function toggleSection(key: SlurmSubsection): void {
@@ -201,7 +205,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
 
   function resetFilters(): void {
     setStateFilter(new Set())
-    setUserFilter('')
+    setTextFilter('')
+    setPartitionFilter('')
   }
 
   return (
@@ -256,17 +261,32 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
         </button>
       </div>
 
-      {visibleSections.has('jobs') && (showUser || filtersActive) && (
+      {visibleSections.has('jobs') && snapshot.jobs.length > 0 && (
         <div className="slurm-toolbar">
-          {showUser && (
-            <input
+          <input
+            className="slurm-user-filter"
+            type="text"
+            placeholder={
+              showUser ? 'Filter by job id, name or user...' : 'Filter by job id or name...'
+            }
+            value={textFilter}
+            onChange={(e) => setTextFilter(e.target.value)}
+            aria-label="Filter jobs by id, name or user"
+          />
+          {jobPartitions.length > 1 && (
+            <select
               className="slurm-user-filter"
-              type="text"
-              placeholder="Filter by username..."
-              value={userFilter}
-              onChange={(e) => setUserFilter(e.target.value)}
-              aria-label="Filter jobs by username"
-            />
+              value={partitionFilter}
+              onChange={(e) => setPartitionFilter(e.target.value)}
+              aria-label="Filter jobs by partition"
+            >
+              <option value="">All partitions</option>
+              {jobPartitions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
           )}
           {filtersActive && (
             <button type="button" className="btn btn-sm" onClick={resetFilters}>
@@ -290,7 +310,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
           {visibleSections.has('jobs') &&
             (snapshot.jobs.length === 0 ? (
               <p className="hint">
-                {showUser ? 'No jobs in these partitions.' : 'You have no jobs in the queue.'}
+                {showUser ? 'No jobs in the queue.' : 'You have no jobs in the queue.'}
               </p>
             ) : filteredJobs.length === 0 ? (
               <p className="hint">No jobs match the current filter.</p>
@@ -362,8 +382,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
             ))}
           {visibleSections.has('jobs') && snapshot.truncated && (
             <p className="hint">
-              Showing the first {MAX_SLURM_JOBS.toLocaleString()} jobs. Narrow the partitions in the
-              cluster settings to see the rest.
+              Showing the first {MAX_SLURM_JOBS.toLocaleString()} jobs. Filter above, or limit the
+              partitions in the cluster settings, to see the rest.
             </p>
           )}
 
@@ -410,7 +430,7 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
         </>
       )}
 
-      <SlurmHistory clusterId={cluster.id} />
+      <SlurmHistory clusterId={cluster.id} autoLoad={!cluster.teleport} />
 
       {selectedNode && (
         <NodeDetailDialog

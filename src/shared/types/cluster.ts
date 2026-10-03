@@ -200,10 +200,10 @@ export type SchedulerScope = 'mine' | 'partitions'
  *  only scheduler supported; PBS/LSF would add their own kinds. */
 export interface SchedulerConfig {
   kind: 'slurm'
-  /** 'mine': the SSH user's own jobs. 'partitions': every user's jobs, but only in `partitions` -
-   *  never the whole queue, which can run to tens of thousands of rows on a large site. */
+  /** 'mine': the SSH user's own jobs. 'partitions': every user's jobs (the name is kept for saved
+   *  configs); the parsed list is capped at MAX_SLURM_JOBS on a large site. */
   scope: SchedulerScope
-  /** Required (non-empty) for scope 'partitions'; an optional filter for 'mine'. */
+  /** Optional: limits the squeue query itself. The Status panel filters by partition client-side. */
   partitions: string[]
   intervalSec: number
   /** Off means refresh only on request. Defaults off for Teleport clusters, where every run is a

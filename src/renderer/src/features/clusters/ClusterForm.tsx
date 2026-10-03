@@ -74,9 +74,6 @@ function schedulerError(form: FormState): string | null {
   const partitions = splitList(form.schedulerPartitions)
   const bad = partitions.find((name) => !SLURM_PARTITION_PATTERN.test(name))
   if (bad) return `Partition names may only use letters, digits, _ . and - ("${bad}").`
-  if (form.schedulerScope === 'partitions' && partitions.length === 0) {
-    return "Showing everyone's jobs needs at least one partition."
-  }
   const interval = Number(form.schedulerInterval)
   if (!Number.isInteger(interval) || interval < MIN_SCHEDULER_INTERVAL_SEC) {
     return `Slurm refresh interval must be a whole number of seconds, at least ${MIN_SCHEDULER_INTERVAL_SEC}.`

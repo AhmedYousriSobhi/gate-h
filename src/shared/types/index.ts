@@ -125,6 +125,7 @@ export interface SlurmJob {
 /** A finished (or still running) allocation of the SSH user's, from `sacct`. */
 export interface SlurmHistoryJob {
   id: string
+  user: string
   partition: string
   /** e.g. `COMPLETED`, `FAILED`, `TIMEOUT`, `CANCELLED by 1234`. */
   state: string
@@ -422,7 +423,7 @@ export interface GateHApi {
     /** The tasks of a collapsed job array, run once on request. */
     arrayTasks(clusterId: string, arrayJobId: string): Promise<SlurmJob[]>
     /** The SSH user's jobs over the last `days` (1 or 7) days, newest first, run once on request. */
-    history(clusterId: string, days: number): Promise<SlurmHistoryJob[]>
+    history(clusterId: string, days: number, allUsers?: boolean): Promise<SlurmHistoryJob[]>
     /** Submits a rendered batch script with `sbatch` - after the main process asks the user to
      *  confirm in a native dialog. Resolves with the job id, or null if the user declined. */
     submit(clusterId: string, script: string, label: string): Promise<string | null>

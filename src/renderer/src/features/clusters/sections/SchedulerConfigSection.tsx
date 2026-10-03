@@ -48,16 +48,14 @@ export default function SchedulerConfigSection({
                 onChange={(e) => set('schedulerScope', e.target.value as SchedulerScope)}
               >
                 <option value="mine">My jobs</option>
-                <option value="partitions">Everyone&apos;s jobs in these partitions</option>
+                <option value="partitions">Everyone&apos;s jobs</option>
               </select>
             </div>
             <div className="form-field">
-              <label htmlFor="schedulerPartitions">
-                Partitions{form.schedulerScope === 'mine' ? ' (optional)' : ''}
-              </label>
+              <label htmlFor="schedulerPartitions">Only query these partitions (optional)</label>
               <input
                 id="schedulerPartitions"
-                placeholder="gpu, cpu"
+                placeholder="Blank = all partitions (filter in the Status panel)"
                 value={form.schedulerPartitions}
                 onChange={(e) => set('schedulerPartitions', e.target.value)}
               />

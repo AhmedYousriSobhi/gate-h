@@ -36,7 +36,9 @@ export function registerSchedulerIpcHandlers(): void {
     (_event, clusterId: string, jobId: string, nodes: number) =>
       sampleJobGpus(clusterId, jobId, nodes)
   )
-  ipcMain.handle('scheduler:history', (_event, clusterId: string, days: number) =>
-    fetchJobHistory(clusterId, days)
+  ipcMain.handle(
+    'scheduler:history',
+    (_event, clusterId: string, days: number, allUsers?: boolean) =>
+      fetchJobHistory(clusterId, days, allUsers === true)
   )
 }
