@@ -96,6 +96,27 @@ export async function listJiraIssues(
   return searchJiraIssues(profile, token, `${scope} ORDER BY updated DESC`)
 }
 
+/** How many tickets in the cluster's own scope are still unresolved. Jira Cloud's approximate-count
+ *  endpoint; Server/Data Center has none, so it falls back to the old search's `total`. */
+export async function countOpenJiraIssues(profile: JiraProfile, token: string): Promise<number> {
+  const scope = baseJql(profile).replace(/\s+order\s+by\s.*$/i, '')
+  const jql = `${scope ? `(${scope}) AND ` : ''}resolution = Unresolved`
+  try {
+    const res = await jiraFetch(profile, token, '/rest/api/3/search/approximate-count', {
+      method: 'POST',
+      body: JSON.stringify({ jql })
+    })
+    return ((await res.json()) as { count: number }).count
+  } catch (err) {
+    if (!(err instanceof Error) || !/HTTP (404|405)\b/.test(err.message)) throw err
+    const res = await jiraFetch(profile, token, '/rest/api/2/search', {
+      method: 'POST',
+      body: JSON.stringify({ jql, maxResults: 0 })
+    })
+    return ((await res.json()) as { total: number }).total
+  }
+}
+
 /** Tickets mentioning a given compute node, scoped the same way as listJiraIssues (the cluster's
  *  own project/JQL filter) - see docs/JIRA_GUIDE.md section 4's "mentioning a specific compute
  *  node" recipe, which this automates instead of the user typing it in by hand. */

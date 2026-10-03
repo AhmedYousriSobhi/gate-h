@@ -1,6 +1,11 @@
 import { ipcMain } from './guard'
 import { getCluster, getClusterSecrets } from '../clusters'
-import { createJiraIssue, listJiraIssues, searchJiraIssuesByNode } from '../jira/client'
+import {
+  countOpenJiraIssues,
+  createJiraIssue,
+  listJiraIssues,
+  searchJiraIssuesByNode
+} from '../jira/client'
 import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
 
 function requireJiraContext(clusterId: string): {
@@ -23,6 +28,11 @@ export function registerJiraIpcHandlers(): void {
   ipcMain.handle('jira:list', async (_event, clusterId: string): Promise<JiraIssueSummary[]> => {
     const { jira, token } = requireJiraContext(clusterId)
     return listJiraIssues(jira, token)
+  })
+
+  ipcMain.handle('jira:openCount', async (_event, clusterId: string): Promise<number> => {
+    const { jira, token } = requireJiraContext(clusterId)
+    return countOpenJiraIssues(jira, token)
   })
 
   ipcMain.handle(

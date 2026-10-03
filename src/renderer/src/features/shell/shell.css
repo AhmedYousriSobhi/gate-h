@@ -1322,3 +1322,10 @@ button.widget-picker-item:hover {
     background-position: -100% 0;
   }
 }
+
+.cluster-card-tickets {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}

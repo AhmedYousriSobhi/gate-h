@@ -1,5 +1,10 @@
-import { RefreshCw } from 'lucide-react'
-import { MIN_STORAGE_INTERVAL_SEC, type ClusterSummary } from '../../../../shared/types'
+import { useState } from 'react'
+import { Plus, RefreshCw, X } from 'lucide-react'
+import {
+  MIN_STORAGE_INTERVAL_SEC,
+  STORAGE_PATH_PATTERN,
+  type ClusterSummary
+} from '../../../../shared/types'
 import { useStorageUsage } from '../../hooks/useStorageUsage'
 
 function size(kib: number): string {
@@ -11,6 +16,19 @@ function size(kib: number): string {
     unit++
   }
   return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`
+}
+
+function storageKey(clusterId: string): string {
+  return `gateh.storage.paths.${clusterId}`
+}
+
+function loadPaths(clusterId: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(storageKey(clusterId)) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 function Meter({
@@ -55,15 +73,37 @@ export default function StorageSection({
 }: {
   cluster: ClusterSummary
 }): React.JSX.Element {
-  const { usage, loading, error, checkedAt, check } = useStorageUsage(cluster)
+  const [extraPaths, setExtraPaths] = useState(() => loadPaths(cluster.id))
+  const [draft, setDraft] = useState('')
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const { usage, loading, error, checkedAt, check } = useStorageUsage(cluster, extraPaths)
+  const configured = cluster.storage?.paths ?? []
   const autoRefresh = cluster.storage?.autoRefresh ?? false
   const intervalSec = Math.max(
     cluster.storage?.intervalSec ?? MIN_STORAGE_INTERVAL_SEC,
     MIN_STORAGE_INTERVAL_SEC
   )
 
-  if (!cluster.storage) {
-    return <p className="hint">No storage paths configured. Edit the cluster to add some.</p>
+  function savePaths(next: string[]): void {
+    setExtraPaths(next)
+    try {
+      localStorage.setItem(storageKey(cluster.id), JSON.stringify(next))
+    } catch {
+      // Kept for this session only.
+    }
+  }
+
+  function addPath(e: React.FormEvent): void {
+    e.preventDefault()
+    const path = draft.trim()
+    if (!path) return
+    if (!STORAGE_PATH_PATTERN.test(path.replace(/\$(USER|HOME)/g, ''))) {
+      setDraftError('Use letters, digits and _ . / ~ - only (plus $USER or $HOME).')
+      return
+    }
+    setDraftError(null)
+    if (!configured.includes(path) && !extraPaths.includes(path)) savePaths([...extraPaths, path])
+    setDraft('')
   }
 
   return (
@@ -72,14 +112,48 @@ export default function StorageSection({
         <span className="slurm-dim slurm-grow">
           {checkedAt
             ? `Checked at ${checkedAt.toLocaleTimeString()}`
-            : cluster.storage.paths.join(', ')}
+            : [...configured, ...extraPaths].join(', ') || 'No paths yet'}
           {autoRefresh && ` · auto-refreshing every ${intervalSec}s`}
         </span>
-        <button className="btn btn-sm" disabled={loading} onClick={() => void check()}>
+        <button
+          className="btn btn-sm"
+          disabled={loading || configured.length + extraPaths.length === 0}
+          onClick={() => void check()}
+        >
           <RefreshCw size={13} strokeWidth={2} className={loading ? 'slurm-spin' : ''} />
           {usage ? 'Check again' : 'Check usage'}
         </button>
       </div>
+      <form className="issue-form" onSubmit={addPath}>
+        <input
+          placeholder="Add a path to check, e.g. /scratch/$USER"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          aria-label="Storage path to check"
+        />
+        <button type="submit" className="btn btn-sm">
+          <Plus size={13} strokeWidth={2.5} />
+          Add
+        </button>
+      </form>
+      {draftError && <p className="slurm-error">{draftError}</p>}
+      {extraPaths.length > 0 && (
+        <div className="slurm-node-chips">
+          {extraPaths.map((path) => (
+            <span className="issue-status issue-status-todo slurm-mono" key={path}>
+              {path}{' '}
+              <button
+                type="button"
+                className="btn-icon"
+                title={`Stop checking ${path}`}
+                onClick={() => savePaths(extraPaths.filter((p) => p !== path))}
+              >
+                <X size={11} strokeWidth={2} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
       {usage?.length === 0 && <p className="hint">The cluster returned no usage information.</p>}
       {usage?.map((entry) => (

@@ -383,6 +383,8 @@ export interface GateHApi {
   }
   jira: {
     list(clusterId: string): Promise<JiraIssueSummary[]>
+    /** Unresolved tickets in the cluster's Jira scope. */
+    openCount(clusterId: string): Promise<number>
     create(clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary>
     /** Tickets mentioning this node name, scoped by the cluster's own Jira project/JQL filter -
      *  see docs/JIRA_GUIDE.md section 4. */
@@ -447,7 +449,7 @@ export interface GateHApi {
   }
   storage: {
     /** Usage and quota for the cluster's configured paths, run once on request. */
-    usage(clusterId: string): Promise<StorageUsage[]>
+    usage(clusterId: string, extraPaths?: string[]): Promise<StorageUsage[]>
   }
   files: {
     /** A remote directory over SFTP on the terminal's connection; defaults to the home directory. */

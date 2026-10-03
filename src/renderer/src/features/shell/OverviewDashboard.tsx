@@ -9,6 +9,7 @@ import type {
 import ClusterCard from './ClusterCard'
 import ClusterTableRow from './ClusterTableRow'
 import { fleetJobTotals } from './jobSummary'
+import { useJiraOpenCounts } from '../../hooks/useJiraOpenCounts'
 import { useOverviewViewMode } from '../../hooks/useOverviewViewMode'
 
 interface OverviewDashboardProps {
@@ -48,6 +49,7 @@ export default function OverviewDashboard({
   const gridRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const { viewMode, setViewMode } = useOverviewViewMode()
+  const openTickets = useJiraOpenCounts(clusters)
 
   const unreadByCluster = useMemo(() => {
     const map: Record<string, number> = {}
@@ -265,6 +267,7 @@ export default function OverviewDashboard({
                       cluster={cluster}
                       reachability={reachability[cluster.id]}
                       schedulerSnapshot={schedulerSnapshots[cluster.id]}
+                      openTickets={openTickets[cluster.id]}
                       unread={unreadByCluster[cluster.id] ?? 0}
                       onConnect={onConnect}
                       onViewStatus={onViewStatus}
@@ -281,6 +284,7 @@ export default function OverviewDashboard({
                   cluster={cluster}
                   reachability={reachability[cluster.id]}
                   schedulerSnapshot={schedulerSnapshots[cluster.id]}
+                  openTickets={openTickets[cluster.id]}
                   unread={unreadByCluster[cluster.id] ?? 0}
                   onConnect={onConnect}
                   onViewStatus={onViewStatus}

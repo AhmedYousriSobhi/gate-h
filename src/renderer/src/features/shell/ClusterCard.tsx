@@ -15,6 +15,8 @@ interface ClusterCardProps {
   /** Last-known Slurm snapshot, if one exists - see useSchedulerSnapshots. Never fetched on the
    *  Overview's account; absent entirely for a cluster that's never been connected. */
   schedulerSnapshot?: SchedulerSnapshot
+  /** Unresolved Jira tickets, once fetched. */
+  openTickets?: number
   unread: number
   onConnect: (cluster: ClusterSummary) => void
   onViewStatus: (cluster: ClusterSummary) => void
@@ -27,6 +29,7 @@ export default function ClusterCard({
   cluster,
   reachability,
   schedulerSnapshot,
+  openTickets,
   unread,
   onConnect,
   onViewStatus
@@ -166,8 +169,19 @@ export default function ClusterCard({
             </span>
           )}
           {cluster.jira && (
-            <span title="Jira configured" aria-label="Jira configured">
+            <span
+              className="cluster-card-tickets"
+              title={
+                openTickets === undefined
+                  ? 'Jira configured'
+                  : `${openTickets} unresolved Jira ticket${openTickets === 1 ? '' : 's'}`
+              }
+              aria-label={
+                openTickets === undefined ? 'Jira configured' : `${openTickets} unresolved tickets`
+              }
+            >
               <Ticket size={13} strokeWidth={2} />
+              {openTickets !== undefined && ` ${openTickets} open`}
             </span>
           )}
         </div>

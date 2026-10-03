@@ -55,6 +55,7 @@ const api: GateHApi = {
   },
   jira: {
     list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),
+    openCount: (clusterId: string) => ipcRenderer.invoke('jira:openCount', clusterId),
     create: (clusterId: string, input: CreateJiraIssueInput) =>
       ipcRenderer.invoke('jira:create', clusterId, input),
     searchNode: (clusterId: string, nodeName: string) =>
@@ -144,7 +145,8 @@ const api: GateHApi = {
     remove: (id: string) => ipcRenderer.invoke('snippets:remove', id)
   },
   storage: {
-    usage: (clusterId: string) => ipcRenderer.invoke('storage:usage', clusterId)
+    usage: (clusterId: string, extraPaths?: string[]) =>
+      ipcRenderer.invoke('storage:usage', clusterId, extraPaths)
   },
   azure: {
     listSubscriptions: () => ipcRenderer.invoke('azure:listSubscriptions'),
