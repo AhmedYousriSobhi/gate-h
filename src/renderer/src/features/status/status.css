@@ -568,3 +568,62 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* Status text is data people copy (node names, reasons, job ids); the app shell disables selection. */
+.status-body {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.status-body .issue-status,
+.status-body button {
+  user-select: none;
+}
+
+.slurm-table tbody tr:hover,
+.issue-row:hover {
+  background-color: var(--color-surface-hover, var(--color-surface-active));
+}
+
+.slurm-toolbar .btn-icon:last-child {
+  margin-left: auto;
+}
+
+.node-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.node-problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.node-group-title {
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--color-text-2);
+}
+
+.node-reason {
+  font-size: 12px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.node-problem-side {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.node-group summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}

@@ -70,14 +70,19 @@ async function searchJiraIssues(
   token: string,
   jql: string
 ): Promise<JiraIssueSummary[]> {
-  const res = await jiraFetch(profile, token, '/rest/api/2/search', {
-    method: 'POST',
-    body: JSON.stringify({
-      jql,
-      maxResults: 25,
-      fields: ['summary', 'status', 'issuetype', 'updated']
-    })
+  const body = JSON.stringify({
+    jql,
+    maxResults: 25,
+    fields: ['summary', 'status', 'issuetype', 'updated']
   })
+  // Jira Cloud removed /rest/api/2/search (HTTP 410); Server/Data Center only has the old one.
+  let res: Response
+  try {
+    res = await jiraFetch(profile, token, '/rest/api/3/search/jql', { method: 'POST', body })
+  } catch (err) {
+    if (!(err instanceof Error) || !/HTTP (404|405)\b/.test(err.message)) throw err
+    res = await jiraFetch(profile, token, '/rest/api/2/search', { method: 'POST', body })
+  }
   const data = (await res.json()) as { issues: JiraApiIssue[] }
   return data.issues.map((issue) => toSummary(profile, issue))
 }

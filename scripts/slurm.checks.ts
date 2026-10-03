@@ -53,8 +53,8 @@ report(
 )
 const partCmd = snapshotCommand(byPartition)
 report(
-  !partCmd.includes('--user') && (partCmd.match(/'--partition=gpu,cpu'/g) ?? []).length === 4,
-  "scope 'partitions' shows every user's jobs, but only in the named partitions",
+  !partCmd.includes('--user') && (partCmd.match(/'--partition=gpu,cpu'/g) ?? []).length === 1,
+  "scope 'partitions' shows every user's jobs, but only in the named partitions - sinfo stays cluster-wide",
   partCmd
 )
 report(
@@ -141,10 +141,10 @@ report(parseGres('(null)').length === 0, 'no GRES configured parses to nothing')
 report(parseGres('license:matlab:2').length === 0, 'a non-GPU GRES entry is skipped, not guessed')
 const nodes = parseNodes(
   [
-    'gpu01|gpu|idle|0/64/0/64|257542|gpu:a100:4',
-    'gpu01|debug|idle|0/64/0/64|257542|gpu:a100:4',
-    'cpu01|cpu|mixed|12/52/0/64|128771|(null)',
-    'bad01|cpu|idle|not-four-slashes|128771|(null)'
+    'gpu01|gpu|idle|0/64/0/64|257542|gpu:a100:4|none',
+    'gpu01|debug|idle|0/64/0/64|257542|gpu:a100:4|none',
+    'cpu01|cpu|mixed|12/52/0/64|128771|(null)|none',
+    'bad01|cpu|idle|not-four-slashes|128771|(null)|none'
   ].join('\n')
 )
 report(nodes.length === 3, 'one SlurmNode per unique node name')
@@ -159,6 +159,11 @@ report(
   gpu01?.cpusAllocated === 0 && gpu01?.cpusTotal === 64 && gpu01?.gpus[0]?.count === 4,
   'parses CPU alloc/total and GPU GRES'
 )
+const down01 = parseNodes('dn01|cpu|drained*|0/0/64/64|1|(null)|NHC: GPU-0 has | to be reset')[0]
+report(
+  down01?.reason === 'NHC: GPU-0 has | to be reset',
+  'keeps a drain reason that itself contains the delimiter'
+)
 const bad01 = nodes.find((n) => n.name === 'bad01')
 report(
   bad01?.cpusAllocated === null && bad01?.cpusTotal === null,
@@ -170,7 +175,7 @@ report(
 )
 
 console.log('-- snapshot')
-const nodeRow = 'cpu01|cpu|idle|0/4/0/4|8192|(null)'
+const nodeRow = 'cpu01|cpu|idle|0/4/0/4|8192|(null)|none'
 const snapshot = parseSnapshot(
   `${squeueMine}@@gateh@@\ngpu|up|6|mixed\n@@gateh@@\n@@gateh@@\n${nodeRow}\n`,
   'mine'
