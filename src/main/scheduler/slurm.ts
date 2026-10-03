@@ -49,7 +49,8 @@ function jobsCommand(config: SchedulerConfig, extra = ''): string {
 }
 
 /** One refresh: jobs, per-partition node states, down/drained nodes, and the full node inventory,
- *  chained into a single exec so it costs one channel. `&&` so the exit status is the first
+ *  chained into a single exec so it costs one channel. The partition filter narrows only the jobs;
+ *  node health is always cluster-wide, since a down node matters whatever partition it is in. `&&` so the exit status is the first
  *  failure's.
  *
  *  ASSUMPTION: `%C`/`%m`/`%G` are standard, stable `sinfo` format letters (CPU state as
@@ -65,11 +66,11 @@ export function snapshotCommand(config: SchedulerConfig): string {
   return [
     jobsCommand(config, partitions),
     `echo '${SECTION_MARKER}'`,
-    `LC_ALL=C sinfo${partitions} --noheader '--format=%R|%a|%D|%T'`,
+    `LC_ALL=C sinfo --noheader '--format=%R|%a|%D|%T'`,
     `echo '${SECTION_MARKER}'`,
-    `LC_ALL=C sinfo${partitions} --noheader --list-reasons '--format=%N|%T|%E'`,
+    `LC_ALL=C sinfo --noheader --list-reasons '--format=%N|%T|%E'`,
     `echo '${SECTION_MARKER}'`,
-    `LC_ALL=C sinfo -N${partitions} --noheader '--format=%N|%R|%T|%C|%m|%G'`
+    `LC_ALL=C sinfo -N --noheader '--format=%N|%R|%T|%C|%m|%G|%E'`
   ].join(' && ')
 }
 
@@ -265,9 +266,9 @@ export function parseGres(raw: string): SlurmGres[] {
 export function parseNodes(text: string): SlurmNode[] {
   const byName = new Map<string, SlurmNode>()
   for (const row of lines(text)) {
-    const f = splitFields(row, 6)
+    const f = splitFields(row, 7)
     if (!f) continue
-    const [name, partition, rawState, cpuField, memField, gresField] = f
+    const [name, partition, rawState, cpuField, memField, gresField, reason] = f
     const existing = byName.get(name)
     if (existing) {
       if (!existing.partitions.includes(partition)) existing.partitions.push(partition)
@@ -284,7 +285,8 @@ export function parseNodes(text: string): SlurmNode[] {
       cpusAllocated: cpusValid ? (cpuNumbers as number[])[0] : null,
       cpusTotal: cpusValid ? (cpuNumbers as number[])[3] : null,
       memTotalMiB: Number.isFinite(mem) ? mem : null,
-      gpus: parseGres(gresField)
+      gpus: parseGres(gresField),
+      reason: reason.trim() === 'none' ? '' : reason.trim()
     })
   }
   return [...byName.values()]

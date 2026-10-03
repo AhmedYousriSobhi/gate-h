@@ -181,6 +181,8 @@ export interface SlurmNode {
   /** Empty when the node has no GRES configured (`sinfo %G` prints `(null)`), or a non-GPU-only
    *  GRES string this parser doesn't recognize. */
   gpus: SlurmGres[]
+  /** From `sinfo %E` - why a down/drained node is out. Empty for healthy nodes. */
+  reason: string
 }
 
 /** 'waiting': no live session to run on yet (nothing ran). 'no-slurm': squeue isn't on the login

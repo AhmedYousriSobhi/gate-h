@@ -10,7 +10,8 @@ import {
 import GpuUsage from './GpuUsage'
 import NodeDetailDialog from './NodeDetailDialog'
 import SlurmHistory from './SlurmHistory'
-import { nodeIsDown, nodeStateClass, shortTime, stateClass } from './slurmState'
+import NodeList from './NodeList'
+import { shortTime, stateClass } from './slurmState'
 
 interface SlurmSectionProps {
   cluster: ClusterSummary
@@ -401,38 +402,8 @@ export default function SlurmSection({ cluster, active }: SlurmSectionProps): Re
                   </table>
                 </div>
               )}
-              {snapshot.nodeIssues.length > 0 && (
-                <div className="issue-list">
-                  {snapshot.nodeIssues.map((issue) => (
-                    <div className="issue-row" key={`${issue.nodes}-${issue.state}`}>
-                      <div>
-                        <span className="slurm-mono">{issue.nodes}</span> {issue.reason}
-                      </div>
-                      <span className="issue-status slurm-state-failed">{issue.state}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
               {snapshot.nodes.length > 0 && (
-                <div className="slurm-node-chips">
-                  {[...snapshot.nodes]
-                    .sort(
-                      (a, b) =>
-                        Number(nodeIsDown(b.state)) - Number(nodeIsDown(a.state)) ||
-                        a.name.localeCompare(b.name)
-                    )
-                    .map((node) => (
-                      <button
-                        key={node.name}
-                        type="button"
-                        className={`issue-status ${nodeStateClass(node.state)} slurm-node-chip`}
-                        title={`${node.name}: ${node.state}`}
-                        onClick={() => setSelectedNode(node)}
-                      >
-                        {node.name}
-                      </button>
-                    ))}
-                </div>
+                <NodeList nodes={snapshot.nodes} onSelect={setSelectedNode} />
               )}
             </>
           )}
