@@ -1,4 +1,9 @@
-import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
+import type {
+  CreateJiraIssueInput,
+  JiraIssueSummary,
+  JiraListFilter,
+  JiraProfile
+} from '../../shared/types'
 import { toClusterSlug } from '../../shared/clusterSlug'
 
 // Talks to a cluster's Jira instance (Cloud or Data Center/Server) over its REST API. Uses the
@@ -61,8 +66,12 @@ function toSummary(profile: JiraProfile, issue: JiraApiIssue): JiraIssueSummary 
   }
 }
 
+/** The cluster's own scope, parenthesised so a user's `a OR b` can't swallow the clauses added
+ *  after it, and without a trailing ORDER BY (each caller adds its own). Empty when unscoped. */
 function baseJql(profile: JiraProfile): string {
-  return profile.jql?.trim() || (profile.projectKey ? `project = "${profile.projectKey}"` : '')
+  const raw = profile.jql?.trim() || (profile.projectKey ? `project = "${profile.projectKey}"` : '')
+  const scope = raw.replace(/\s+order\s+by\s.*$/i, '').trim()
+  return scope ? `(${scope})` : ''
 }
 
 async function searchJiraIssues(
@@ -89,18 +98,24 @@ async function searchJiraIssues(
 
 export async function listJiraIssues(
   profile: JiraProfile,
-  token: string
+  token: string,
+  filter: JiraListFilter = {}
 ): Promise<JiraIssueSummary[]> {
   // The v3 search rejects a query with no restriction at all, so an unscoped profile gets a window.
-  const scope = baseJql(profile) || 'updated >= -90d'
-  return searchJiraIssues(profile, token, `${scope} ORDER BY updated DESC`)
+  const clauses = [baseJql(profile) || 'updated >= -90d']
+  const text = filter.text?.trim()
+  if (text) clauses.push(`text ~ "${text.replace(/[\\"]/g, '\\$&')}"`)
+  if (filter.openOnly) clauses.push('resolution = Unresolved')
+  return searchJiraIssues(profile, token, `${clauses.join(' AND ')} ORDER BY updated DESC`)
 }
 
 /** How many tickets in the cluster's own scope are still unresolved. Jira Cloud's approximate-count
  *  endpoint; Server/Data Center has none, so it falls back to the old search's `total`. */
 export async function countOpenJiraIssues(profile: JiraProfile, token: string): Promise<number> {
-  const scope = baseJql(profile).replace(/\s+order\s+by\s.*$/i, '')
-  const jql = `${scope ? `(${scope}) AND ` : ''}resolution = Unresolved`
+  const scope = baseJql(profile)
+  // Without a project or JQL this would count every ticket the account can see - not the cluster's.
+  if (!scope) throw new Error('This cluster has no Jira project key or JQL filter.')
+  const jql = `${scope} AND resolution = Unresolved`
   try {
     const res = await jiraFetch(profile, token, '/rest/api/3/search/approximate-count', {
       method: 'POST',

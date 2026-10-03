@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
-import type { ClusterSummary, JiraIssueSummary } from '../../../../shared/types'
+import type { ClusterSummary, JiraIssueSummary, JiraListFilter } from '../../../../shared/types'
 
 function issueStatusClass(status: string): string {
   const normalized = status.toLowerCase()
@@ -31,12 +31,15 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
   const [newSummary, setNewSummary] = useState('')
   const [creating, setCreating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [text, setText] = useState('')
+  const [openOnly, setOpenOnly] = useState(false)
+  const [filter, setFilter] = useState<JiraListFilter>({})
   const [autoRefresh, setAutoRefresh] = useState(loadAutoRefresh)
 
   async function refresh(): Promise<void> {
     setRefreshing(true)
     try {
-      setIssues(await window.api.jira.list(cluster.id))
+      setIssues(await window.api.jira.list(cluster.id, filter))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Jira issues.')
@@ -58,7 +61,7 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
   useEffect(() => {
     let cancelled = false
     window.api.jira
-      .list(cluster.id)
+      .list(cluster.id, filter)
       .then((result) => {
         if (!cancelled) setIssues(result)
       })
@@ -71,7 +74,7 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
     return () => {
       cancelled = true
     }
-  }, [cluster.id])
+  }, [cluster.id, filter])
 
   useEffect(() => {
     if (!autoRefresh || !cluster.jira) return
@@ -103,6 +106,42 @@ export default function JiraSection({ cluster }: JiraSectionProps): React.JSX.El
 
   return (
     <div className="status-section">
+      {!cluster.jira.projectKey && !cluster.jira.jql?.trim() && (
+        <p className="hint">
+          This cluster has no Jira project key or JQL filter, so this lists every ticket you can see
+          (last 90 days). Edit the cluster and set one to scope it to this cluster.
+        </p>
+      )}
+      <form
+        className="slurm-toolbar"
+        onSubmit={(e) => {
+          e.preventDefault()
+          setFilter({ text: text.trim(), openOnly })
+        }}
+      >
+        <input
+          className="slurm-user-filter"
+          type="text"
+          placeholder="Search these tickets..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="Search Jira tickets"
+        />
+        <label className="form-field-checkbox">
+          <input
+            type="checkbox"
+            checked={openOnly}
+            onChange={(e) => {
+              setOpenOnly(e.target.checked)
+              setFilter({ text: text.trim(), openOnly: e.target.checked })
+            }}
+          />
+          Unresolved only
+        </label>
+        <button type="submit" className="btn btn-sm">
+          Search
+        </button>
+      </form>
       <div className="slurm-toolbar">
         <label className="form-field-checkbox">
           <input

@@ -91,6 +91,12 @@ export interface GrafanaStatusResult {
   dashboards: GrafanaDashboardStatus[]
 }
 
+/** Extra, per-view narrowing applied on top of the cluster's own Jira scope. */
+export interface JiraListFilter {
+  text?: string
+  openOnly?: boolean
+}
+
 export interface JiraIssueSummary {
   key: string
   summary: string
@@ -382,7 +388,7 @@ export interface GateHApi {
     gpuUsage(clusterId: string, nodelists: string[]): Promise<GpuSample[]>
   }
   jira: {
-    list(clusterId: string): Promise<JiraIssueSummary[]>
+    list(clusterId: string, filter?: JiraListFilter): Promise<JiraIssueSummary[]>
     /** Unresolved tickets in the cluster's Jira scope. */
     openCount(clusterId: string): Promise<number>
     create(clusterId: string, input: CreateJiraIssueInput): Promise<JiraIssueSummary>

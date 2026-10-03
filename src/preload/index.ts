@@ -4,6 +4,7 @@ import type {
   ClusterInput,
   ClusterNotification,
   ClusterOrder,
+  JiraListFilter,
   ClusterReachability,
   CreateJiraIssueInput,
   FileTransferEvent,
@@ -54,7 +55,8 @@ const api: GateHApi = {
       ipcRenderer.invoke('grafana:gpuUsage', clusterId, nodelists)
   },
   jira: {
-    list: (clusterId: string) => ipcRenderer.invoke('jira:list', clusterId),
+    list: (clusterId: string, filter?: JiraListFilter) =>
+      ipcRenderer.invoke('jira:list', clusterId, filter),
     openCount: (clusterId: string) => ipcRenderer.invoke('jira:openCount', clusterId),
     create: (clusterId: string, input: CreateJiraIssueInput) =>
       ipcRenderer.invoke('jira:create', clusterId, input),

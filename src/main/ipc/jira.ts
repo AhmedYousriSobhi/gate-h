@@ -6,7 +6,12 @@ import {
   listJiraIssues,
   searchJiraIssuesByNode
 } from '../jira/client'
-import type { CreateJiraIssueInput, JiraIssueSummary, JiraProfile } from '../../shared/types'
+import type {
+  CreateJiraIssueInput,
+  JiraIssueSummary,
+  JiraListFilter,
+  JiraProfile
+} from '../../shared/types'
 
 function requireJiraContext(clusterId: string): {
   jira: JiraProfile
@@ -25,10 +30,16 @@ function requireJiraContext(clusterId: string): {
 }
 
 export function registerJiraIpcHandlers(): void {
-  ipcMain.handle('jira:list', async (_event, clusterId: string): Promise<JiraIssueSummary[]> => {
-    const { jira, token } = requireJiraContext(clusterId)
-    return listJiraIssues(jira, token)
-  })
+  ipcMain.handle(
+    'jira:list',
+    async (_event, clusterId: string, filter?: JiraListFilter): Promise<JiraIssueSummary[]> => {
+      const { jira, token } = requireJiraContext(clusterId)
+      return listJiraIssues(jira, token, {
+        text: typeof filter?.text === 'string' ? filter.text : undefined,
+        openOnly: filter?.openOnly === true
+      })
+    }
+  )
 
   ipcMain.handle('jira:openCount', async (_event, clusterId: string): Promise<number> => {
     const { jira, token } = requireJiraContext(clusterId)
