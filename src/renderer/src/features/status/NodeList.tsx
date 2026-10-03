@@ -19,6 +19,13 @@ export default function NodeList({ nodes, onSelect }: NodeListProps): React.JSX.
   const problems = matching
     .filter((n) => nodeIsDown(n.state))
     .sort((a, b) => a.state.localeCompare(b.state) || byName(a, b))
+  // One row per cause: twenty nodes drained for the same reason are one thing to fix, not twenty.
+  const byReason = new Map<string, SlurmNode[]>()
+  for (const node of problems) {
+    const reason = node.reason.trim()
+    byReason.set(reason, [...(byReason.get(reason) ?? []), node])
+  }
+  const problemGroups = [...byReason].sort((a, b) => b[1].length - a[1].length)
   const groups = new Map<string, SlurmNode[]>()
   for (const node of matching) {
     if (nodeIsDown(node.state)) continue
@@ -35,21 +42,33 @@ export default function NodeList({ nodes, onSelect }: NodeListProps): React.JSX.
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Find a node by name"
       />
-      {problems.length > 0 && (
+      {problemGroups.length > 0 && (
         <div className="node-problems">
-          <div className="node-group-title">Needs attention · {problems.length}</div>
-          {problems.map((node) => (
-            <div className="issue-row node-problem" key={node.name}>
+          <div className="node-group-title">
+            Needs attention · {problems.length} node{problems.length === 1 ? '' : 's'} ·{' '}
+            {problemGroups.length} cause{problemGroups.length === 1 ? '' : 's'}
+          </div>
+          {problemGroups.map(([reason, group]) => (
+            <div className="issue-row node-problem" key={reason}>
               <div>
-                <span className="slurm-mono">{node.name}</span>
-                {node.reason && <div className="slurm-dim node-reason">{node.reason}</div>}
+                <div className="node-reason-title">{reason || 'No reason recorded'}</div>
+                <div className="slurm-node-chips">
+                  {group.map((node) => (
+                    <button
+                      key={node.name}
+                      type="button"
+                      className={`issue-status ${nodeStateClass(node.state)} slurm-node-chip`}
+                      title={`${node.name}: ${node.state} - click for details`}
+                      onClick={() => onSelect(node)}
+                    >
+                      {node.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="node-problem-side">
-                <span className={`issue-status ${nodeStateClass(node.state)}`}>{node.state}</span>
-                <button type="button" className="btn btn-sm" onClick={() => onSelect(node)}>
-                  Details
-                </button>
-              </div>
+              <span className="slurm-dim node-problem-side">
+                {group.length} node{group.length === 1 ? '' : 's'}
+              </span>
             </div>
           ))}
         </div>

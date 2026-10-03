@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { ClusterSummary, JiraIssueSummary, SlurmNode } from '../../../../shared/types'
+import { hostlistContains } from '../../../../shared/hostlist'
+import type {
+  ClusterSummary,
+  JiraIssueSummary,
+  SlurmJob,
+  SlurmNode
+} from '../../../../shared/types'
 import { nodeStateClass } from './slurmState'
 // The shared modal styles (.modal-overlay, .modal, .modal-actions) live with the cluster form.
 import '../clusters/clusters.css'
@@ -7,6 +13,10 @@ import '../clusters/clusters.css'
 interface NodeDetailDialogProps {
   cluster: ClusterSummary
   node: SlurmNode
+  /** The latest Slurm snapshot's jobs; the ones running on this node are listed. */
+  jobs: SlurmJob[]
+  /** False when the snapshot only holds the user's own jobs. */
+  allUsers: boolean
   onClose: () => void
 }
 
@@ -26,6 +36,8 @@ function issueStatusClass(status: string): string {
 export default function NodeDetailDialog({
   cluster,
   node,
+  jobs,
+  allUsers,
   onClose
 }: NodeDetailDialogProps): React.JSX.Element {
   const [issues, setIssues] = useState<Issues>('loading')
@@ -67,6 +79,9 @@ export default function NodeDetailDialog({
     }
   }
 
+  const nodeJobs = jobs.filter(
+    (job) => job.state === 'RUNNING' && hostlistContains(job.reason, node.name)
+  )
   const noMatches = Array.isArray(issues) && issues.length === 0 && !created
 
   return (
@@ -77,6 +92,27 @@ export default function NodeDetailDialog({
           State: <span className={`issue-status ${nodeStateClass(node.state)}`}>{node.state}</span>
           {node.partitions.length > 0 && ` · partitions: ${node.partitions.join(', ')}`}
         </p>
+
+        <h3 className="slurm-subheading">Running jobs on this node</h3>
+        {nodeJobs.length === 0 ? (
+          <p className="hint">
+            {allUsers ? 'No running jobs.' : 'None of your jobs. Only your own jobs are listed.'}
+          </p>
+        ) : (
+          <div className="issue-list">
+            {nodeJobs.map((job) => (
+              <div className="issue-row" key={job.id}>
+                <div>
+                  <span className="slurm-mono">{job.id}</span> {job.name}
+                  {job.user && <span className="slurm-dim"> · {job.user}</span>}
+                </div>
+                <span className="slurm-mono slurm-dim">
+                  {job.elapsed} / {job.timeLimit}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {!cluster.jira && <p className="hint">No Jira project configured for this cluster.</p>}
 

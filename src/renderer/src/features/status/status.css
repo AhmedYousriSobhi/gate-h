@@ -627,3 +627,8 @@
   cursor: pointer;
   user-select: none;
 }
+
+.node-reason-title {
+  overflow-wrap: anywhere;
+  margin-bottom: var(--space-2);
+}

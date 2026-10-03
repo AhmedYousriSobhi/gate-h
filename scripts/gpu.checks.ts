@@ -8,6 +8,7 @@ import {
   nvidiaSmiCommand,
   parseNvidiaSmi
 } from '../src/main/scheduler/gpu'
+import { hostlistContains } from '../src/shared/hostlist'
 import { createServer } from 'http'
 import type { AddressInfo } from 'net'
 import { getGpuUsage, gpuQueryBody, parseGpuResponse } from '../src/main/grafana/gpu'
@@ -41,6 +42,12 @@ report(
   'several bracket groups'
 )
 report(expandHostlist('n[0001-9999]').length === MAX_GPU_HOSTS, `stops at ${MAX_GPU_HOSTS} names`)
+report(
+  hostlistContains('azure-uk-hpc-H200-instance-[001-200]', 'azure-uk-hpc-H200-instance-181') &&
+    !hostlistContains('azure-uk-hpc-H200-instance-[001-100]', 'azure-uk-hpc-H200-instance-181') &&
+    !hostlistContains('(Resources)', 'gpu01'),
+  'a node is found in a wide job even past the 64-name cap'
+)
 
 console.log('-- nvidia-smi')
 const cmd = nvidiaSmiCommand('48213', 2)
