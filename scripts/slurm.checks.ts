@@ -58,8 +58,8 @@ report(
   partCmd
 )
 report(
-  throws(() => snapshotCommand({ ...byPartition, partitions: [] })),
-  "scope 'partitions' refuses to run without a partition (no whole-queue scope)"
+  !throws(() => snapshotCommand({ ...byPartition, partitions: [] })),
+  "scope 'partitions' with no partition lists the whole queue"
 )
 report(
   throws(() => snapshotCommand({ ...mine, partitions: ["gpu'; rm -rf ~; '"] })),

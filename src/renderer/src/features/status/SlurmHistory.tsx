@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { SlurmHistoryJob } from '../../../../shared/types'
 import { shortTime, stateClass } from './slurmState'
 
@@ -9,10 +9,17 @@ const RANGES = [
 
 /** The SSH user's recent jobs from sacct. Only loaded on request: sacct reads the accounting
  *  database, which there's no reason to poll. */
-export default function SlurmHistory({ clusterId }: { clusterId: string }): React.JSX.Element {
-  const [days, setDays] = useState<number | null>(null)
+export default function SlurmHistory({
+  clusterId,
+  autoLoad
+}: {
+  clusterId: string
+  /** Load the last 24 h on open. Off for Teleport, where every run is an audited session. */
+  autoLoad: boolean
+}): React.JSX.Element {
+  const [days, setDays] = useState<number | null>(autoLoad ? 1 : null)
   const [jobs, setJobs] = useState<SlurmHistoryJob[] | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
 
   async function load(range: number): Promise<void> {
@@ -29,6 +36,25 @@ export default function SlurmHistory({ clusterId }: { clusterId: string }): Reac
     }
   }
 
+  useEffect(() => {
+    if (!autoLoad) return
+    let cancelled = false
+    window.api.scheduler
+      .history(clusterId, 1)
+      .then((result) => {
+        if (!cancelled) setJobs(result)
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [clusterId, autoLoad])
+
   return (
     <>
       <div className="slurm-toolbar">
@@ -44,6 +70,9 @@ export default function SlurmHistory({ clusterId }: { clusterId: string }): Reac
           </button>
         ))}
       </div>
+      {days === null && !loading && (
+        <p className="hint">Pick a range to load your finished jobs from sacct.</p>
+      )}
       {loading && <p className="hint">Loading job history...</p>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && jobs && jobs.length === 0 && <p className="hint">No jobs in this period.</p>}

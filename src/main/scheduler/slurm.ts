@@ -35,9 +35,6 @@ function partitionArg(config: SchedulerConfig): string {
   for (const name of config.partitions) {
     if (!SLURM_PARTITION_PATTERN.test(name)) throw new Error(`Invalid partition name: ${name}`)
   }
-  if (config.scope === 'partitions' && config.partitions.length === 0) {
-    throw new Error("Scope 'partitions' needs at least one partition.")
-  }
   return config.partitions.length ? ` '--partition=${config.partitions.join(',')}'` : ''
 }
 

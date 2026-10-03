@@ -91,8 +91,9 @@ export async function listJiraIssues(
   profile: JiraProfile,
   token: string
 ): Promise<JiraIssueSummary[]> {
-  const scope = baseJql(profile)
-  return searchJiraIssues(profile, token, `${scope ? `${scope} ` : ''}ORDER BY updated DESC`)
+  // The v3 search rejects a query with no restriction at all, so an unscoped profile gets a window.
+  const scope = baseJql(profile) || 'updated >= -90d'
+  return searchJiraIssues(profile, token, `${scope} ORDER BY updated DESC`)
 }
 
 /** Tickets mentioning a given compute node, scoped the same way as listJiraIssues (the cluster's
